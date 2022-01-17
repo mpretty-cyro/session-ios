@@ -136,6 +136,8 @@
 "CONVERSATION_SETTINGS_MUTED_UNTIL_FORMAT" = "до %@";
 /* Table cell label in conversation settings which returns the user to the conversation with 'search mode' activated */
 "CONVERSATION_SETTINGS_SEARCH" = "Искать в разговоре";
+/* Label for button to pin a conversation */
+"CONVERSATION_SETTINGS_PIN" = "Pin Conversation";
 /* Label for button to unmute a thread. */
 "CONVERSATION_SETTINGS_UNMUTE_ACTION" = "Включить звук";
 /* Title for the 'crop/scale image' dialog. */
@@ -158,6 +160,10 @@
 "DISAPPEARING_MESSAGES" = "Исчезающие сообщения";
 /* Info Message when added to a group which has enabled disappearing messages. Embeds {{time amount}} before messages disappear, see the *_TIME_AMOUNT strings for context. */
 "DISAPPEARING_MESSAGES_CONFIGURATION_GROUP_EXISTING_FORMAT" = "Сообщения в этой беседе исчезнут после %@.";
+/* table cell label in conversation settings */
+"DISAPPEARING_MESSAGES_OFF" = "Off";
+/* table cell label in conversation settings */
+"DELETE_MESSAGES" = "Delete Messages";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "Изменить группу";
 /* Label indicating media gallery is empty */

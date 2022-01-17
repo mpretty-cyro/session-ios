@@ -5,12 +5,15 @@ public final class ViewControllerUtilities : NSObject {
 
     private override init() { }
 
-    @objc(setUpDefaultSessionStyleForVC:withTitle:customBackButton:)
-    public static func setUpDefaultSessionStyle(for vc: UIViewController, title: String?, hasCustomBackButton: Bool) {
+    @objc(setUpDefaultSessionStyleForVC:withTitle:customBackButton:customBackground:)
+    public static func setUpDefaultSessionStyle(for vc: UIViewController, title: String?, hasCustomBackButton: Bool, hasCustomBackground: Bool = false) {
         // Set gradient background
-        vc.view.backgroundColor = .clear
-        let gradient = Gradients.defaultBackground
-        vc.view.setGradient(gradient)
+        if !hasCustomBackground {
+            vc.view.backgroundColor = .clear
+            let gradient = Gradients.defaultBackground
+            vc.view.setGradient(gradient)
+        }
+        
         // Set navigation bar background color
         if let navigationBar = vc.navigationController?.navigationBar {
             navigationBar.setBackgroundImage(UIImage(), for: UIBarMetrics.default)
