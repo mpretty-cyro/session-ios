@@ -100,6 +100,11 @@ NS_ASSUME_NONNULL_BEGIN
     return [NSString formatDurationSeconds:self.durationSeconds useShortFormat:NO];
 }
 
+- (NSString *)shortDurationString
+{
+    return [NSString formatDurationSeconds:self.durationSeconds useShortFormat:YES];
+}
+
 #pragma mark - Dirty Tracking
 
 + (MTLPropertyStorage)storageBehaviorForPropertyWithKey:(NSString *)propertyKey

@@ -4,7 +4,7 @@ import Foundation
 import SessionMessagingKit
 
 class ConversationSettingsViewModel {
-    struct ConversationSettingsItem {
+    struct Item {
         enum Id: CaseIterable {
             case header
             case search
@@ -31,6 +31,19 @@ class ConversationSettingsViewModel {
         let title: String
         let subtitle: String?
         let accessibilityIdentifier: String?
+        
+        // Convenience
+        
+        func with(subtitle: String?) -> Item {
+            return Item(
+                id: id,
+                style: style,
+                icon: icon,
+                title: title,
+                subtitle: subtitle,
+                accessibilityIdentifier: accessibilityIdentifier
+            )
+        }
     }
     
 //    enum ConversationSettingsItemType: CaseIterable {
@@ -95,11 +108,17 @@ class ConversationSettingsViewModel {
     
     // MARK: - Properties
     
-    let thread: TSThread
+    private let thread: TSThread
     private let uiDatabaseConnection: YapDatabaseConnection
     private var disappearingMessageConfiguration: OWSDisappearingMessagesConfiguration?
     
-    private var transitionActions: [ConversationSettingsItem.Id: (TSThread, OWSDisappearingMessagesConfiguration?) -> ()] = [:]
+    var onItemsChanged: ((TSThread, [[Item]]) -> ())? {
+        didSet {
+            onItemsChanged?(thread, generateItemsArray())
+        }
+    }
+    
+    private var transitionActions: [Item.Id: (TSThread, OWSDisappearingMessagesConfiguration?) -> ()] = [:]
     
     // MARK: - Initialization
     
@@ -107,14 +126,8 @@ class ConversationSettingsViewModel {
         self.thread = thread
         self.uiDatabaseConnection = uiDatabaseConnection
         
-        if let uniqueId: String = thread.uniqueId {
-            if let config: OWSDisappearingMessagesConfiguration = OWSDisappearingMessagesConfiguration.fetch(uniqueId: uniqueId) {
-                self.disappearingMessageConfiguration = config
-            }
-            else {
-                self.disappearingMessageConfiguration = OWSDisappearingMessagesConfiguration(defaultWithThreadId: uniqueId)
-            }
-        }
+        // Need to load in initial data
+        self.tryRefreshData(for: .disappearingMessages)
     }
     
     // MARK: - Data
@@ -127,109 +140,143 @@ class ConversationSettingsViewModel {
         return NSLocalizedString("Group Settings", comment: "")
     }()
     
-    lazy var items: [[ConversationSettingsItem]] = {
+    private lazy var dataStore: [Item.Id: Item] = {
         let groupThread: TSGroupThread? = (thread as? TSGroupThread)
         
-//        if (self.disappearingMessagesConfiguration.isEnabled) {
-//            NSString *keepForFormat = @"Disappear after %@";
-//            self.disappearingMessagesDurationLabel.text =
-//                [NSString stringWithFormat:keepForFormat, self.disappearingMessagesConfiguration.durationString];
-//        } else {
-//            self.disappearingMessagesDurationLabel.text
-//                = NSLocalizedString(@"KEEP_MESSAGES_FOREVER", @"Slider label when disappearing messages is off");
-//        }
-        //durationSeconds
+        return [
+            .header: Item(
+                id: .header,
+                style: .header,
+                icon: nil,
+                title: {
+                    if let contactThread: TSContactThread = thread as? TSContactThread {
+                        return (Storage.shared.getContact(with: contactThread.contactSessionID())?.displayName(for: .regular) ?? "Anonymous")
+                    }
+
+                    let threadName: String = thread.name()
+
+                    return (threadName.count == 0 && thread is TSGroupThread ?
+                        MessageStrings.newGroupDefaultTitle :
+                        threadName
+                    )
+                }(),
+                subtitle: (thread is TSGroupThread ? nil : (thread as? TSContactThread)?.contactSessionID()),
+                accessibilityIdentifier: nil
+            ),
+            
+            .search: Item(
+                id: .search,
+                style: .search,
+                icon: UIImage(named: "conversation_settings_search")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("CONVERSATION_SETTINGS_SEARCH", comment: "label in conversation settings which returns the user to the conversation with 'search mode' activated"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).search"
+            ),
+            
+            .editGroup: Item(
+                id: .editGroup,
+                style: .action,
+                icon: UIImage(named: "table_ic_group_edit")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("EDIT_GROUP_ACTION", comment: "label in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
+                // TODO: Check this?
+                //            cell.userInteractionEnabled = !weakSelf.hasLeftGroup;
+            ),
+                
+            .allMedia: Item(
+                id: .allMedia,
+                style: .action,
+                icon: UIImage(named: "actionsheet_camera_roll_black")?.withRenderingMode(.alwaysTemplate),
+                title: MediaStrings.allMedia,
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).all_media"
+            ),
+            
+            .pinConversation: Item(
+                id: .pinConversation,
+                style: .action,
+                icon: UIImage(named: "settings_pin")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("CONVERSATION_SETTINGS_PIN", comment: "label in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).pin_conversation"
+            ),
+            
+            .disappearingMessages: Item(
+                id: .disappearingMessages,
+                style: .action,
+                icon: UIImage(named: "timer_55")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("DISAPPEARING_MESSAGES", comment: "label in conversation settings"),
+                subtitle: (disappearingMessageConfiguration?.isEnabled == true ?
+                    disappearingMessageConfiguration?.shortDurationString :
+                    NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")
+                ),
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).disappearing_messages"
+            ),
+            
+            .notifications: Item(
+                id: .notifications,
+                style: .action,
+                icon: UIImage(named: "mute_unfilled")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("CONVERSATION_SETTINGS_MUTE_LABEL", comment: "label for 'mute thread' cell in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).mute"
+            ),
+            
+            .deleteMessages: Item(
+                id: .deleteMessages,
+                style: .actionDestructive,
+                icon: UIImage(named: "trash")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("DELETE_MESSAGES", comment: "label in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).delete_messages"
+            ),
+            
+            .blockUser: Item(
+                id: .blockUser,
+                style: .actionDestructive,
+                icon: UIImage(named: "table_ic_block")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("CONVERSATION_SETTINGS_BLOCK_THIS_USER", comment: "label in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).block"
+            ),
+            
+            .leaveGroup: Item(
+                id: .editGroup,
+                style: .actionDestructive,
+                icon: UIImage(named: "table_ic_group_leave")?.withRenderingMode(.alwaysTemplate),
+                title: NSLocalizedString("LEAVE_GROUP_ACTION", comment: "label in conversation settings"),
+                subtitle: nil,
+                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).leave_group"
+                // TODO: Check this?
+                //            cell.userInteractionEnabled = !weakSelf.hasLeftGroup;
+            )
+        ]
+    }()
+    
+    private func generateItemsArray() -> [[Item]] {
+        let groupThread: TSGroupThread? = (thread as? TSGroupThread)
+        let isClosedGroupAndMemeber: Bool = (groupThread != nil && groupThread?.isClosedGroup == true && groupThread?.isUserMember(inGroup: SNGeneralUtilities.getUserPublicKey()) == true)
+        let isOpenGroup: Bool = (groupThread != nil && groupThread?.isOpenGroup == true)
+        
         return [
             // Header section
             [
-                ConversationSettingsItem(
-                    id: .header,
-                    style: .header,
-                    icon: nil,
-                    title: {
-                        if let contactThread: TSContactThread = thread as? TSContactThread {
-                            return (Storage.shared.getContact(with: contactThread.contactSessionID())?.displayName(for: .regular) ?? "Anonymous")
-                        }
-
-                        let threadName: String = thread.name()
-
-                        return (threadName.count == 0 && thread is TSGroupThread ?
-                            MessageStrings.newGroupDefaultTitle :
-                            threadName
-                        )
-                    }(),
-                    subtitle: (thread is TSGroupThread ? nil : (thread as? TSContactThread)?.contactSessionID()),
-                    accessibilityIdentifier: nil
-                )
-            ],
+                dataStore[.header]
+            ].compactMap { $0 },
             
             // Search section
             [
-                ConversationSettingsItem(
-                    id: .search,
-                    style: .search,
-                    icon: UIImage(named: "conversation_settings_search")?.withRenderingMode(.alwaysTemplate),
-                    title: NSLocalizedString("CONVERSATION_SETTINGS_SEARCH", comment: "label in conversation settings which returns the user to the conversation with 'search mode' activated"),
-                    subtitle: nil,
-                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).search"
-                )
-            ],
+                dataStore[.search]
+            ].compactMap { $0 },
             
             // Main section
             [
-                (groupThread == nil || groupThread?.isClosedGroup != true || groupThread?.isUserMember(inGroup: SNGeneralUtilities.getUserPublicKey()) != true ?
-                    nil
-                 :
-                    ConversationSettingsItem(
-                        id: .editGroup,
-                        style: .action,
-                        icon: UIImage(named: "table_ic_group_edit")?.withRenderingMode(.alwaysTemplate),
-                        title: NSLocalizedString("EDIT_GROUP_ACTION", comment: "label in conversation settings"),
-                        subtitle: nil,
-                        accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
-                        // TODO: Check this?
-                        //            cell.userInteractionEnabled = !weakSelf.hasLeftGroup;
-                    )
-                ),
-                ConversationSettingsItem(
-                    id: .allMedia,
-                    style: .action,
-                    icon: UIImage(named: "actionsheet_camera_roll_black")?.withRenderingMode(.alwaysTemplate),
-                    title: MediaStrings.allMedia,
-                    subtitle: nil,
-                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).all_media"
-                ),
-                ConversationSettingsItem(
-                    id: .pinConversation,
-                    style: .action,
-                    icon: UIImage(named: "settings_pin")?.withRenderingMode(.alwaysTemplate),
-                    title: NSLocalizedString("CONVERSATION_SETTINGS_PIN", comment: "label in conversation settings"),
-                    subtitle: nil,
-                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).pin_conversation"
-                ),
-                (groupThread != nil && groupThread?.isOpenGroup == true ?
-                    nil
-                 :
-                    ConversationSettingsItem(
-                        id: .disappearingMessages,
-                        style: .action,
-                        icon: UIImage(named: "timer_55")?.withRenderingMode(.alwaysTemplate),
-                        title: NSLocalizedString("DISAPPEARING_MESSAGES", comment: "label in conversation settings"),
-                        subtitle: (disappearingMessageConfiguration?.isEnabled == true ?
-                            disappearingMessageConfiguration?.durationString :
-                            NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")
-                        ),
-                        accessibilityIdentifier: "\(ConversationSettingsViewModel.self).disappearing_messages"
-                    )
-                ),
-                ConversationSettingsItem(
-                    id: .notifications,
-                    style: .action,
-                    icon: UIImage(named: "mute_unfilled")?.withRenderingMode(.alwaysTemplate),
-                    title: NSLocalizedString("CONVERSATION_SETTINGS_MUTE_LABEL", comment: "label for 'mute thread' cell in conversation settings"),
-                    subtitle: nil,
-                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).mute"
-                )
+                (isClosedGroupAndMemeber ? dataStore[.editGroup] : nil),
+                dataStore[.allMedia],
+                dataStore[.pinConversation],
+                (!isOpenGroup ? dataStore[.disappearingMessages] : nil),
+                dataStore[.notifications]
             ]
             .compactMap { $0 },
             
@@ -238,48 +285,52 @@ class ConversationSettingsViewModel {
 //                (thread.isNoteToSelf() || thread as? TSContactThread == nil ?
 //                    nil
 //                 :
-                    ConversationSettingsItem(
-                        id: .deleteMessages,
-                        style: .actionDestructive,
-                        icon: UIImage(named: "trash")?.withRenderingMode(.alwaysTemplate),
-                        title: NSLocalizedString("DELETE_MESSAGES", comment: "label in conversation settings"),
-                        subtitle: nil,
-                        accessibilityIdentifier: "\(ConversationSettingsViewModel.self).delete_messages"
-                    ),
+                dataStore[.deleteMessages],
 //                ),
-                (thread.isNoteToSelf() || thread as? TSContactThread == nil ?
-                    nil
-                 :
-                    ConversationSettingsItem(
-                        id: .blockUser,
-                        style: .actionDestructive,
-                        icon: UIImage(named: "table_ic_block")?.withRenderingMode(.alwaysTemplate),
-                        title: NSLocalizedString("CONVERSATION_SETTINGS_BLOCK_THIS_USER", comment: "label in conversation settings"),
-                        subtitle: nil,
-                        accessibilityIdentifier: "\(ConversationSettingsViewModel.self).block"
-                    )
-                ),
+                (thread.isNoteToSelf() || thread as? TSContactThread == nil ? nil : dataStore[.blockUser]),
                 // Leave Group (groups)
-                (groupThread == nil || groupThread?.isClosedGroup != true || groupThread?.isUserMember(inGroup: SNGeneralUtilities.getUserPublicKey()) != true ?
-                    nil
-                 :
-                    ConversationSettingsItem(
-                        id: .editGroup,
-                        style: .actionDestructive,
-                        icon: UIImage(named: "table_ic_group_leave")?.withRenderingMode(.alwaysTemplate),
-                        title: NSLocalizedString("LEAVE_GROUP_ACTION", comment: "label in conversation settings"),
-                        subtitle: nil,
-                        accessibilityIdentifier: "\(ConversationSettingsViewModel.self).leave_group"
-                        // TODO: Check this?
-                        //            cell.userInteractionEnabled = !weakSelf.hasLeftGroup;
-                    )
-                )
+                (isClosedGroupAndMemeber ? dataStore[.leaveGroup] : nil)
             ]
             .compactMap { $0 }
         ]
-    }()
+    }
     
-    // MARK: - Interactions
+    // MARK: - Functions
+    
+    func tryRefreshData(for itemId: Item.Id) {
+        switch itemId {
+            case .disappearingMessages:
+                guard let uniqueId: String = thread.uniqueId else { return }
+                
+                // Ensure the 'disappearingMessageConfiguration' value is set to something
+                let targetConfig: OWSDisappearingMessagesConfiguration
+                
+                if let config: OWSDisappearingMessagesConfiguration = self.disappearingMessageConfiguration {
+                    targetConfig = config
+                }
+                else if let config: OWSDisappearingMessagesConfiguration = OWSDisappearingMessagesConfiguration.fetch(uniqueId: uniqueId) {
+                    targetConfig = config
+                }
+                else {
+                    targetConfig = OWSDisappearingMessagesConfiguration(defaultWithThreadId: uniqueId)
+                }
+                
+                // Update the data store
+                self.disappearingMessageConfiguration = targetConfig
+                self.dataStore[.disappearingMessages] = self.dataStore[.disappearingMessages]?.with(
+                    subtitle: (targetConfig.isEnabled ?
+                        targetConfig.shortDurationString :
+                        NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")
+                    )
+                )
+        
+            // Data cannot be updated so don't make any changes
+            default: return
+        }
+    
+        // Announce the update
+        onItemsChanged?(thread, generateItemsArray())
+    }
     
     func profilePictureTapped() {
         
@@ -289,14 +340,14 @@ class ConversationSettingsViewModel {
         
     }
     
-    func itemTapped(_ itemId: ConversationSettingsItem.Id) {
+    func itemTapped(_ itemId: Item.Id) {
         transitionActions[itemId]?(thread, disappearingMessageConfiguration)
     }
     
     // MARK: - Transitions
     
     /// Each item can only have a single action associated to it at a time
-    func on(_ itemId: ConversationSettingsItem.Id, doAction action: @escaping (TSThread, OWSDisappearingMessagesConfiguration?) -> ()) {
+    func on(_ itemId: Item.Id, doAction action: @escaping (TSThread, OWSDisappearingMessagesConfiguration?) -> ()) {
         transitionActions[itemId] = action
     }
 }

@@ -21,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) uint32_t durationSeconds;
 @property (nonatomic, readonly) NSUInteger durationIndex;
 @property (nonatomic, readonly) NSString *durationString;
+@property (nonatomic, readonly) NSString *shortDurationString;
 @property (nonatomic, readonly) BOOL dictionaryValueDidChange;
 @property (readonly, getter=isNewRecord) BOOL newRecord;
 

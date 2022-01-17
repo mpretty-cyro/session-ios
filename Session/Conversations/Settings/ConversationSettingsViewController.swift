@@ -55,83 +55,6 @@ class ConversationSettingsViewController: BaseVC {
         
         scrollView.addSubview(stackView)
         
-        // Add the content from the viewModel
-        viewModel.items.enumerated().forEach { sectionIndex, section in
-            section.enumerated().forEach { index, item in
-                switch item.style {
-                    case .header:
-                        let targetView: ConversationSettingsHeaderView = ConversationSettingsHeaderView()
-                        targetView.clipsToBounds = true
-                        targetView.layer.cornerRadius = 8
-                        
-                        targetView.update(with: viewModel.thread, threadName: item.title, contactSessionId: item.subtitle)
-                        targetView.profilePictureTapped = { [weak self] in self?.viewModel.profilePictureTapped() }
-                        targetView.displayNameTapped = { [weak self] in self?.viewModel.displayNameTapped() }
-                        
-                        stackView.addArrangedSubview(targetView)
-                        
-                    case .search:
-                        let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
-                        targetView.clipsToBounds = true
-                        targetView.layer.cornerRadius = (ConversationSettingsActionView.minHeight / 2)
-                        targetView.update(with: item.icon, color: Colors.text, title: item.title, canHighlight: false)
-                        targetView.viewTapped = { [weak self] in self?.viewModel.itemTapped(item.id) }
-                        
-                        stackView.addArrangedSubview(targetView)
-                        
-                    case .action, .actionDestructive:
-                        let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
-                        targetView.clipsToBounds = true
-                        targetView.layer.cornerRadius = 8
-                        targetView.update(
-                            with: item.icon,
-                            color: (item.style == .actionDestructive ?
-                                Colors.destructive :
-                                Colors.text
-                            ),
-                            title: item.title,
-                            subtitle: item.subtitle
-                        )
-                        targetView.viewTapped = { [weak self] in self?.viewModel.itemTapped(item.id) }
-
-                        stackView.addArrangedSubview(targetView)
-                        
-                        // Round relevant corners
-                        switch (index, section.count) {
-                            case (_, 1): break
-                            case (0, _): targetView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-                            case (section.count - 1, _): targetView.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-                            default: targetView.layer.cornerRadius = 0
-                        }
-                        
-                        // Add a separator if there is an item after this one
-                        switch index {
-                            case section.count - 1: break
-                            default:
-                                let separatorContainerView: UIView = UIView()
-                                separatorContainerView.backgroundColor = targetView.backgroundColor
-                                 
-                                let separatorView: UIView = UIView.separator()
-                                separatorView.backgroundColor = Colors.settingsBackground
-                                
-                                separatorContainerView.addSubview(separatorView)
-                                stackView.addArrangedSubview(separatorContainerView)
-                                
-                                NSLayoutConstraint.activate([
-                                    separatorContainerView.heightAnchor.constraint(equalTo: separatorView.heightAnchor),
-                                    separatorView.leftAnchor.constraint(equalTo: separatorContainerView.leftAnchor, constant: 24),
-                                    separatorView.rightAnchor.constraint(equalTo: separatorContainerView.rightAnchor, constant: -24)
-                                ])
-                        }
-                }
-            }
-            
-            // Add a spacer at the bottom of each section (except for the last)
-            if sectionIndex != (viewModel.items.count - 1) {
-                stackView.addArrangedSubview(UIView.vSpacer(30))
-            }
-        }
-        
         setupLayout()
         setupBinding()
     }
@@ -156,6 +79,99 @@ class ConversationSettingsViewController: BaseVC {
     // MARK: - Binding
     
     private func setupBinding() {
+        // Bind the items from the viewModel to the UI generation
+        viewModel.onItemsChanged = { [weak self] (thread: TSThread, items: [[ConversationSettingsViewModel.Item]]) in
+            DispatchQueue.main.async {
+                // Keep the contentOffset between generation
+                let oldContentOffset: CGPoint? = self?.scrollView.contentOffset
+                
+                // Clear out old content
+                self?.stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                
+                // Generate new content
+                items.enumerated().forEach { sectionIndex, section in
+                    section.enumerated().forEach { index, item in
+                        switch item.style {
+                            case .header:
+                                let targetView: ConversationSettingsHeaderView = ConversationSettingsHeaderView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = 8
+                                
+                                targetView.update(with: thread, threadName: item.title, contactSessionId: item.subtitle)
+                                targetView.profilePictureTapped = { [weak self] in self?.viewModel.profilePictureTapped() }
+                                targetView.displayNameTapped = { [weak self] in self?.viewModel.displayNameTapped() }
+                                
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                            case .search:
+                                let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = (ConversationSettingsActionView.minHeight / 2)
+                                targetView.update(with: item.icon, color: Colors.text, title: item.title, canHighlight: false)
+                                targetView.viewTapped = { [weak self] in self?.viewModel.itemTapped(item.id) }
+                                
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                            case .action, .actionDestructive:
+                                let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = 8
+                                targetView.update(
+                                    with: item.icon,
+                                    color: (item.style == .actionDestructive ?
+                                        Colors.destructive :
+                                        Colors.text
+                                    ),
+                                    title: item.title,
+                                    subtitle: item.subtitle
+                                )
+                                targetView.viewTapped = { [weak self] in self?.viewModel.itemTapped(item.id) }
+
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                                // Round relevant corners
+                                switch (index, section.count) {
+                                    case (_, 1): break
+                                    case (0, _): targetView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+                                    case (section.count - 1, _): targetView.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+                                    default: targetView.layer.cornerRadius = 0
+                                }
+                                
+                                // Add a separator if there is an item after this one
+                                switch index {
+                                    case section.count - 1: break
+                                    default:
+                                        let separatorContainerView: UIView = UIView()
+                                        separatorContainerView.backgroundColor = targetView.backgroundColor
+                                         
+                                        let separatorView: UIView = UIView.separator()
+                                        separatorView.backgroundColor = Colors.settingsBackground
+                                        
+                                        separatorContainerView.addSubview(separatorView)
+                                        self?.stackView.addArrangedSubview(separatorContainerView)
+                                        
+                                        NSLayoutConstraint.activate([
+                                            separatorContainerView.heightAnchor.constraint(equalTo: separatorView.heightAnchor),
+                                            separatorView.leftAnchor.constraint(equalTo: separatorContainerView.leftAnchor, constant: 24),
+                                            separatorView.rightAnchor.constraint(equalTo: separatorContainerView.rightAnchor, constant: -24)
+                                        ])
+                                }
+                        }
+                    }
+                    
+                    // Add a spacer at the bottom of each section (except for the last)
+                    if sectionIndex != (items.count - 1) {
+                        self?.stackView.addArrangedSubview(UIView.vSpacer(30))
+                    }
+                }
+                
+                // Restore contentOffset
+                self?.scrollView.contentOffset = (oldContentOffset ?? CGPoint.zero)
+            }
+        }
+        
+        // Bind interactions
+        
         viewModel.on(.editGroup) { [weak self] thread, _ in
             guard let threadId: String = thread.uniqueId else { return }
             
@@ -163,11 +179,13 @@ class ConversationSettingsViewController: BaseVC {
             self?.navigationController?.pushViewController(viewController, animated: true)
         }
         
-        viewModel.on(.disappearingMessages) { [weak self] _, disappearingMessageConfiguration in
-            let viewController: ConversationDisappearingMessagesViewController = ConversationDisappearingMessagesViewController(configuration: disappearingMessageConfiguration)
+        viewModel.on(.disappearingMessages) { [weak self] thread, disappearingMessageConfiguration in
+            guard let config: OWSDisappearingMessagesConfiguration = disappearingMessageConfiguration else { return }
+            
+            let viewController: ConversationDisappearingMessagesViewController = ConversationDisappearingMessagesViewController(thread: thread, configuration: config) { [weak self] in
+                self?.viewModel.tryRefreshData(for: .disappearingMessages)
+            }
             self?.navigationController?.pushViewController(viewController, animated: true)
         }
-        
-        //OWSDisappearingMessagesConfiguration?
     }
 }
