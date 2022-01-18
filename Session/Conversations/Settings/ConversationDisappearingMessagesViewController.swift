@@ -40,6 +40,17 @@ class ConversationDisappearingMessagesViewController: BaseVC {
         return stackView
     }()
     
+    private lazy var descriptionLabel: UILabel = {
+        let label: UILabel = UILabel()
+        label.font = UIFont.systemFont(ofSize: Values.smallFontSize)
+        label.text = viewModel.description
+        label.textColor = Colors.text
+        label.numberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        
+        return label
+    }()
+    
     // MARK: - Lifecycle
     
     override func viewDidLoad() {
@@ -90,6 +101,12 @@ class ConversationDisappearingMessagesViewController: BaseVC {
                 
                 // Clear out old content
                 self?.stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                
+                // Add the descriptionLabel first
+                if let descriptionLabel: UILabel = self?.descriptionLabel {
+                    self?.stackView.addArrangedSubview(descriptionLabel)
+                    self?.stackView.addArrangedSubview(UIView.vSpacer(15))
+                }
                 
                 // Generate new content
                 items.enumerated().forEach { index, item in

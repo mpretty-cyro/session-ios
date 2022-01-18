@@ -5,6 +5,8 @@ import UIKit
 class ConversationSettingsViewController: BaseVC {
     private let viewModel: ConversationSettingsViewModel
     
+    private var mediaGallery: MediaGallery?
+    
     // MARK: - Initialization
     
     required init(thread: TSThread, uiDatabaseConnection: YapDatabaseConnection) {
@@ -177,6 +179,17 @@ class ConversationSettingsViewController: BaseVC {
             
             let viewController: EditClosedGroupVC = EditClosedGroupVC(with: threadId)
             self?.navigationController?.pushViewController(viewController, animated: true)
+        }
+        
+        viewModel.on(.allMedia) { [weak self] thread, _ in
+            guard let navController: OWSNavigationController = self?.navigationController as? OWSNavigationController else {
+                return
+            }
+            
+            // Note: Need to store the 'mediaGallery' somewhere to prevent it from being released and crashing
+            let mediaGallery: MediaGallery = MediaGallery(thread: thread, options: .sliderEnabled)
+            self?.mediaGallery = mediaGallery
+            mediaGallery.pushTileView(fromNavController: navController)
         }
         
         viewModel.on(.disappearingMessages) { [weak self] thread, disappearingMessageConfiguration in

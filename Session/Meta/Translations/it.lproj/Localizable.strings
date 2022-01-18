@@ -161,6 +161,8 @@
 /* Info Message when added to a group which has enabled disappearing messages. Embeds {{time amount}} before messages disappear, see the *_TIME_AMOUNT strings for context. */
 "DISAPPEARING_MESSAGES_CONFIGURATION_GROUP_EXISTING_FORMAT" = "I messaggi in questa conversazione scompariranno dopo %@.";
 /* table cell label in conversation settings */
+"DISAPPEARING_MESSAGES_SETTINGS_TITLE" = "Timer";
+/* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
 "DELETE_MESSAGES" = "Delete Messages";

@@ -30,7 +30,7 @@ static NSString *const kSealedSenderInfoURL = @"https://signal.org/blog/sealed-s
 
     [self updateTableContents];
     
-    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"vc_privacy_settings_title", @"") customBackButton:NO];
+    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"vc_privacy_settings_title", @"") customBackButton:NO customBackground:NO];
     self.tableView.backgroundColor = UIColor.clearColor;
 }
 

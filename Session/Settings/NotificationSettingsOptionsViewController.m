@@ -16,7 +16,7 @@
     
     [self updateTableContents];
 
-    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"Content", @"") customBackButton:NO];
+    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"Content", @"") customBackButton:NO customBackground:NO];
     self.tableView.backgroundColor = UIColor.clearColor;
 }
 

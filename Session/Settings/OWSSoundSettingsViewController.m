@@ -38,7 +38,7 @@ NS_ASSUME_NONNULL_BEGIN
     [self updateTableContents];
     [self updateNavigationItems];
     
-    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"Sound", @"") customBackButton:NO];
+    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:NSLocalizedString(@"Sound", @"") customBackButton:NO customBackground:NO];
     self.tableView.backgroundColor = UIColor.clearColor;
 }
 

@@ -25,7 +25,24 @@ class ConversationDisappearingMessagesViewModel {
     
     // MARK: - Data
     
-    let title: String = NSLocalizedString("DISAPPEARING_MESSAGES", comment: "label in conversation settings")
+    let title: String = NSLocalizedString("DISAPPEARING_MESSAGES_SETTINGS_TITLE", comment: "")
+    
+    lazy var description: String = {
+        let displayName: String
+        
+        if thread.isGroupThread() {
+            displayName = "the group"
+        }
+        else if let contactThread: TSContactThread = thread as? TSContactThread {
+            contactThread.contactSessionID()
+            displayName = (Storage.shared.getContact(with: contactThread.contactSessionID())?.displayName(for: .regular) ?? "anonymous")
+        }
+        else {
+            displayName = "anonymous"
+        }
+        
+        return String(format: NSLocalizedString("When enabled, messages between you and %@ will disappear after they have been seen.", comment: ""), arguments: [displayName])
+    }()
     
     private lazy var dataStore: [(index: Int, title: String, isActive: Bool)] = {
         // Need to '+ 1' the 'durationIndex' if the config is enabled as the "Off" option isn't included in
