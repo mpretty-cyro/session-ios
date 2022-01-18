@@ -712,24 +712,18 @@ static NSTimeInterval launchStartedAt;
     if (window == nil) { return; }
     switch (appMode) {
         case LKAppModeLight: {
-            if (@available(iOS 13.0, *)) {
-                window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
-            }
+            window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
             window.backgroundColor = UIColor.whiteColor;
             break;
         }
         case LKAppModeDark: {
-            if (@available(iOS 13.0, *)) {
-                window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-            }
+            window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
             window.backgroundColor = UIColor.blackColor;
             break;
         }
     }
     if (LKAppModeUtilities.isSystemDefault) {
-        if (@available(iOS 13.0, *)) {
-            window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-        }
+        window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
     }
     [NSNotificationCenter.defaultCenter postNotificationName:NSNotification.appModeChanged object:nil];
 }

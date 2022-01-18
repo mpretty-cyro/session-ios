@@ -1,4 +1,4 @@
-platform :ios, '12.0'
+platform :ios, '13.0'
 source 'https://github.com/CocoaPods/Specs.git'
 
 use_frameworks!
@@ -11,7 +11,7 @@ target 'Session' do
   pod 'PromiseKit', :inhibit_warnings => true
   pod 'PureLayout', '~> 3.1.8', :inhibit_warnings => true
   pod 'Reachability', :inhibit_warnings => true
-  pod 'Sodium', '~> 0.8.0', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
   pod 'YYImage', git: 'https://github.com/signalapp/YYImage', :inhibit_warnings => true
   pod 'ZXingObjC', :inhibit_warnings => true
@@ -24,12 +24,14 @@ target 'SessionShareExtension' do
   pod 'Mantle', git: 'https://github.com/signalapp/Mantle', branch: 'signal-master', :inhibit_warnings => true
   pod 'PromiseKit', :inhibit_warnings => true
   pod 'PureLayout', '~> 3.1.8', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', :inhibit_warnings => true
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
 end
 
 target 'SessionNotificationServiceExtension' do
   pod 'Curve25519Kit', git: 'https://github.com/signalapp/Curve25519Kit.git', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', :inhibit_warnings => true
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
 end
@@ -38,13 +40,13 @@ target 'SignalUtilitiesKit' do
   pod 'AFNetworking', inhibit_warnings: true
   pod 'CryptoSwift', :inhibit_warnings => true
   pod 'Curve25519Kit', git: 'https://github.com/signalapp/Curve25519Kit.git', :inhibit_warnings => true
-  pod 'GRKOpenSSLFramework', :inhibit_warnings => true
   pod 'HKDFKit', :inhibit_warnings => true
   pod 'Mantle', git: 'https://github.com/signalapp/Mantle', branch: 'signal-master', :inhibit_warnings => true
   pod 'NVActivityIndicatorView', :inhibit_warnings => true
   pod 'PromiseKit', :inhibit_warnings => true
   pod 'PureLayout', '~> 3.1.8', :inhibit_warnings => true
   pod 'Reachability', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'SAMKeychain', :inhibit_warnings => true
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', :inhibit_warnings => true
   pod 'SwiftProtobuf', '~> 1.5.0', :inhibit_warnings => true
@@ -67,7 +69,7 @@ target 'SessionMessagingKit' do
   pod 'Reachability', :inhibit_warnings => true
   pod 'SAMKeychain', :inhibit_warnings => true
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', :inhibit_warnings => true
-  pod 'Sodium', '~> 0.8.0', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'SwiftProtobuf', '~> 1.5.0', :inhibit_warnings => true
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
 end
@@ -77,7 +79,7 @@ target 'SessionSnodeKit' do
   pod 'Curve25519Kit', git: 'https://github.com/signalapp/Curve25519Kit.git', :inhibit_warnings => true
   pod 'PromiseKit', :inhibit_warnings => true
   pod 'SignalCoreKit', git: 'https://github.com/signalapp/SignalCoreKit.git', :inhibit_warnings => true
-  pod 'Sodium', '~> 0.8.0', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.9.1', :inhibit_warnings => true
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
 end
 
@@ -112,7 +114,7 @@ end
 def set_minimum_deployment_target(installer)
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |build_configuration|
-      build_configuration.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      build_configuration.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
   end
 end
