@@ -255,11 +255,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     // MARK: 
     
     var lastPageYOffset: CGFloat {
-        var yOffset = collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom
-        if #available(iOS 11.0, *) {
-            yOffset += view.safeAreaInsets.bottom
-        }
-        return yOffset
+        return (collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom + view.safeAreaInsets.bottom)
     }
 
     func scrollToBottom(animated: Bool) {
@@ -342,13 +338,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     }
 
     func updateLayout() {
-        let containerWidth: CGFloat
-        if #available(iOS 11.0, *) {
-            containerWidth = self.view.safeAreaLayoutGuide.layoutFrame.size.width
-        } else {
-            containerWidth = self.view.frame.size.width
-        }
-
+        let containerWidth: CGFloat = self.view.safeAreaLayoutGuide.layoutFrame.size.width
         let kItemsPerPortraitRow = 4
         let screenWidth = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
         let approxItemWidth = screenWidth / CGFloat(kItemsPerPortraitRow)
