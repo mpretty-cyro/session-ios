@@ -171,8 +171,11 @@ class ConversationSettingsHeaderView: UIView {
     
     // MARK: - Content
     
-    func update(with thread: TSThread, threadName: String?, contactSessionId: String?) {
+    func update(with thread: TSThread) {
         profilePictureView.update(for: thread)
+    }
+    
+    func update(with threadName: String?, contactSessionId: String?) {
         displayNameLabel.text = (threadName != nil && threadName?.isEmpty == false ? threadName : "Anonymous")
         sessionIdLabel.text = contactSessionId
         sessionIdLabel.isHidden = (contactSessionId?.isEmpty != false)

@@ -5,15 +5,31 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 class ConversationDisappearingMessagesViewModel {
+    struct Item {
+        typealias Id = Int
+        
+        let id: Id
+        let title: String
+        let isActive: Bool
+        
+        // Convenience
+        
+        func with(
+            isActive: Bool? = nil
+        ) -> Item {
+            return Item(
+                id: id,
+                title: title,
+                isActive: (isActive ?? self.isActive)
+            )
+        }
+    }
+    
+    // MARK: - Variables
+    
     private let thread: TSThread
     private var disappearingMessagesConfiguration: OWSDisappearingMessagesConfiguration
     private let dataChanged: () -> ()
-    
-    var onItemsChanged: (([(index: Int, title: String, isActive: Bool)]) -> ())? {
-        didSet {
-            onItemsChanged?(dataStore)
-        }
-    }
     
     // MARK: - Initialization
     
@@ -21,9 +37,13 @@ class ConversationDisappearingMessagesViewModel {
         self.thread = thread
         self.disappearingMessagesConfiguration = disappearingMessagesConfiguration
         self.dataChanged = dataChanged
+        
+        // Need to setup interaction binding and load in initial data
+        self.setupBinding()
+        self.refreshAllData()
     }
     
-    // MARK: - Data
+    // MARK: - Content and Interactions
     
     let title: String = NSLocalizedString("DISAPPEARING_MESSAGES_SETTINGS_TITLE", comment: "")
     
@@ -44,7 +64,7 @@ class ConversationDisappearingMessagesViewModel {
         return String(format: NSLocalizedString("When enabled, messages between you and %@ will disappear after they have been seen.", comment: ""), arguments: [displayName])
     }()
     
-    private lazy var dataStore: [(index: Int, title: String, isActive: Bool)] = {
+    lazy var items: DynamicValue<[Item]> = {
         // Need to '+ 1' the 'durationIndex' if the config is enabled as the "Off" option isn't included in
         // the 'validDurationsSeconds' set so to include it the 'durationIndex' needs to be 1-indexed
         let currentIndex: UInt = (disappearingMessagesConfiguration.isEnabled ?
@@ -53,29 +73,91 @@ class ConversationDisappearingMessagesViewModel {
         )
         
         // Setup the initial state of the items
-        return [NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")]
-            .appending(
+        return DynamicValue(
+            [NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")]
+                .appending(
+                    contentsOf: OWSDisappearingMessagesConfiguration.validDurationsSeconds()
+                        .map { seconds in NSString.formatDurationSeconds(UInt32(seconds.intValue), useShortFormat: false) }
+                )
+                .enumerated()
+                .map { index, title -> Item in Item(id: index, title: title, isActive: (currentIndex == index)) }
+        )
+    }()
+    
+    lazy var interactions: Interactions<Int, TSThread> = Interactions { [weak self] in
+        guard let strongSelf: ConversationDisappearingMessagesViewModel = self else { return nil }
+        
+        return (strongSelf.thread)
+    }
+    
+    // MARK: - Internal State Management
+    
+    private lazy var viewState: [Item.Id: Item] = {
+        // Need to '+ 1' the 'index' for the duration options as the "Off" option isn't included in
+        // the 'validDurationsSeconds' set so to include it the 'index' needs to be 1-indexed
+        return [
+            0: Item(
+                id: 0,
+                title: NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: ""),
+                isActive: false
+            )
+        ]
+            .setting(
                 contentsOf: OWSDisappearingMessagesConfiguration.validDurationsSeconds()
                     .map { seconds in NSString.formatDurationSeconds(UInt32(seconds.intValue), useShortFormat: false) }
+                    .enumerated()
+                    .map { index, title -> (key: Item.Id, value: Item) in
+                        (
+                            key: (index + 1),
+                            value: Item(
+                                id: (index + 1),
+                                title: title,
+                                isActive: false
+                            )
+                        )
+                    }
             )
-            .enumerated()
-            .map { index, title -> (Int, String, Bool) in (index, title, (currentIndex == index)) }
     }()
+    
+    private func setupBinding() {
+        interactions.onAny(forceToMainThread: false) { [weak self] id, _ in
+            self?.disappearingMessagesConfiguration.isEnabled = (id != 0)
+            self?.disappearingMessagesConfiguration.durationSeconds = (id == 0 ?
+                0 :
+                OWSDisappearingMessagesConfiguration.validDurationsSeconds()[id - 1].uint32Value
+            )
+
+            self?.refreshAllData()
+        }
+    }
     
     // MARK: - Functions
     
-    func itemTapped(_ tappedIndex: Int) {
-        dataStore = dataStore.map { index, title, isActive in
-            (index, title, (index == tappedIndex))
-        }
-        
-        disappearingMessagesConfiguration.isEnabled = (tappedIndex != 0)
-        disappearingMessagesConfiguration.durationSeconds = (tappedIndex == 0 ?
-            0 :
-            OWSDisappearingMessagesConfiguration.validDurationsSeconds()[tappedIndex - 1].uint32Value
+    private func refreshData(for itemId: Int) {
+        // See the 'viewState' section for an explanation but the 'itemId' value is 1-indexed and the
+        // 'durationIndex' value is 0-indexed
+        let currentIndex: UInt = (disappearingMessagesConfiguration.isEnabled ?
+            (disappearingMessagesConfiguration.durationIndex + 1) :
+            0
         )
         
-        onItemsChanged?(dataStore)
+        self.viewState[itemId] = self.viewState[itemId]?.with(
+            isActive: (currentIndex == itemId)
+        )
+    }
+    
+    private func refreshAllData() {
+        // Loop through the array and refresh the data then update the items
+        self.viewState.keys.forEach { refreshData(for: $0) }
+        items.value = Array(self.viewState.values)
+            .sorted { lhs, rhs in lhs.id < rhs.id }
+    }
+    
+    func tryRefreshData(for itemId: Item.Id) {
+        // Refresh the desired data and update the items
+        refreshData(for: itemId)
+        items.value = Array(self.viewState.values)
+            .sorted { lhs, rhs in lhs.id < rhs.id }
     }
     
     func trySaveChanges() {

@@ -4,13 +4,13 @@ import UIKit
 import SessionUIKit
 import SessionMessagingKit
 
-class ConversationDisappearingMessagesViewController: BaseVC {
-    private let viewModel: ConversationDisappearingMessagesViewModel
+class ConversationNotificationSettingsViewController: BaseVC {
+    private let viewModel: ConversationNotificationSettingsViewModel
     
     // MARK: - Initialization
     
-    required init(thread: TSThread, configuration: OWSDisappearingMessagesConfiguration, dataChanged: @escaping () -> ()) {
-        self.viewModel = ConversationDisappearingMessagesViewModel(thread: thread, disappearingMessagesConfiguration: configuration, dataChanged: dataChanged)
+    required init(thread: TSGroupThread, dataChanged: @escaping () -> ()) {
+        self.viewModel = ConversationNotificationSettingsViewModel(thread: thread, dataChanged: dataChanged)
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -23,7 +23,7 @@ class ConversationDisappearingMessagesViewController: BaseVC {
     // MARK: - UI
     
     // This is used to make the content easier to update (rather than just recreating the UI on every change)
-    private var viewMap: [ConversationDisappearingMessagesViewModel.Item.Id: UIView] = [:]
+    private var viewMap: [ConversationNotificationSettingsViewModel.Item.Id: UIView] = [:]
     
     private let scrollView: UIScrollView = {
         let scrollView: UIScrollView = UIScrollView()
@@ -44,17 +44,6 @@ class ConversationDisappearingMessagesViewController: BaseVC {
         return stackView
     }()
     
-    private lazy var descriptionLabel: UILabel = {
-        let label: UILabel = UILabel()
-        label.font = UIFont.systemFont(ofSize: Values.smallFontSize)
-        label.text = viewModel.description
-        label.textColor = Colors.text
-        label.numberOfLines = 0
-        label.lineBreakMode = .byWordWrapping
-        
-        return label
-    }()
-    
     // MARK: - Lifecycle
     
     override func viewDidLoad() {
@@ -67,19 +56,8 @@ class ConversationDisappearingMessagesViewController: BaseVC {
         
         scrollView.addSubview(stackView)
         
-        stackView.addArrangedSubview(descriptionLabel)
-        stackView.addArrangedSubview(UIView.vSpacer(15))
-        
         setupLayout()
         setupBinding()
-    }
-    
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        
-        // Save changes when leaving the screen instead of on change to avoid spamming the thread with
-        // messages
-        viewModel.trySaveChanges()
     }
     
     // MARK: - Layout

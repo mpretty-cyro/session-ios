@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUIKit
 
 class ConversationSettingsOptionView: UIView {
     static let minHeight: CGFloat = 50
@@ -46,7 +47,7 @@ class ConversationSettingsOptionView: UIView {
         stackView.axis = .horizontal
         stackView.alignment = .center
         stackView.distribution = .fill
-        stackView.spacing = 12
+        stackView.spacing = (isIPhone5OrSmaller ? Values.smallSpacing : Values.mediumSpacing)
         
         return stackView
     }()
@@ -65,6 +66,7 @@ class ConversationSettingsOptionView: UIView {
         let imageView: UIImageView = UIImageView(image: UIImage(named: "checkmark")?.withRenderingMode(.alwaysTemplate))
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.contentMode = .scaleAspectFit
+        imageView.tintColor = Colors.accent
         imageView.layer.minificationFilter = .trilinear
         imageView.layer.magnificationFilter = .trilinear
         
@@ -87,6 +89,8 @@ class ConversationSettingsOptionView: UIView {
     // MARK: - Layout
     
     private func setupLayout() {
+        let edgeInset: CGFloat = (isIPhone5OrSmaller ? Values.mediumSpacing : Values.largeSpacing)
+        
         NSLayoutConstraint.activate([
             heightAnchor.constraint(greaterThanOrEqualToConstant: ConversationSettingsActionView.minHeight),
             
@@ -96,8 +100,8 @@ class ConversationSettingsOptionView: UIView {
             highlightView.bottomAnchor.constraint(equalTo: bottomAnchor),
             
             stackView.topAnchor.constraint(equalTo: topAnchor),
-            stackView.leftAnchor.constraint(equalTo: leftAnchor, constant: 24),
-            stackView.rightAnchor.constraint(equalTo: rightAnchor, constant: -24),
+            stackView.leftAnchor.constraint(equalTo: leftAnchor, constant: edgeInset),
+            stackView.rightAnchor.constraint(equalTo: rightAnchor, constant: -edgeInset),
             stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
             
             imageView.widthAnchor.constraint(equalToConstant: 24),
@@ -108,7 +112,6 @@ class ConversationSettingsOptionView: UIView {
     // MARK: - Content
     
     func update(withColor color: UIColor, title: String, isActive: Bool) {
-        imageView.tintColor = color
         titleLabel.text = title
         titleLabel.textColor = color
         imageView.isHidden = !isActive

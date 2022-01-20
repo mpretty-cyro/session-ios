@@ -76,12 +76,16 @@
 "BLOCK_LIST_BLOCK_BUTTON" = "ブロックする";
 /* A format for the 'block user' action sheet title. Embeds {{the blocked user's name or phone number}}. */
 "BLOCK_LIST_BLOCK_USER_TITLE_FORMAT" = "%@ をブロックしますか？";
+/* A format for the 'unblock conversation' action sheet title. Embeds the {{conversation title}}. */
+"BLOCK_LIST_UNBLOCK_TITLE_FORMAT" = "%@ のブロックを解除しますか？";
 /* Button label for the 'unblock' button */
 "BLOCK_LIST_UNBLOCK_BUTTON" = "ブロックを解除する";
 /* The message format of the 'conversation blocked' alert. Embeds the {{conversation title}}. */
 "BLOCK_LIST_VIEW_BLOCKED_ALERT_MESSAGE_FORMAT" = "%@はブロックされました。";
 /* The title of the 'user blocked' alert. */
 "BLOCK_LIST_VIEW_BLOCKED_ALERT_TITLE" = "ユーザがブロックされました";
+/* Alert title after unblocking a group or 1:1 chat. Embeds the {{conversation title}}. */
+"BLOCK_LIST_VIEW_UNBLOCKED_ALERT_TITLE_FORMAT" = "%@ のブロックは解除されています。";
 /* An explanation of the consequences of blocking another user. */
 "BLOCK_USER_BEHAVIOR_EXPLANATION" = "ブロックされたユーザは、あなたにメッセージや通話を発信することができなくなります。";
 /* Label for generic done button. */
@@ -116,6 +120,10 @@
 "CONVERSATION_SETTINGS" = "会話設定";
 /* table cell label in conversation settings */
 "CONVERSATION_SETTINGS_BLOCK_THIS_USER" = "このユーザをブロックする";
+/* table cell label in conversation settings */
+"CONVERSATION_SETTINGS_BLOCK_USER" = "Block User";
+/* table cell label in conversation settings */
+"CONVERSATION_SETTINGS_UNBLOCK_USER" = "Unblock User";
 /* Title of the 'mute this thread' action sheet. */
 "CONVERSATION_SETTINGS_MUTE_ACTION_SHEET_TITLE" = "消音";
 /* label for 'mute thread' cell in conversation settings */
@@ -138,6 +146,14 @@
 "CONVERSATION_SETTINGS_SEARCH" = "会話の検索";
 /* Label for button to pin a conversation */
 "CONVERSATION_SETTINGS_PIN" = "Pin Conversation";
+/* Label for button to unpin a conversation */
+"CONVERSATION_SETTINGS_UNPIN" = "Unpin Conversation";
+/* Label for button to go to notification settings. */
+"CONVERSATION_SETTINGS_MESSAGE_NOTIFICATIONS" = "Message Notifications";
+/* Label for button to mute a thread. */
+"CONVERSATION_SETTINGS_MUTE_ACTION_NEW" = "Mute Notifications";
+/* Label for button to unmute a thread. */
+"CONVERSATION_SETTINGS_UNMUTE_ACTION_NEW" = "Unmute Notifications";
 /* Label for button to unmute a thread. */
 "CONVERSATION_SETTINGS_UNMUTE_ACTION" = "消音をやめる";
 /* Title for the 'crop/scale image' dialog. */
@@ -559,6 +575,10 @@
 "modal_send_seed_title" = "Warning";
 "modal_send_seed_explanation" = "This is your recovery phrase. If you send it to someone they'll have full access to your account.";
 "modal_send_seed_send_button_title" = "Send";
+"vc_conversation_notifications_settings_all_title" = "All";
+"vc_conversation_notifications_settings_mentions_only_title" = "Mentions Only";
+"vc_conversation_notifications_settings_mentions_only_title_short" = "Mentions";
+"vc_conversation_notifications_settings_mute_title" = "Mute";
 "vc_conversation_settings_notify_for_mentions_only_title" = "Notify for Mentions Only";
 "vc_conversation_settings_notify_for_mentions_only_explanation" = "When enabled, you'll only be notified for messages mentioning you.";
 "view_conversation_title_notify_for_mentions_only" = "Notifying for Mentions Only";

@@ -775,6 +775,12 @@
 		FAD6392E0205566D11AA9E48 /* Pods_Session.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB3724C70247A916D43271FE /* Pods_Session.framework */; };
 		FC3BD9881A30A790005B96BB /* Social.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC3BD9871A30A790005B96BB /* Social.framework */; };
 		FCB11D8C1A129A76002F93FB /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FCB11D8B1A129A76002F93FB /* CoreMedia.framework */; };
+		FD59EA342798D7FC00A18298 /* DynamicValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA332798D7FC00A18298 /* DynamicValue.swift */; };
+		FD59EA382798DC9100A18298 /* Interactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA372798DC9100A18298 /* Interactions.swift */; };
+		FD59EA3A2798DE6200A18298 /* Listener.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA392798DE6200A18298 /* Listener.swift */; };
+		FD59EA3C2799075600A18298 /* ConversationNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */; };
+		FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */; };
+		FD59EA402799142600A18298 /* Dictionary+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */; };
 		FD59FEB22794EC90003C51FB /* ConversationSettingsActionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */; };
 		FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */; };
 		FD59FEB62794EFFA003C51FB /* ConversationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */; };
@@ -1788,6 +1794,12 @@
 		FB523C549815DE935E98151E /* Pods_SessionMessagingKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SessionMessagingKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC3BD9871A30A790005B96BB /* Social.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Social.framework; path = System/Library/Frameworks/Social.framework; sourceTree = SDKROOT; };
 		FCB11D8B1A129A76002F93FB /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		FD59EA332798D7FC00A18298 /* DynamicValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicValue.swift; sourceTree = "<group>"; };
+		FD59EA372798DC9100A18298 /* Interactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Interactions.swift; sourceTree = "<group>"; };
+		FD59EA392798DE6200A18298 /* Listener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Listener.swift; sourceTree = "<group>"; };
+		FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
+		FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewController.swift; sourceTree = "<group>"; };
+		FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dictionary+Convenience.swift"; sourceTree = "<group>"; };
 		FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsActionView.swift; sourceTree = "<group>"; };
 		FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModel.swift; sourceTree = "<group>"; };
@@ -2001,6 +2013,7 @@
 		76EB03C118170B33006006FC /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				FD59EA322798D7F100A18298 /* Data Binding */,
 				451166BF1FD86B98000739BA /* AccountManager.swift */,
 				4C090A1A210FD9C7001FD7F9 /* HapticFeedback.swift */,
 				34D5CCA71EAE3D30005515DB /* AvatarViewHelper.h */,
@@ -2304,6 +2317,7 @@
 				C38EF23E255B6D66007E1867 /* UIView+OWS.m */,
 				C38EF2EF255B6DBB007E1867 /* Weak.swift */,
 				FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */,
+				FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */,
 			);
 			path = General;
 			sourceTree = "<group>";
@@ -2446,6 +2460,8 @@
 				FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */,
 				FD59FEBD27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift */,
 				FD59FEBB2795387E003C51FB /* ConversationDisappearingMessagesViewController.swift */,
+				FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */,
+				FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */,
 				B84A89BB25DE328A0040017D /* ProfilePictureVC.swift */,
 				3427C64120F500DE00EEC730 /* OWSMessageTimerView.h */,
 				3427C64220F500DF00EEC730 /* OWSMessageTimerView.m */,
@@ -3558,6 +3574,16 @@
 			path = Session;
 			sourceTree = "<group>";
 		};
+		FD59EA322798D7F100A18298 /* Data Binding */ = {
+			isa = PBXGroup;
+			children = (
+				FD59EA332798D7FC00A18298 /* DynamicValue.swift */,
+				FD59EA372798DC9100A18298 /* Interactions.swift */,
+				FD59EA392798DE6200A18298 /* Listener.swift */,
+			);
+			path = "Data Binding";
+			sourceTree = "<group>";
+		};
 		FD59FEB02794E79A003C51FB /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -4585,6 +4611,7 @@
 				C32C5FA1256DFED5003C73A2 /* NSArray+Functional.m in Sources */,
 				C3A7225E2558C38D0043A11F /* Promise+Retaining.swift in Sources */,
 				C3D9E4D12567777D0040E4F3 /* OWSMediaUtils.swift in Sources */,
+				FD59EA402799142600A18298 /* Dictionary+Convenience.swift in Sources */,
 				C3BBE0AA2554D4DE0050F1E3 /* Dictionary+Description.swift in Sources */,
 				C3D9E4DA256778410040E4F3 /* UIImage+OWS.m in Sources */,
 				C32C600F256E07F5003C73A2 /* NSUserDefaults+OWS.m in Sources */,
@@ -4782,6 +4809,7 @@
 				B879D449247E1BE300DB3608 /* PathVC.swift in Sources */,
 				454A84042059C787008B8C75 /* MediaTileViewController.swift in Sources */,
 				340FC8B4204DAC8D007AEB0F /* OWSBackupSettingsViewController.m in Sources */,
+				FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */,
 				34D1F0871F8678AA0066283D /* ConversationViewItem.m in Sources */,
 				451A13B11E13DED2000A50FD /* AppNotifications.swift in Sources */,
 				34D99CE4217509C2000AFB39 /* AppEnvironment.swift in Sources */,
@@ -4796,6 +4824,7 @@
 				B84A89BC25DE328A0040017D /* ProfilePictureVC.swift in Sources */,
 				34386A54207D271D009F5D9C /* NeverClearView.swift in Sources */,
 				FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */,
+				FD59EA342798D7FC00A18298 /* DynamicValue.swift in Sources */,
 				451166C01FD86B98000739BA /* AccountManager.swift in Sources */,
 				C374EEF425DB31D40073A857 /* VoiceMessageRecordingView.swift in Sources */,
 				B83F2B88240CB75A000A54AB /* UIImage+Scaling.swift in Sources */,
@@ -4811,6 +4840,7 @@
 				34A8B3512190A40E00218A25 /* MediaAlbumView.swift in Sources */,
 				7B7CB18B270591630079FF93 /* ShareLogsModal.swift in Sources */,
 				4C4AEC4520EC343B0020E72B /* DismissableTextField.swift in Sources */,
+				FD59EA3A2798DE6200A18298 /* Listener.swift in Sources */,
 				3496955E219B605E00DCFE74 /* PhotoLibrary.swift in Sources */,
 				C3A76A8D25DB83F90074CB90 /* PermissionMissingModal.swift in Sources */,
 				340FC8A9204DAC8D007AEB0F /* NotificationSettingsOptionsViewController.m in Sources */,
@@ -4819,6 +4849,7 @@
 				C3548F0624456447009433A8 /* PNModeVC.swift in Sources */,
 				B80A579F23DFF1F300876683 /* NewClosedGroupVC.swift in Sources */,
 				D221A09A169C9E5E00537ABF /* main.m in Sources */,
+				FD59EA382798DC9100A18298 /* Interactions.swift in Sources */,
 				3496957221A301A100DCFE74 /* OWSBackup.m in Sources */,
 				B835247925C38D880089A44F /* MessageCell.swift in Sources */,
 				B86BD08623399CEF000F5AE3 /* SeedModal.swift in Sources */,
@@ -4827,6 +4858,7 @@
 				34D1F0521F7E8EA30066283D /* GiphyDownloader.swift in Sources */,
 				450DF2051E0D74AC003D14BE /* Platform.swift in Sources */,
 				4CC613362227A00400E21A3A /* ConversationSearch.swift in Sources */,
+				FD59EA3C2799075600A18298 /* ConversationNotificationSettingsViewModel.swift in Sources */,
 				B82149B825D60393009C0F2A /* BlockedModal.swift in Sources */,
 				B82B408C239A068800A248E7 /* RegisterVC.swift in Sources */,
 				346129991FD1E4DA00532771 /* SignalApp.m in Sources */,

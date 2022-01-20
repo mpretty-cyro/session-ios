@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUIKit
 
 class ConversationSettingsActionView: UIView {
     static let minHeight: CGFloat = 50
@@ -46,7 +47,7 @@ class ConversationSettingsActionView: UIView {
         stackView.axis = .horizontal
         stackView.alignment = .center
         stackView.distribution = .fill
-        stackView.spacing = 12
+        stackView.spacing = (isIPhone5OrSmaller ? Values.smallSpacing : Values.mediumSpacing)
         
         return stackView
     }()
@@ -76,11 +77,20 @@ class ConversationSettingsActionView: UIView {
         label.translatesAutoresizingMaskIntoConstraints = false
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.font = UIFont.systemFont(ofSize: Values.mediumFontSize)
-        label.textColor = Colors.border//unimportant
-        //label.font = UIFont.ows_lightFont(withSize: <#T##CGFloat#>) UIFont.systemFont(ofSize: Values.mediumFontSize)
+        label.textColor = Colors.border
         label.lineBreakMode = .byTruncatingTail
         
         return label
+    }()
+    
+    private lazy var disabledView: UIView = {
+        let view: UIView = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.backgroundColor = Colors.cellSelected
+        view.alpha = 0.5
+        view.isHidden = true
+        
+        return view
     }()
     
     private func setupUI() {
@@ -89,6 +99,7 @@ class ConversationSettingsActionView: UIView {
         
         addSubview(highlightView)
         addSubview(stackView)
+        addSubview(disabledView)
         
         stackView.addArrangedSubview(imageView)
         stackView.addArrangedSubview(titleLabel)
@@ -100,6 +111,8 @@ class ConversationSettingsActionView: UIView {
     // MARK: - Layout
     
     private func setupLayout() {
+        let edgeInset: CGFloat = (isIPhone5OrSmaller ? Values.mediumSpacing : Values.largeSpacing)
+        
         NSLayoutConstraint.activate([
             heightAnchor.constraint(greaterThanOrEqualToConstant: ConversationSettingsActionView.minHeight),
             
@@ -109,30 +122,32 @@ class ConversationSettingsActionView: UIView {
             highlightView.bottomAnchor.constraint(equalTo: bottomAnchor),
             
             stackView.topAnchor.constraint(equalTo: topAnchor),
-            stackView.leftAnchor.constraint(equalTo: leftAnchor, constant: 24),
-            stackView.rightAnchor.constraint(equalTo: rightAnchor, constant: -24),
+            stackView.leftAnchor.constraint(equalTo: leftAnchor, constant: edgeInset),
+            stackView.rightAnchor.constraint(equalTo: rightAnchor, constant: -edgeInset),
             stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            
-//            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-//            imageView.leftAnchor.constraint(equalTo: leftAnchor, constant: 24),
+
             imageView.widthAnchor.constraint(equalToConstant: 24),
-            imageView.heightAnchor.constraint(equalToConstant: 24)//,
+            imageView.heightAnchor.constraint(equalToConstant: 24),
             
-//            titleLabel.centerYAnchor.constraint(equalTo: imageView.centerYAnchor),
-//            titleLabel.leftAnchor.constraint(equalTo: imageView.rightAnchor, constant: 12),
-//            titleLabel.rightAnchor.constraint(equalTo: rightAnchor, constant: -24)
+            disabledView.topAnchor.constraint(equalTo: topAnchor),
+            disabledView.leftAnchor.constraint(equalTo: leftAnchor),
+            disabledView.rightAnchor.constraint(equalTo: rightAnchor),
+            disabledView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
     
     // MARK: - Content
     
-    func update(with icon: UIImage?, color: UIColor, title: String, subtitle: String? = nil, canHighlight: Bool = true) {
+    func update(with icon: UIImage?, color: UIColor, title: String, subtitle: String? = nil, canHighlight: Bool = true, isEnabled: Bool = true) {
         imageView.image = icon
         imageView.tintColor = color
         titleLabel.text = title
         titleLabel.textColor = color
         subtitleLabel.text = subtitle
-        highlightView.isHidden = !canHighlight
+        highlightView.isHidden = (!canHighlight || !isEnabled)
+        
+        disabledView.isHidden = isEnabled
+        tapGestureRecognizer.isEnabled = isEnabled
     }
     
     // MARK: - Interaction

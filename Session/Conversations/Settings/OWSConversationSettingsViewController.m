@@ -263,7 +263,7 @@ CGFloat kIconViewLength = 24;
     } else {
         title = NSLocalizedString(@"Group Settings", @"");
     }
-    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:title customBackButton:YES];
+    [LKViewControllerUtilities setUpDefaultSessionStyleForVC:self withTitle:title customBackButton:YES customBackground:NO];
     self.tableView.backgroundColor = UIColor.clearColor;
     
     if ([self.thread isKindOfClass:TSContactThread.class]) {
