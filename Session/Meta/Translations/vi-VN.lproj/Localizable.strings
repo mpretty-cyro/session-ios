@@ -181,7 +181,9 @@
 /* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
-"DELETE_MESSAGES" = "Delete Messages";
+"DELETE_MESSAGES" = "Xóa tin nhắn";
+/* message in confirmation alert when deleting messages in a conversation */
+"DELETE_MESSAGES_CONFIRMATION_MESSAGE" = "Xóa cuộc trò chuyện này vĩnh viễn?";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "Edit Group";
 /* Label indicating media gallery is empty */

@@ -181,7 +181,9 @@
 /* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
-"DELETE_MESSAGES" = "Delete Messages";
+"DELETE_MESSAGES" = "حذف پیام‌ها";
+/* message in confirmation alert when deleting messages in a conversation */
+"DELETE_MESSAGES_CONFIRMATION_MESSAGE" = "آیا می‌خواهید این گفتگو را برای همیشه حذف کنید؟";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "وایرایش گروه";
 /* Label indicating media gallery is empty */

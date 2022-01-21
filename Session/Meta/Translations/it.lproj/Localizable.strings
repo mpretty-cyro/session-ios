@@ -181,7 +181,9 @@
 /* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
-"DELETE_MESSAGES" = "Delete Messages";
+"DELETE_MESSAGES" = "Elimina messaggi";
+/* message in confirmation alert when deleting messages in a conversation */
+"DELETE_MESSAGES_CONFIRMATION_MESSAGE" = "Rimuovere definitivamente la conversazione?";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "Modifica gruppo";
 /* Label indicating media gallery is empty */

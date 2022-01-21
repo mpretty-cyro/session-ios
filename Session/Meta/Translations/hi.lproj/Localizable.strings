@@ -181,7 +181,9 @@
 /* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
-"DELETE_MESSAGES" = "Delete Messages";
+"DELETE_MESSAGES" = "संदेश हटाएँ";
+/* message in confirmation alert when deleting messages in a conversation */
+"DELETE_MESSAGES_CONFIRMATION_MESSAGE" = "इस वार्तालाप को स्थायी रूप से हटाएं?";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "Edit Group";
 /* Label indicating media gallery is empty */

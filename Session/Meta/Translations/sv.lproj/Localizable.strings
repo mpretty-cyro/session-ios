@@ -181,7 +181,9 @@
 /* table cell label in conversation settings */
 "DISAPPEARING_MESSAGES_OFF" = "Off";
 /* table cell label in conversation settings */
-"DELETE_MESSAGES" = "Delete Messages";
+"DELETE_MESSAGES" = "Radera meddelanden";
+/* message in confirmation alert when deleting messages in a conversation */
+"DELETE_MESSAGES_CONFIRMATION_MESSAGE" = "Vill du radera denna konversation för alltid?";
 /* table cell label in conversation settings */
 "EDIT_GROUP_ACTION" = "Redigera grupp";
 /* Label indicating media gallery is empty */

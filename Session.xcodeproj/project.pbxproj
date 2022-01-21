@@ -76,7 +76,7 @@
 		4535186E1FC635DD00210559 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4535186C1FC635DD00210559 /* MainInterface.storyboard */; };
 		453518721FC635DD00210559 /* SessionShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 453518681FC635DD00210559 /* SessionShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4539B5861F79348F007141FF /* PushRegistrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4539B5851F79348F007141FF /* PushRegistrationManager.swift */; };
-		4542DF54208D40AC007B4E76 /* LoadingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4542DF53208D40AC007B4E76 /* LoadingViewController.swift */; };
+		4542DF54208D40AC007B4E76 /* SplashViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4542DF53208D40AC007B4E76 /* SplashViewController.swift */; };
 		454A84042059C787008B8C75 /* MediaTileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454A84032059C787008B8C75 /* MediaTileViewController.swift */; };
 		455A16DD1F1FEA0000F86704 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 455A16DB1F1FEA0000F86704 /* Metal.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		455A16DE1F1FEA0000F86704 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 455A16DC1F1FEA0000F86704 /* MetalKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
@@ -1047,7 +1047,7 @@
 		4535186D1FC635DD00210559 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
 		4535186F1FC635DD00210559 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4539B5851F79348F007141FF /* PushRegistrationManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PushRegistrationManager.swift; sourceTree = "<group>"; };
-		4542DF53208D40AC007B4E76 /* LoadingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingViewController.swift; sourceTree = "<group>"; };
+		4542DF53208D40AC007B4E76 /* SplashViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashViewController.swift; sourceTree = "<group>"; };
 		454A84032059C787008B8C75 /* MediaTileViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTileViewController.swift; sourceTree = "<group>"; };
 		455A16DB1F1FEA0000F86704 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		455A16DC1F1FEA0000F86704 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
@@ -2359,7 +2359,7 @@
 				45A6DAD51EBBF85500893231 /* ReminderView.swift */,
 				C354E75923FE2A7600CE22E3 /* BaseVC.swift */,
 				B8BB82AA238F669C00BA5194 /* ConversationCell.swift */,
-				4542DF53208D40AC007B4E76 /* LoadingViewController.swift */,
+				4542DF53208D40AC007B4E76 /* SplashViewController.swift */,
 				340FC888204DAC8C007AEB0F /* OWSQRCodeScanningViewController.h */,
 				340FC896204DAC8C007AEB0F /* OWSQRCodeScanningViewController.m */,
 				B893063E2383961A005EAA8E /* ScanQRCodeWrapperVC.swift */,
@@ -4889,7 +4889,7 @@
 				34330AA31E79686200DF2FB9 /* OWSProgressView.m in Sources */,
 				344825C6211390C800DB4BD8 /* OWSOrphanDataCleaner.m in Sources */,
 				C328254925CA60E60062D0A7 /* ContextMenuVC+Action.swift in Sources */,
-				4542DF54208D40AC007B4E76 /* LoadingViewController.swift in Sources */,
+				4542DF54208D40AC007B4E76 /* SplashViewController.swift in Sources */,
 				34D5CCA91EAE3D30005515DB /* AvatarViewHelper.m in Sources */,
 				B8F5F71A25F1B35C003BF8D4 /* MediaPlaceholderView.swift in Sources */,
 				341341EF2187467A00192D59 /* ConversationViewModel.m in Sources */,

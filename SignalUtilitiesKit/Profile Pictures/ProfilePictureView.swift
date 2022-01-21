@@ -72,7 +72,7 @@ public final class ProfilePictureView : UIView {
                 var users = Set(thread.groupModel.groupMemberIds)
                 users.remove(getUserHexEncodedPublicKey())
                 var randomUsers = users.sorted() // Sort to provide a level of stability
-                if users.count == 1 {
+                if users.count <= 1 {
                     randomUsers.insert(getUserHexEncodedPublicKey(), at: 0) // Ensure the current user is at the back visually
                 }
                 publicKey = randomUsers.count >= 1 ? randomUsers[0] : ""
