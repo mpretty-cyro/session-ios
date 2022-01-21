@@ -1,11 +1,13 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
+import Foundation
+
 class DynamicValue<T> {
     typealias ChangeHandler = (T) -> Void
     
     private var observers: [Int: ChangeHandler] = [:]
     
-    var value : T {
+    var value: T {
         didSet {
             // Let all observers know about the change
             observers.values.forEach { callback in
@@ -42,7 +44,7 @@ class DynamicValue<T> {
     ) -> Listener {
         let identifier: Int = UUID().hashValue
         let finalChangeHandler: ChangeHandler = { value in
-            guard forceToMainThread else { return changeHandler(value) }
+            guard forceToMainThread && !Thread.isMainThread else { return changeHandler(value) }
             
             DispatchQueue.main.async { changeHandler(value) }
         }

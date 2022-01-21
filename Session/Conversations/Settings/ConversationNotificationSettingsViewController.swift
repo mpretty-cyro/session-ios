@@ -3,6 +3,7 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SignalUtilitiesKit
 
 class ConversationNotificationSettingsViewController: BaseVC {
     private let viewModel: ConversationNotificationSettingsViewModel
@@ -50,7 +51,7 @@ class ConversationNotificationSettingsViewController: BaseVC {
         super.viewDidLoad()
         
         view.backgroundColor = Colors.settingsBackground
-        ViewControllerUtilities.setUpDefaultSessionStyle(for: self, title: viewModel.title, hasCustomBackButton: true)
+        ViewControllerUtilities.setUpDefaultSessionStyle(for: self, title: viewModel.title, hasCustomBackButton: true, hasCustomBackground: true)
         
         view.addSubview(scrollView)
         
@@ -89,7 +90,7 @@ class ConversationNotificationSettingsViewController: BaseVC {
                 optionView.clipsToBounds = true
                 optionView.layer.cornerRadius = 8
                 optionView.update(withColor: Colors.text, title: item.title, isActive: item.isActive)
-                optionView.viewTapped = { [weak self] in self?.viewModel.interactions.tap(item.id) }
+                optionView.viewTapped = { [weak self] in self?.viewModel.interaction.tap(item.id) }
                 self?.viewMap[item.id] = optionView
 
                 self?.stackView.addArrangedSubview(optionView)

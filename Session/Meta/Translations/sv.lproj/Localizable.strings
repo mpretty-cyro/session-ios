@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = "Skanna QR-koden för den öppna grupp du vill ansluta till";
 "vc_enter_chat_url_text_field_hint" = "Ange en öppen grupp-URL";
 "vc_settings_title" = "Inställningar";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "Ange ett visningsnamn";
 "vc_settings_display_name_missing_error" = "Vänligen välj ett visningsnamn";
 "vc_settings_display_name_too_long_error" = "Vänligen välj ett kortare visningsnamn";

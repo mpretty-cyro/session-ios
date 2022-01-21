@@ -1,3 +1,4 @@
+import UIKit
 
 final class MessagesTableView : UITableView {
     var keyboardHeight: CGFloat = 0

@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = "Pindai kode QR grup terbuka yang ingin anda masuki";
 "vc_enter_chat_url_text_field_hint" = "Masukkan sebuah URL grup terbuka";
 "vc_settings_title" = "Pengaturan";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "Masukkan nama";
 "vc_settings_display_name_missing_error" = "Pilih sebuah nama";
 "vc_settings_display_name_too_long_error" = "Nama yang dibuat terlalu panjang";

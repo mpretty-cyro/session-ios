@@ -3,6 +3,11 @@
 // • Slight paging glitch when scrolling up and loading more content
 // • Photo rounding (the small corners don't have the correct rounding)
 // • Remaining search glitchiness
+import UIKit
+import AVFAudio
+import SessionUIKit
+import SessionMessagingKit
+import SignalUtilitiesKit
 
 final class ConversationVC : BaseVC, ConversationViewModelDelegate, OWSConversationSettingsViewDelegate, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
     let isUnsendRequestsEnabled = true // Set to true once unsend requests are done on all platforms

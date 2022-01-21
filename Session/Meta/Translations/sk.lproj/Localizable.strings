@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = "Oskenujte QR kód skupiny ku ktorej sa chcete pripojiť";
 "vc_enter_chat_url_text_field_hint" = "Zadajte URL otvorenej skupiny";
 "vc_settings_title" = "Nastavenia";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "Zadajte zobrazované meno";
 "vc_settings_display_name_missing_error" = "Zvoľte prosím zobrazované meno";
 "vc_settings_display_name_too_long_error" = "Zvoľte prosím kratšie zobrazované meno";

@@ -45,7 +45,7 @@ class ConversationDisappearingMessagesViewModel {
     
     // MARK: - Content and Interactions
     
-    let title: String = NSLocalizedString("DISAPPEARING_MESSAGES_SETTINGS_TITLE", comment: "")
+    let title: String = "DISAPPEARING_MESSAGES_SETTINGS_TITLE".localized()
     
     lazy var description: String = {
         let displayName: String
@@ -74,7 +74,7 @@ class ConversationDisappearingMessagesViewModel {
         
         // Setup the initial state of the items
         return DynamicValue(
-            [NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: "label in conversation settings")]
+            ["DISAPPEARING_MESSAGES_OFF".localized()]
                 .appending(
                     contentsOf: OWSDisappearingMessagesConfiguration.validDurationsSeconds()
                         .map { seconds in NSString.formatDurationSeconds(UInt32(seconds.intValue), useShortFormat: false) }
@@ -84,7 +84,7 @@ class ConversationDisappearingMessagesViewModel {
         )
     }()
     
-    lazy var interactions: Interactions<Int, TSThread> = Interactions { [weak self] in
+    lazy var interaction: InteractionManager<Int, TSThread> = InteractionManager { [weak self] _ in
         guard let strongSelf: ConversationDisappearingMessagesViewModel = self else { return nil }
         
         return (strongSelf.thread)
@@ -98,7 +98,7 @@ class ConversationDisappearingMessagesViewModel {
         return [
             0: Item(
                 id: 0,
-                title: NSLocalizedString("DISAPPEARING_MESSAGES_OFF", comment: ""),
+                title: "DISAPPEARING_MESSAGES_OFF".localized(),
                 isActive: false
             )
         ]
@@ -120,7 +120,7 @@ class ConversationDisappearingMessagesViewModel {
     }()
     
     private func setupBinding() {
-        interactions.onAny(forceToMainThread: false) { [weak self] id, _ in
+        interaction.onAny(forceToMainThread: false) { [weak self] id, _ in
             self?.disappearingMessagesConfiguration.isEnabled = (id != 0)
             self?.disappearingMessagesConfiguration.durationSeconds = (id == 0 ?
                 0 :

@@ -51,10 +51,10 @@ class ConversationNotificationSettingsViewModel {
     
     lazy var items: DynamicValue<[Item]> = DynamicValue(Item.Id.allCases.compactMap { viewState[$0] })
     
-    lazy var interactions: Interactions<Item.Id, TSGroupThread> = Interactions { [weak self] in
+    lazy var interaction: InteractionManager<Item.Id, (TSGroupThread, Any?)> = InteractionManager { [weak self] interactionData in
         guard let strongSelf: ConversationNotificationSettingsViewModel = self else { return nil }
         
-        return (strongSelf.thread)
+        return (strongSelf.thread, interactionData)
     }
     
     // MARK: - Internal State Management
@@ -62,25 +62,25 @@ class ConversationNotificationSettingsViewModel {
     private lazy var viewState: [Item.Id: Item] = [
         .all: Item(
             id: .all,
-            title: NSLocalizedString("vc_conversation_notifications_settings_all_title", comment: ""),
+            title: "vc_conversation_notifications_settings_all_title".localized(),
             isActive: false
         ),
         
         .mentionsOnly: Item(
             id: .mentionsOnly,
-            title: NSLocalizedString("vc_conversation_notifications_settings_mentions_only_title", comment: ""),
+            title: "vc_conversation_notifications_settings_mentions_only_title".localized(),
             isActive: false
         ),
         
         .mute: Item(
             id: .mute,
-            title: NSLocalizedString("vc_conversation_notifications_settings_mute_title", comment: ""),
+            title: "vc_conversation_notifications_settings_mute_title".localized(),
             isActive: false
         )
     ]
     
     private func setupBinding() {
-        interactions.on(.all, forceToMainThread: false) { [weak self] thread in
+        interaction.on(.all, forceToMainThread: false) { [weak self] thread, _ in
             Storage.write { transaction in
                 thread.setIsOnlyNotifyingForMentions(false, with: transaction)
                 thread.updateWithMuted(until: nil, transaction: transaction)
@@ -90,7 +90,7 @@ class ConversationNotificationSettingsViewModel {
             }
         }
         
-        interactions.on(.mentionsOnly, forceToMainThread: false) { [weak self] thread in
+        interaction.on(.mentionsOnly, forceToMainThread: false) { [weak self] thread, _ in
             Storage.write { transaction in
                 thread.setIsOnlyNotifyingForMentions(true, with: transaction)
                 thread.updateWithMuted(until: nil, transaction: transaction)
@@ -100,7 +100,7 @@ class ConversationNotificationSettingsViewModel {
             }
         }
         
-        interactions.on(.mute, forceToMainThread: false) { [weak self] thread in
+        interaction.on(.mute, forceToMainThread: false) { [weak self] thread, _ in
             Storage.write { transaction in
                 thread.setIsOnlyNotifyingForMentions(false, with: transaction)
                 thread.updateWithMuted(until: Date.distantFuture, transaction: transaction)

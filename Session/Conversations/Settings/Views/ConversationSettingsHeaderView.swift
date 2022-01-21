@@ -4,29 +4,10 @@ import UIKit
 import SessionUIKit
 import SignalUtilitiesKit
 
-class ConversationSettingsHeaderView: UIView {
-    var profilePictureTapped: (() -> ())?
+class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
+    var profilePictureTapped: ((UIImage?) -> ())?
     var displayNameTapped: (() -> ())?
-    
-    var isEditingDisplayName: Bool = false {
-        didSet {
-            guard isEditingDisplayName != oldValue else { return }
-            
-            let newValue: Bool = isEditingDisplayName
-            
-            UIView.animate(withDuration: 0.25) { [weak self] in
-                self?.displayNameLabel.alpha = (newValue ? 0 : 1)
-                self?.displayNameTextField.alpha = (newValue ? 1 : 0)
-            }
-            
-            if isEditingDisplayName {
-                displayNameTextField.becomeFirstResponder()
-            }
-            else {
-                displayNameTextField.resignFirstResponder()
-            }
-        }
-    }
+    var textChanged: ((String) -> ())?
     
     // MARK: - Initialization
     
@@ -84,7 +65,7 @@ class ConversationSettingsHeaderView: UIView {
         return view
     }()
     
-    private let displayNameContainer: UIView = {
+    private lazy var displayNameContainer: UIView = {
         let view: UIView = UIView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.accessibilityLabel = "Edit name text field"
@@ -107,14 +88,15 @@ class ConversationSettingsHeaderView: UIView {
         return label
     }()
     
-    private let displayNameTextField: UIView = {
-        let view: TextField = TextField(placeholder: "Enter a name", usesDefaultHeight: false)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        view.textAlignment = .center
-        view.accessibilityLabel = "Edit name text field"
-        view.alpha = 0
+    private lazy var displayNameTextField: UITextField = {
+        let textField: TextField = TextField(placeholder: "Enter a name", usesDefaultHeight: false)
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.textAlignment = .center
+        textField.accessibilityLabel = "Edit name text field"
+        textField.alpha = 0
+        textField.delegate = self
         
-        return view
+        return textField
     }()
     
     private lazy var sessionIdLabel: SRCopyableLabel = {
@@ -181,13 +163,39 @@ class ConversationSettingsHeaderView: UIView {
         sessionIdLabel.isHidden = (contactSessionId?.isEmpty != false)
     }
     
+    func update(isEditingDisplayName: Bool) {
+        UIView.animate(withDuration: 0.25) { [weak self] in
+            self?.displayNameLabel.alpha = (isEditingDisplayName ? 0 : 1)
+            self?.displayNameTextField.alpha = (isEditingDisplayName ? 1 : 0)
+        }
+        
+        if isEditingDisplayName {
+            displayNameTextField.becomeFirstResponder()
+        }
+        else {
+            displayNameTextField.resignFirstResponder()
+        }
+    }
+    
     // MARK: - Interaction
     
     @objc private func internalProfilePictureTapped() {
-        profilePictureTapped?()
+        profilePictureTapped?(profilePictureView.getProfilePicture())
     }
     
     @objc private func internalDisplayNameTapped() {
         displayNameTapped?()
+    }
+    
+    // MARK: - UITextFieldDelegate
+    
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        if let text: String = textField.text, let range: Range = Range(range, in: text) {
+            let updatedText: String = text.replacingCharacters(in: range, with: string)
+            
+            textChanged?(updatedText)
+        }
+        
+        return true
     }
 }

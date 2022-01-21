@@ -1,3 +1,5 @@
+import UIKit
+import SessionUIKit
 
 class BaseVC : UIViewController {
     private var hasGradient = false

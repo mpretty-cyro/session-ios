@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = "掃描開放式群組的 QR Code 來加入";
 "vc_enter_chat_url_text_field_hint" = "請輸入開放式群組的網址";
 "vc_settings_title" = "設定";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "輸入一個名稱";
 "vc_settings_display_name_missing_error" = "請選擇一個名稱";
 "vc_settings_display_name_too_long_error" = "請選擇一個較短的名稱";

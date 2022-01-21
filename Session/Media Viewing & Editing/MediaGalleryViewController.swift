@@ -2,7 +2,9 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 //
 
-import Foundation
+import UIKit
+import SessionUIKit
+import SessionMessagingKit
 
 public enum GalleryDirection {
     case before, after, around

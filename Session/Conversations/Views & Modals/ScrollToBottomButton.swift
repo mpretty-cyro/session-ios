@@ -1,4 +1,5 @@
-    
+import UIKit
+
 final class ScrollToBottomButton : UIView {
     private weak var delegate: ScrollToBottomButtonDelegate?
     

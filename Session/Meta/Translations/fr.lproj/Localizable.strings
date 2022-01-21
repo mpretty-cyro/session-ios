@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = "Scannez le code QR du groupe public que vous souhaitez rejoindre";
 "vc_enter_chat_url_text_field_hint" = "Saisissez une URL de groupe public";
 "vc_settings_title" = "Paramètres";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "Saisissez un nom d'utilisateur";
 "vc_settings_display_name_missing_error" = "Veuillez choisir un nom d'utilisateur";
 "vc_settings_display_name_too_long_error" = "Veuillez choisir un nom d'utilisateur plus court";

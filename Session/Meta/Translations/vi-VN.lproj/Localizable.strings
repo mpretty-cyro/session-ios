@@ -504,6 +504,7 @@
 "vc_join_public_chat_scan_qr_code_explanation" = " Quét mã QR của nhóm mở mà bạn muốn tham gia";
 "vc_enter_chat_url_text_field_hint" = "Nhập URL của nhóm mở";
 "vc_settings_title" = "Cài đặt";
+"vc_group_settings_title" = "Group Settings";
 "vc_settings_display_name_text_field_hint" = "Nhập tên hiển thị";
 "vc_settings_display_name_missing_error" = "Vui lòng chọn một tên hiển thị ";
 "vc_settings_display_name_too_long_error" = "Vui lòng chọn một tên hiển thị ngắn hơn ";

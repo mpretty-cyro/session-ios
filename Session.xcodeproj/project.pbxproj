@@ -776,11 +776,13 @@
 		FC3BD9881A30A790005B96BB /* Social.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC3BD9871A30A790005B96BB /* Social.framework */; };
 		FCB11D8C1A129A76002F93FB /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FCB11D8B1A129A76002F93FB /* CoreMedia.framework */; };
 		FD59EA342798D7FC00A18298 /* DynamicValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA332798D7FC00A18298 /* DynamicValue.swift */; };
-		FD59EA382798DC9100A18298 /* Interactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA372798DC9100A18298 /* Interactions.swift */; };
+		FD59EA382798DC9100A18298 /* InteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA372798DC9100A18298 /* InteractionManager.swift */; };
 		FD59EA3A2798DE6200A18298 /* Listener.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA392798DE6200A18298 /* Listener.swift */; };
 		FD59EA3C2799075600A18298 /* ConversationNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */; };
 		FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */; };
 		FD59EA402799142600A18298 /* Dictionary+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */; };
+		FD59EA42279A12BB00A18298 /* String+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA41279A12BB00A18298 /* String+Localization.swift */; };
+		FD59EA44279A263200A18298 /* ClosureBarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */; };
 		FD59FEB22794EC90003C51FB /* ConversationSettingsActionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */; };
 		FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */; };
 		FD59FEB62794EFFA003C51FB /* ConversationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */; };
@@ -1795,11 +1797,13 @@
 		FC3BD9871A30A790005B96BB /* Social.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Social.framework; path = System/Library/Frameworks/Social.framework; sourceTree = SDKROOT; };
 		FCB11D8B1A129A76002F93FB /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		FD59EA332798D7FC00A18298 /* DynamicValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicValue.swift; sourceTree = "<group>"; };
-		FD59EA372798DC9100A18298 /* Interactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Interactions.swift; sourceTree = "<group>"; };
+		FD59EA372798DC9100A18298 /* InteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionManager.swift; sourceTree = "<group>"; };
 		FD59EA392798DE6200A18298 /* Listener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Listener.swift; sourceTree = "<group>"; };
 		FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dictionary+Convenience.swift"; sourceTree = "<group>"; };
+		FD59EA41279A12BB00A18298 /* String+Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Localization.swift"; sourceTree = "<group>"; };
+		FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosureBarButtonItem.swift; sourceTree = "<group>"; };
 		FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsActionView.swift; sourceTree = "<group>"; };
 		FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModel.swift; sourceTree = "<group>"; };
@@ -2046,6 +2050,7 @@
 				B83F2B87240CB75A000A54AB /* UIImage+Scaling.swift */,
 				C31A6C59247F214E001123EF /* UIView+Glow.swift */,
 				C3548F0724456AB6009433A8 /* UIView+Wrapping.swift */,
+				FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -2318,6 +2323,7 @@
 				C38EF2EF255B6DBB007E1867 /* Weak.swift */,
 				FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */,
 				FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */,
+				FD59EA41279A12BB00A18298 /* String+Localization.swift */,
 			);
 			path = General;
 			sourceTree = "<group>";
@@ -3578,7 +3584,7 @@
 			isa = PBXGroup;
 			children = (
 				FD59EA332798D7FC00A18298 /* DynamicValue.swift */,
-				FD59EA372798DC9100A18298 /* Interactions.swift */,
+				FD59EA372798DC9100A18298 /* InteractionManager.swift */,
 				FD59EA392798DE6200A18298 /* Listener.swift */,
 			);
 			path = "Data Binding";
@@ -4626,6 +4632,7 @@
 				C32C5DDB256DD9FF003C73A2 /* ContentProxy.swift in Sources */,
 				C3A71F892558BA9F0043A11F /* Mnemonic.swift in Sources */,
 				B8F5F58325EC94A6003BF8D4 /* Collection+Subscripting.swift in Sources */,
+				FD59EA42279A12BB00A18298 /* String+Localization.swift in Sources */,
 				C33FDEF8255A656D00E217F9 /* Promise+Delaying.swift in Sources */,
 				B8BC00C0257D90E30032E807 /* General.swift in Sources */,
 				FD59FEC027953D3C003C51FB /* Array+Convenience.swift in Sources */,
@@ -4849,7 +4856,7 @@
 				C3548F0624456447009433A8 /* PNModeVC.swift in Sources */,
 				B80A579F23DFF1F300876683 /* NewClosedGroupVC.swift in Sources */,
 				D221A09A169C9E5E00537ABF /* main.m in Sources */,
-				FD59EA382798DC9100A18298 /* Interactions.swift in Sources */,
+				FD59EA382798DC9100A18298 /* InteractionManager.swift in Sources */,
 				3496957221A301A100DCFE74 /* OWSBackup.m in Sources */,
 				B835247925C38D880089A44F /* MessageCell.swift in Sources */,
 				B86BD08623399CEF000F5AE3 /* SeedModal.swift in Sources */,
@@ -4932,6 +4939,7 @@
 				3496957021A301A100DCFE74 /* OWSBackupIO.m in Sources */,
 				FD59FEC227953DA5003C51FB /* ConversationSettingsOptionView.swift in Sources */,
 				B8269D3325C7A8C600488AB4 /* InputViewButton.swift in Sources */,
+				FD59EA44279A263200A18298 /* ClosureBarButtonItem.swift in Sources */,
 				B8269D3D25C7B34D00488AB4 /* InputTextView.swift in Sources */,
 				76EB054018170B33006006FC /* AppDelegate.m in Sources */,
 				340FC8B6204DAC8D007AEB0F /* OWSQRCodeScanningViewController.m in Sources */,

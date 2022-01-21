@@ -1,3 +1,4 @@
+import UIKit
 
 final class ConversationTitleView : UIView {
     private let thread: TSThread

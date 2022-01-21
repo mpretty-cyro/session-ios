@@ -2,7 +2,7 @@
 
 import Foundation
 
-class Interactions<Id: Hashable, DataType> {
+class InteractionManager<Id: Hashable, DataType> {
     typealias Callback = (DataType) -> ()
     typealias IdentifiedCallback = (Id, DataType) -> ()
     
@@ -11,21 +11,22 @@ class Interactions<Id: Hashable, DataType> {
     enum Style: Hashable {
         case any
         case tap
+        case change
     }
-    struct IdentifiedInteraction<Id: Hashable>: Hashable {
+    private struct IdentifiedInteraction<Id: Hashable>: Hashable {
         let id: Id?
         let style: Style
     }
     
     // MARK: - Variables
     
-    private let dataProvider: () -> DataType?
+    private let dataProvider: (Any?) -> DataType?
     private var interactions: [IdentifiedInteraction<Id>: [Int: Callback]] = [:]
     private var anyInteractions: [Style: [Int: IdentifiedCallback]] = [:]
     
     // MARK: - Initialization
     
-    init(_ dataProvider: @escaping (() -> DataType?)) {
+    init(_ dataProvider: @escaping ((Any?) -> DataType?)) {
         self.dataProvider = dataProvider
     }
     
@@ -37,8 +38,8 @@ class Interactions<Id: Hashable, DataType> {
     
     /// This function triggers the interaction callbacks for the given `id` and `style` as well as the `Style.any` callbacks for the `id` and
     /// the `onAny` interactions for either the `id` or the `style`
-    private func interact(_ id: Id, style: Style) {
-        guard let data: DataType = dataProvider() else { return }
+    private func interact(_ id: Id, style: Style, interactionData: Any? = nil) {
+        guard let data: DataType = dataProvider(interactionData) else { return }
         
         var targetInteractions: [Callback?]
         var targetAnyInteractions: [IdentifiedCallback?]
@@ -51,9 +52,16 @@ class Interactions<Id: Hashable, DataType> {
                     Array((interactions[IdentifiedInteraction(id: id, style: .any)] ?? [:]).values)
                 ].flatMap { $0 }
                 
+            case .change:
+                targetInteractions = [
+                    Array((interactions[IdentifiedInteraction(id: id, style: .change)] ?? [:]).values),
+                    Array((interactions[IdentifiedInteraction(id: id, style: .any)] ?? [:]).values)
+                ].flatMap { $0 }
+                
             case .any:
                 targetInteractions = [
                     Array((interactions[IdentifiedInteraction(id: id, style: .tap)] ?? [:]).values),
+                    Array((interactions[IdentifiedInteraction(id: id, style: .change)] ?? [:]).values),
                     Array((interactions[IdentifiedInteraction(id: id, style: .any)] ?? [:]).values)
                 ].flatMap { $0 }
         }
@@ -66,9 +74,16 @@ class Interactions<Id: Hashable, DataType> {
                     Array((anyInteractions[.any] ?? [:]).values)
                 ].flatMap { $0 }
                 
+            case .change:
+                targetAnyInteractions = [
+                    Array((anyInteractions[.change] ?? [:]).values),
+                    Array((anyInteractions[.any] ?? [:]).values)
+                ].flatMap { $0 }
+                
             case .any:
                 targetAnyInteractions = [
                     Array((anyInteractions[.tap] ?? [:]).values),
+                    Array((anyInteractions[.change] ?? [:]).values),
                     Array((anyInteractions[.any] ?? [:]).values)
                 ].flatMap { $0 }
         }
@@ -96,7 +111,7 @@ class Interactions<Id: Hashable, DataType> {
         let identifier: IdentifiedInteraction<Id> = IdentifiedInteraction(id: id, style: style)
         let uniqueIdentifier: Int = UUID().hashValue
         let finalCallback: Callback = { data in
-            guard forceToMainThread else { return callback(data) }
+            guard forceToMainThread && !Thread.isMainThread else { return callback(data) }
             
             DispatchQueue.main.async { callback(data) }
         }
@@ -123,7 +138,7 @@ class Interactions<Id: Hashable, DataType> {
     ) -> Listener {
         let uniqueIdentifier: Int = UUID().hashValue
         let finalCallback: IdentifiedCallback = { id, data in
-            guard forceToMainThread else { return callback(id, data) }
+            guard forceToMainThread && !Thread.isMainThread else { return callback(id, data) }
             
             DispatchQueue.main.async { callback(id, data) }
         }
@@ -139,11 +154,15 @@ class Interactions<Id: Hashable, DataType> {
     
     // MARK: - Interaction Functions
     
-    public func trigger(_ id: Id) {
-        interact(id, style: .any)
+    public func trigger(_ id: Id, data: Any? = nil) {
+        interact(id, style: .any, interactionData: data)
     }
     
-    public func tap(_ id: Id) {
-        interact(id, style: .tap)
+    public func tap(_ id: Id, data: Any? = nil) {
+        interact(id, style: .tap, interactionData: data)
+    }
+    
+    public func change(_ id: Id, data: Any? = nil) {
+        interact(id, style: .change, interactionData: data)
     }
 }
