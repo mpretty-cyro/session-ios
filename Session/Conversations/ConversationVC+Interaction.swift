@@ -1,6 +1,9 @@
+import UIKit
 import CoreServices
 import Photos
 import PhotosUI
+import SessionMessagingKit
+import SignalUtilitiesKit
 
 extension ConversationVC : InputViewDelegate, MessageCellDelegate, ContextMenuActionDelegate, ScrollToBottomButtonDelegate,
     SendMediaNavDelegate, UIDocumentPickerDelegate, AttachmentApprovalViewControllerDelegate, GifPickerViewControllerDelegate,
@@ -11,10 +14,22 @@ extension ConversationVC : InputViewDelegate, MessageCellDelegate, ContextMenuAc
     }
     
     @objc func openSettings() {
-        let settingsVC = OWSConversationSettingsViewController()
-        settingsVC.configure(with: thread, uiDatabaseConnection: OWSPrimaryStorage.shared().uiDatabaseConnection)
-        settingsVC.conversationSettingsViewDelegate = self
-        navigationController!.pushViewController(settingsVC, animated: true, completion: nil)
+        let viewController: ConversationSettingsViewController = ConversationSettingsViewController(
+            thread: thread,
+            uiDatabaseConnection: OWSPrimaryStorage.shared().uiDatabaseConnection,
+            didTriggerSearch: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.showSearchUI()
+                    self?.popAllConversationSettingsViews {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Without this delay the search bar doesn't show
+                            self?.searchController.uiSearchController.searchBar.becomeFirstResponder()
+                        }
+                    }
+                }
+            }
+        )
+        
+        navigationController?.pushViewController(viewController, animated: true)
     }
 
     func handleScrollToBottomButtonTapped() {

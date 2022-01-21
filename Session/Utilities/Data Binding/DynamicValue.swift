@@ -30,6 +30,9 @@ class DynamicValue<T> {
 
     /// This function allows an observer to listen for changes to the value
     ///
+    /// **Warning:** The `changeHandler`will be triggered from whatever thread the value is updated on which may not be the thread
+    /// which the observer was added on
+    ///
     /// - Parameter forceToMainThread: This will force the `changeHandler` to be called on the main thread (which is the default to simplify
     /// UI updates
     /// - Parameter firstOnly: This will mean the `changeHandler` only gets called once immediately and doesn't get triggered for

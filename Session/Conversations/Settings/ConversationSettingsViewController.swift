@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import NVActivityIndicatorView
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionMessagingKit
@@ -346,6 +347,39 @@ class ConversationSettingsViewController: BaseVC {
                 }
             }
         }
+        viewModel.interaction.on(.deleteMessages) { [weak self] thread, _, _ in
+            let alertController: UIAlertController = UIAlertController(
+                title: "DELETE_MESSAGES".localized(),
+                message: "DELETE_MESSAGES_CONFIRMATION_MESSAGE".localized(),
+                preferredStyle: .alert
+            )
+            alertController.addAction(
+                UIAlertAction(
+                    title: "TXT_DELETE_TITLE".localized(),
+                    accessibilityIdentifier: "\(ConversationSettingsViewController.self).delete_messages_confirm",
+                    style: .destructive
+                ) { _ in
+                    self?.viewModel.interaction.tap(.deleteMessagesConfirmed)
+                }
+            )
+            alertController.addAction(OWSAlerts.cancelAction)
+            
+            self?.presentAlert(alertController)
+        }
+        
+        viewModel.interaction.on(.deleteMessagesConfirmed) { [weak self] _, _, _ in
+            let viewController: LoadingViewController = LoadingViewController()
+            viewController.modalTransitionStyle = .crossDissolve
+            viewController.modalPresentationStyle = .overCurrentContext
+            
+            self?.present(viewController, animated: true, completion: nil)
+        }
+        
+        viewModel.interaction.on(.deleteMessagesCompleted) { [weak self] _, _, _ in
+            guard self?.presentedViewController is LoadingViewController else { return }
+
+            self?.presentedViewController?.dismiss(animated: true, completion: nil)
+        }
         
         viewModel.interaction.on(.leaveGroup) { [weak self] thread, _, _ in
             guard let groupThread: TSGroupThread = thread as? TSGroupThread else { return }
@@ -357,17 +391,17 @@ class ConversationSettingsViewController: BaseVC {
                 message = "Because you are the creator of this group it will be deleted for everyone. This cannot be undone."
             }
             else {
-                message = NSLocalizedString("CONFIRM_LEAVE_GROUP_DESCRIPTION", comment: "")
+                message = "CONFIRM_LEAVE_GROUP_DESCRIPTION".localized()
             }
             
             let alertController: UIAlertController = UIAlertController(
-                title: NSLocalizedString("CONFIRM_LEAVE_GROUP_TITLE", comment: ""),
+                title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
                 message: message,
                 preferredStyle: .alert
             )
             alertController.addAction(
                 UIAlertAction(
-                    title: NSLocalizedString("LEAVE_BUTTON_TITLE", comment: ""),
+                    title: "LEAVE_BUTTON_TITLE".localized(),
                     accessibilityIdentifier: "\(ConversationSettingsViewController.self).leave_group_confirm",
                     style: .destructive
                 ) { _ in

@@ -26,6 +26,8 @@ class ConversationSettingsViewModel {
         case toggleMuteNotifications
         case viewNotificationsSettings
         case deleteMessages
+        case deleteMessagesConfirmed
+        case deleteMessagesCompleted
         case leaveGroup
         case leaveGroupConfirmed
         case leaveGroupCompleted
@@ -424,6 +426,13 @@ class ConversationSettingsViewModel {
                 )
                 
                 self?.tryRefreshData(for: .notifications)
+            }
+        }
+        
+        interaction.on(.deleteMessagesConfirmed, forceToMainThread: false) { [weak self] thread, _, _ in
+            Storage.write { transaction in
+                thread.removeAllThreadInteractions(with: transaction)
+                self?.interaction.trigger(.deleteMessagesCompleted)
             }
         }
         

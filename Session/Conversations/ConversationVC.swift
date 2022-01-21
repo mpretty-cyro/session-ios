@@ -9,7 +9,7 @@ import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
 
-final class ConversationVC : BaseVC, ConversationViewModelDelegate, OWSConversationSettingsViewDelegate, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
+final class ConversationVC : BaseVC, ConversationViewModelDelegate, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
     let isUnsendRequestsEnabled = true // Set to true once unsend requests are done on all platforms
     let thread: TSThread
     let focusedMessageID: String? // This isn't actually used ATM
@@ -516,19 +516,7 @@ final class ConversationVC : BaseVC, ConversationViewModelDelegate, OWSConversat
         return a * x
     }
     
-    func groupWasUpdated(_ groupModel: TSGroupModel) {
-        // Not currently in use
-    }
-    
     // MARK: Search
-    func conversationSettingsDidRequestConversationSearch(_ conversationSettingsViewController: OWSConversationSettingsViewController) {
-        showSearchUI()
-        popAllConversationSettingsViews {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Without this delay the search bar doesn't show
-                self.searchController.uiSearchController.searchBar.becomeFirstResponder()
-            }
-        }
-    }
     
     func popAllConversationSettingsViews(completion completionBlock: (() -> Void)? = nil) {
         if presentedViewController != nil {

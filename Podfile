@@ -93,6 +93,24 @@ target 'SessionUtilitiesKit' do
   pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
 end
 
+target 'SessionTests' do
+  # These need to match the 'Session' target
+  pod 'AFNetworking', inhibit_warnings: true
+  pod 'CryptoSwift', :inhibit_warnings => true
+  pod 'Mantle', git: 'https://github.com/signalapp/Mantle', branch: 'signal-master', :inhibit_warnings => true
+  pod 'NVActivityIndicatorView', :inhibit_warnings => true
+  pod 'PromiseKit', :inhibit_warnings => true
+  pod 'PureLayout', '~> 3.1.8', :inhibit_warnings => true
+  pod 'Reachability', :inhibit_warnings => true
+  pod 'Sodium', '~> 0.8.0', :inhibit_warnings => true
+  pod 'YapDatabase/SQLCipher', :git => 'https://github.com/loki-project/session-ios-yap-database.git', branch: 'signal-release', :inhibit_warnings => true
+  pod 'YYImage', git: 'https://github.com/signalapp/YYImage', :inhibit_warnings => true
+  pod 'ZXingObjC', :inhibit_warnings => true
+  
+  # Test-Specific Pods
+  pod 'Nimble'
+end
+
 post_install do |installer|
   enable_whole_module_optimization_for_crypto_swift(installer)
   set_minimum_deployment_target(installer)
