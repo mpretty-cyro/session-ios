@@ -5,7 +5,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 class ConversationNotificationSettingsViewModel {
-    struct Item {
+    struct Item: Equatable {
         enum Id: CaseIterable {
             case all
             case mentionsOnly

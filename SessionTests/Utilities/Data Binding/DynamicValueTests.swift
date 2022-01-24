@@ -109,19 +109,20 @@ class DynamicValueTests: XCTestCase {
         var callbackTriggerCount: Int = 0
         var threads: [Thread] = []
         
-        DispatchQueue.global(qos: .background).async {
-            self.dynamicValue.onChange(forceToMainThread: true) { _ in
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            self?.dynamicValue.onChange(forceToMainThread: true) { _ in
                 callbackTriggerCount += 1
                 threads.append(Thread.current)
             }
+            
+            // Note: Need to set this on the background thread to ensure a standard behaviour
+            // when the test is running
+            self?.dynamicValue.value = 10
         }
         
-        dynamicValue.value = 10
-        
-        // It'll only trigger once since the observer is added on a background thread
         expect(callbackTriggerCount)
             .toEventually(
-                equal(1),
+                equal(2),
                 timeout: .milliseconds(100)
             )
         expect(self.dynamicValue.value)
@@ -132,6 +133,7 @@ class DynamicValueTests: XCTestCase {
         expect(threads)
             .toEventually(
                 equal([
+                    Thread.main,
                     Thread.main
                 ]),
                 timeout: .milliseconds(100)

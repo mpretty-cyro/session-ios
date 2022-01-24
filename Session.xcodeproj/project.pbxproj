@@ -786,6 +786,9 @@
 		FD59EA48279A72A800A18298 /* LoadingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA47279A72A800A18298 /* LoadingViewController.swift */; };
 		FD59EA5B279A748100A18298 /* ConversationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */; };
 		FD59EA5D279A749400A18298 /* DynamicValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5C279A749400A18298 /* DynamicValueTests.swift */; };
+		FD59EA62279E0F9100A18298 /* ListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA61279E0F9100A18298 /* ListenerTests.swift */; };
+		FD59EA64279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */; };
+		FD59EA66279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */; };
 		FD59FEB22794EC90003C51FB /* ConversationSettingsActionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */; };
 		FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */; };
 		FD59FEB62794EFFA003C51FB /* ConversationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */; };
@@ -1818,6 +1821,9 @@
 		FD59EA4D279A744100A18298 /* SessionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SessionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModelTests.swift; sourceTree = "<group>"; };
 		FD59EA5C279A749400A18298 /* DynamicValueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicValueTests.swift; sourceTree = "<group>"; };
+		FD59EA61279E0F9100A18298 /* ListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListenerTests.swift; sourceTree = "<group>"; };
+		FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModelTests.swift; sourceTree = "<group>"; };
+		FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDisappearingMessagesViewModelTests.swift; sourceTree = "<group>"; };
 		FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsActionView.swift; sourceTree = "<group>"; };
 		FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModel.swift; sourceTree = "<group>"; };
@@ -3636,6 +3642,8 @@
 			isa = PBXGroup;
 			children = (
 				FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */,
+				FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */,
+				FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -3652,6 +3660,7 @@
 			isa = PBXGroup;
 			children = (
 				FD59EA5C279A749400A18298 /* DynamicValueTests.swift */,
+				FD59EA61279E0F9100A18298 /* ListenerTests.swift */,
 			);
 			path = "Data Binding";
 			sourceTree = "<group>";
@@ -5122,8 +5131,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FD59EA62279E0F9100A18298 /* ListenerTests.swift in Sources */,
 				FD59EA5D279A749400A18298 /* DynamicValueTests.swift in Sources */,
 				FD59EA5B279A748100A18298 /* ConversationSettingsViewModelTests.swift in Sources */,
+				FD59EA64279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift in Sources */,
+				FD59EA66279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

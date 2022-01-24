@@ -5,7 +5,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 class ConversationDisappearingMessagesViewModel {
-    struct Item {
+    struct Item: Equatable {
         typealias Id = Int
         
         let id: Id

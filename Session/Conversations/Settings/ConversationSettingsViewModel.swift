@@ -34,7 +34,7 @@ class ConversationSettingsViewModel {
         case toggleBlockUser
     }
     
-    struct Item {
+    struct Item: Equatable {
         enum Id: CaseIterable {
             case navEdit
             case navCancel
@@ -66,9 +66,9 @@ class ConversationSettingsViewModel {
         let title: String
         let barButtonItem: UIBarButtonItem.SystemItem?
         let subtitle: String?
-        let color: UIColor
-        let accessibilityIdentifier: String?
         let isEnabled: Bool
+        let isNegativeAction: Bool
+        let accessibilityIdentifier: String?
 
         // Convenience
         
@@ -80,9 +80,9 @@ class ConversationSettingsViewModel {
             title: String = "",
             barButtonItem: UIBarButtonItem.SystemItem? = nil,
             subtitle: String? = nil,
-            color: UIColor = Colors.text,
-            accessibilityIdentifier: String? = nil,
-            isEnabled: Bool = true
+            isEnabled: Bool = true,
+            isNegativeAction: Bool = false,
+            accessibilityIdentifier: String? = nil
         ) {
             self.id = id
             self.style = style
@@ -91,9 +91,9 @@ class ConversationSettingsViewModel {
             self.title = title
             self.barButtonItem = barButtonItem
             self.subtitle = subtitle
-            self.color = color
-            self.accessibilityIdentifier = accessibilityIdentifier
             self.isEnabled = isEnabled
+            self.isNegativeAction = isNegativeAction
+            self.accessibilityIdentifier = accessibilityIdentifier
         }
         
         func with(
@@ -110,9 +110,9 @@ class ConversationSettingsViewModel {
                 title: (title ?? self.title),
                 barButtonItem: barButtonItem,
                 subtitle: (subtitle ?? self.subtitle),
-                color: color,
-                accessibilityIdentifier: accessibilityIdentifier,
-                isEnabled: (isEnabled ?? self.isEnabled)
+                isEnabled: (isEnabled ?? self.isEnabled),
+                isNegativeAction: isNegativeAction,
+                accessibilityIdentifier: accessibilityIdentifier
             )
         }
     }
@@ -258,7 +258,7 @@ class ConversationSettingsViewModel {
                 action: .deleteMessages,
                 icon: UIImage(named: "trash")?.withRenderingMode(.alwaysTemplate),
                 title: "DELETE_MESSAGES".localized(),
-                color: Colors.destructive,
+                isNegativeAction: true,
                 accessibilityIdentifier: "\(ConversationSettingsViewModel.self).delete_messages"
             ),
             
@@ -266,7 +266,7 @@ class ConversationSettingsViewModel {
                 id: .blockUser,
                 action: .toggleBlockUser,
                 icon: UIImage(named: "table_ic_block")?.withRenderingMode(.alwaysTemplate),
-                color: Colors.destructive,
+                isNegativeAction: true,
                 accessibilityIdentifier: "\(ConversationSettingsViewModel.self).block"
             ),
             
@@ -275,7 +275,7 @@ class ConversationSettingsViewModel {
                 action: .leaveGroup,
                 icon: UIImage(named: "table_ic_group_leave")?.withRenderingMode(.alwaysTemplate),
                 title: "LEAVE_GROUP_ACTION".localized(),
-                color: Colors.destructive,
+                isNegativeAction: true,
                 accessibilityIdentifier: "\(ConversationSettingsViewModel.self).leave_group"
             )
         ]
@@ -320,12 +320,13 @@ class ConversationSettingsViewModel {
     }
     
     private func generateLeftNavItems() -> [Item] {
-        guard isEditingDisplayName else { return [] }
+        guard thread.value is TSContactThread && isEditingDisplayName else { return [] }
         
         return [ viewState[.navCancel] ].compactMap { $0 }
     }
     
     private func generateRightNavItems() -> [Item] {
+        guard thread.value is TSContactThread else { return [] }
         guard isEditingDisplayName else {
             return [ viewState[.navEdit] ].compactMap { $0 }
         }

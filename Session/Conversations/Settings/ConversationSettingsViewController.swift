@@ -93,7 +93,7 @@ class ConversationSettingsViewController: BaseVC {
                     let buttonItem: ClosureBarButtonItem = ClosureBarButtonItem(barButtonSystemItem: systemItem) {
                         self?.viewModel.interaction.tap(item.action)
                     }
-                    buttonItem.tintColor = item.color
+                    buttonItem.tintColor = Colors.text
                     buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
                     buttonItem.accessibilityLabel = item.accessibilityIdentifier
                     buttonItem.isAccessibilityElement = true
@@ -112,7 +112,7 @@ class ConversationSettingsViewController: BaseVC {
                     let buttonItem: ClosureBarButtonItem = ClosureBarButtonItem(barButtonSystemItem: systemItem) {
                         self?.viewModel.interaction.tap(item.action)
                     }
-                    buttonItem.tintColor = item.color
+                    buttonItem.tintColor = Colors.text
                     buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
                     buttonItem.accessibilityLabel = item.accessibilityIdentifier
                     buttonItem.isAccessibilityElement = true
@@ -171,7 +171,10 @@ class ConversationSettingsViewController: BaseVC {
                             targetView.layer.cornerRadius = 8
                             targetView.update(
                                 with: item.icon,
-                                color: item.color,
+                                color: (item.isNegativeAction ?
+                                    Colors.destructive :
+                                    Colors.text
+                                ),
                                 title: item.title,
                                 subtitle: item.subtitle,
                                 isEnabled: item.isEnabled
@@ -246,7 +249,10 @@ class ConversationSettingsViewController: BaseVC {
                             (self?.viewMap[item.id] as? ConversationSettingsActionView)?
                                 .update(
                                     with: item.icon,
-                                    color: item.color,
+                                    color: (item.isNegativeAction ?
+                                        Colors.destructive :
+                                        Colors.text
+                                    ),
                                     title: item.title,
                                     subtitle: item.subtitle,
                                     isEnabled: item.isEnabled
