@@ -2,6 +2,8 @@
 
 import Combine
 
+public protocol CombineCompatible {}
+
 public extension Publisher {
     func mapToVoid() -> AnyPublisher<Void, Failure> {
         return map { _ -> Void in () }

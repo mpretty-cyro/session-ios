@@ -64,8 +64,6 @@ public extension UIControl {
 
 // MARK: - CombineCompatible
 
-extension UIControl: CombineCompatible {}
-
 extension CombineCompatible where Self: UIControl {
     public func publisher(for events: UIControl.Event) -> UIControl.Publisher<Self> {
         return UIControl.Publisher(output: self, events: events)
