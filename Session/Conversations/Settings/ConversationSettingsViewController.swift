@@ -1,14 +1,17 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import NVActivityIndicatorView
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 import SwiftUI
 
 class ConversationSettingsViewController: BaseVC {
     private let viewModel: ConversationSettingsViewModel
+    private var disposables: Set<AnyCancellable> = Set()
     
     private var mediaGallery: MediaGallery?
     
@@ -51,6 +54,13 @@ class ConversationSettingsViewController: BaseVC {
     
     // MARK: - Lifecycle
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        // Force the viewModel to refresh it's data when the view appears in case the state changed
+        viewModel.forceRefreshData.send()
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -85,342 +95,390 @@ class ConversationSettingsViewController: BaseVC {
     // MARK: - Binding
     
     private func setupBinding() {
-        viewModel.leftNavItems.onChange { [weak self] items in
-            self?.navigationItem.setLeftBarButtonItems(
-                items.compactMap { item -> UIBarButtonItem? in
-                    guard let systemItem: UIBarButtonItem.SystemItem = item.barButtonItem else { return nil }
-                    
-                    let buttonItem: ClosureBarButtonItem = ClosureBarButtonItem(barButtonSystemItem: systemItem) {
-                        self?.viewModel.interaction.tap(item.action)
-                    }
-                    buttonItem.tintColor = Colors.text
-                    buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
-                    buttonItem.accessibilityLabel = item.accessibilityIdentifier
-                    buttonItem.isAccessibilityElement = true
-                    
-                    return buttonItem
-                },
-                animated: true
-            )
-        }
+        // Content
         
-        viewModel.rightNavItems.onChange { [weak self] items in
-            self?.navigationItem.setRightBarButtonItems(
-                items.compactMap { item -> UIBarButtonItem? in
-                    guard let systemItem: UIBarButtonItem.SystemItem = item.barButtonItem else { return nil }
-                    
-                    let buttonItem: ClosureBarButtonItem = ClosureBarButtonItem(barButtonSystemItem: systemItem) {
-                        self?.viewModel.interaction.tap(item.action)
-                    }
-                    buttonItem.tintColor = Colors.text
-                    buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
-                    buttonItem.accessibilityLabel = item.accessibilityIdentifier
-                    buttonItem.isAccessibilityElement = true
-                    
-                    return buttonItem
-                },
-                animated: true
-            )
-        }
-        
-        // Create the UI once
-        viewModel.items.onChange(firstOnly: true) { [weak self] items in
-            let edgeInset: CGFloat = (isIPhone5OrSmaller ? Values.mediumSpacing : Values.largeSpacing)
-            
-            items.enumerated().forEach { sectionIndex, section in
-                section.enumerated().forEach { index, item in
-                    switch item.style {
-                        case .header:
-                            let targetView: ConversationSettingsHeaderView = ConversationSettingsHeaderView()
-                            targetView.clipsToBounds = true
-                            targetView.layer.cornerRadius = 8
-                            
-                            targetView.update(with: item.title, contactSessionId: item.subtitle)
-                            targetView.profilePictureTapped = { [weak self] image in
-                                self?.viewModel.interaction.tap(.viewProfilePicture, data: image)
-                            }
-                            targetView.displayNameTapped = { [weak self] in
-                                self?.viewModel.interaction.tap(.startEditingDisplayName)
-                            }
-                            targetView.textChanged = { [weak self] updatedText in
-                                self?.viewModel.interaction.change(.changeDisplayName, data: updatedText)
-                            }
-                            self?.viewMap[item.id] = targetView
-                            
-                            self?.stackView.addArrangedSubview(targetView)
-                            
-                        case .search:
-                            let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
-                            targetView.clipsToBounds = true
-                            targetView.layer.cornerRadius = (ConversationSettingsActionView.minHeight / 2)
-                            targetView.update(
-                                with: item.icon,
-                                color: Colors.text,
-                                title: item.title,
-                                canHighlight: false,
-                                isEnabled: item.isEnabled
-                            )
-                            targetView.viewTapped = { [weak self] in self?.viewModel.interaction.tap(item.action) }
-                            self?.viewMap[item.id] = targetView
-                            
-                            self?.stackView.addArrangedSubview(targetView)
-                            
-                        case .standard:
-                            let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
-                            targetView.clipsToBounds = true
-                            targetView.layer.cornerRadius = 8
-                            targetView.update(
-                                with: item.icon,
-                                color: (item.isNegativeAction ?
-                                    Colors.destructive :
-                                    Colors.text
-                                ),
-                                title: item.title,
-                                subtitle: item.subtitle,
-                                isEnabled: item.isEnabled
-                            )
-                            targetView.viewTapped = { [weak self] in self?.viewModel.interaction.tap(item.action) }
-                            self?.viewMap[item.id] = targetView
-
-                            self?.stackView.addArrangedSubview(targetView)
-                            
-                            // Round relevant corners
-                            switch (index, section.count) {
-                                case (_, 1): break
-                                case (0, _): targetView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-                                case (section.count - 1, _): targetView.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-                                default: targetView.layer.cornerRadius = 0
-                            }
-                            
-                            // Add a separator if there is an item after this one
-                            switch index {
-                                case section.count - 1: break
-                                default:
-                                    let separatorContainerView: UIView = UIView()
-                                    separatorContainerView.backgroundColor = targetView.backgroundColor
-                                     
-                                    let separatorView: UIView = UIView.separator()
-                                    separatorView.backgroundColor = Colors.settingsBackground
-                                    
-                                    separatorContainerView.addSubview(separatorView)
-                                    self?.stackView.addArrangedSubview(separatorContainerView)
-                                    
-                                    NSLayoutConstraint.activate([
-                                        separatorContainerView.heightAnchor.constraint(equalTo: separatorView.heightAnchor),
-                                        separatorView.leftAnchor.constraint(equalTo: separatorContainerView.leftAnchor, constant: edgeInset),
-                                        separatorView.rightAnchor.constraint(equalTo: separatorContainerView.rightAnchor, constant: -edgeInset)
-                                    ])
-                            }
-                            
-                        case .navigation: return
-                    }
-                }
-                
-                // Add a spacer at the bottom of each section (except for the last)
-                if sectionIndex != (items.count - 1) {
-                    self?.stackView.addArrangedSubview(UIView.vSpacer(30))
-                }
+        viewModel.leftNavItems
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                self?.navigationItem.setLeftBarButtonItems(
+                    items.map { item -> DisposableBarButtonItem in
+                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.systemItem, target: nil, action: nil, accessibilityIdentifier: item.accessibilityIdentifier)
+                        buttonItem.tintColor = Colors.text
+                        buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
+                        buttonItem.accessibilityLabel = item.accessibilityIdentifier
+                        buttonItem.isAccessibilityElement = true
+                        
+                        buttonItem.tapPublisher
+                            .mapToVoid()
+                            .sink(into: item.subject)
+                            .store(in: &buttonItem.disposables)
+                        
+                        return buttonItem
+                    },
+                    animated: true
+                )
             }
-        }
+            .store(in: &disposables)
         
-        // Update content on any changes
-        viewModel.thread.onChange { [weak self] thread in
-            (self?.viewMap[.header] as? ConversationSettingsHeaderView)?.update(with: thread)
-        }
-        viewModel.items.onChange(skipFirst: true) { [weak self] items in
-            items.enumerated().forEach { sectionIndex, section in
-                section.enumerated().forEach { index, item in
-                    switch item.style {
-                        case .header:
-                            (self?.viewMap[item.id] as? ConversationSettingsHeaderView)?
-                                .update(with: item.title, contactSessionId: item.subtitle)
-                            
-                        case .search:
-                            (self?.viewMap[item.id] as? ConversationSettingsActionView)?
-                                .update(
-                                    with: item.icon,
+        viewModel.rightNavItems
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                self?.navigationItem.setRightBarButtonItems(
+                    items.map { item -> DisposableBarButtonItem in
+                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.systemItem, target: nil, action: nil, accessibilityIdentifier: item.accessibilityIdentifier)
+                        buttonItem.tintColor = Colors.text
+                        buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
+                        buttonItem.accessibilityLabel = item.accessibilityIdentifier
+                        buttonItem.isAccessibilityElement = true
+                        
+                        buttonItem.tapPublisher
+                            .mapToVoid()
+                            .sink(into: item.subject)
+                            .store(in: &buttonItem.disposables)
+                        
+                        return buttonItem
+                    },
+                    animated: true
+                )
+            }
+            .store(in: &disposables)
+        
+        viewModel.items
+            .first()    // Just want to create the UI once, can update the content separately
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                guard let viewModel: ConversationSettingsViewModel = self?.viewModel else { return }
+                
+                let edgeInset: CGFloat = (isIPhone5OrSmaller ? Values.mediumSpacing : Values.largeSpacing)
+                
+                items.enumerated().forEach { sectionIndex, section in
+                    section.enumerated().forEach { index, item in
+                        switch item.data.style {
+                            case .header:
+                                let targetView: ConversationSettingsHeaderView = ConversationSettingsHeaderView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = 8
+                                targetView.update(with: item.data.title, contactSessionId: item.data.subtitle)
+                                targetView.update(isEditingDisplayName: item.data.isEditing, animated: false)
+                                
+                                targetView.displayNameTapPublisher
+                                    .mapToVoid()
+                                    .sink(into: viewModel.editDisplayNameTapped)
+                                    .store(in: &targetView.disposables)
+                                
+                                targetView.profilePictureTapPublisher
+                                    .mapToVoid()
+                                    .sink(into: viewModel.profilePictureTapped)
+                                    .store(in: &targetView.disposables)
+                                
+                                targetView.textPublisher
+                                    .assign(to: \.displayName, on: viewModel)
+                                    .store(in: &targetView.disposables)
+                                
+                                self?.viewMap[item.data.id] = targetView
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                            case .search:
+                                let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = (ConversationSettingsActionView.minHeight / 2)
+                                targetView.update(
+                                    with: item.data.icon,
                                     color: Colors.text,
-                                    title: item.title,
+                                    title: item.data.title,
                                     canHighlight: false,
-                                    isEnabled: item.isEnabled
+                                    isEnabled: item.data.isEnabled
                                 )
-                            
-                        case .standard:
-                            (self?.viewMap[item.id] as? ConversationSettingsActionView)?
-                                .update(
-                                    with: item.icon,
-                                    color: (item.isNegativeAction ?
+                                
+                                targetView.tapPublisher
+                                    .mapToVoid()
+                                    .sink(into: item.action)
+                                    .store(in: &targetView.disposables)
+                                
+                                self?.viewMap[item.data.id] = targetView
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                            case .standard:
+                                let targetView: ConversationSettingsActionView = ConversationSettingsActionView()
+                                targetView.clipsToBounds = true
+                                targetView.layer.cornerRadius = 8
+                                targetView.update(
+                                    with: item.data.icon,
+                                    color: (item.data.isNegativeAction ?
                                         Colors.destructive :
                                         Colors.text
                                     ),
-                                    title: item.title,
-                                    subtitle: item.subtitle,
-                                    isEnabled: item.isEnabled
+                                    title: item.data.title,
+                                    subtitle: item.data.subtitle,
+                                    isEnabled: item.data.isEnabled
                                 )
-                            
-                        case .navigation: return
+                                
+                                targetView.tapPublisher
+                                    .mapToVoid()
+                                    .sink(into: item.action)
+                                    .store(in: &targetView.disposables)
+                                
+                                self?.viewMap[item.data.id] = targetView
+                                self?.stackView.addArrangedSubview(targetView)
+                                
+                                // Round relevant corners
+                                switch (index, section.count) {
+                                    case (_, 1): break
+                                    case (0, _): targetView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+                                    case (section.count - 1, _): targetView.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+                                    default: targetView.layer.cornerRadius = 0
+                                }
+                                
+                                // Add a separator if there is an item after this one
+                                switch index {
+                                    case section.count - 1: break
+                                    default:
+                                        let separatorContainerView: UIView = UIView()
+                                        separatorContainerView.backgroundColor = targetView.backgroundColor
+                                         
+                                        let separatorView: UIView = UIView.separator()
+                                        separatorView.backgroundColor = Colors.settingsBackground
+                                        
+                                        separatorContainerView.addSubview(separatorView)
+                                        self?.stackView.addArrangedSubview(separatorContainerView)
+                                        
+                                        NSLayoutConstraint.activate([
+                                            separatorContainerView.heightAnchor.constraint(equalTo: separatorView.heightAnchor),
+                                            separatorView.leftAnchor.constraint(equalTo: separatorContainerView.leftAnchor, constant: edgeInset),
+                                            separatorView.rightAnchor.constraint(equalTo: separatorContainerView.rightAnchor, constant: -edgeInset)
+                                        ])
+                                }
+                        }
+                    }
+                    
+                    // Add a spacer at the bottom of each section (except for the last)
+                    if sectionIndex != (items.count - 1) {
+                        self?.stackView.addArrangedSubview(UIView.vSpacer(30))
                     }
                 }
             }
-        }
+            .store(in: &disposables)
+        
+        Publishers
+            .CombineLatest(
+                // Note: Don't care about this value but want to wait until it has emitted so that the
+                // header gets updated correctly with the 'thread'
+                viewModel.items.first(),
+                viewModel.profileContent
+            )
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, thread in
+                // TODO: Refactor the 'ProfilePictureView' so it's not dependant on a TSThread
+                // (will make this cleaner or not needed)
+                (self?.viewMap[.header] as? ConversationSettingsHeaderView)?.updateProfile(with: thread)
+            }
+            .store(in: &disposables)
+        
+        viewModel.items
+            .dropFirst()    // Only want changes here as the UI gets created in the previous sink
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                items.enumerated().forEach { sectionIndex, section in
+                    section.enumerated().forEach { index, item in
+                        switch item.data.style {
+                            case .header:
+                                (self?.viewMap[item.data.id] as? ConversationSettingsHeaderView)?
+                                    .update(with: item.data.title, contactSessionId: item.data.subtitle)
+                                (self?.viewMap[item.data.id] as? ConversationSettingsHeaderView)?
+                                    .update(isEditingDisplayName: item.data.isEditing, animated: true)
+                                
+                            case .search:
+                                (self?.viewMap[item.data.id] as? ConversationSettingsActionView)?
+                                    .update(
+                                        with: item.data.icon,
+                                        color: Colors.text,
+                                        title: item.data.title,
+                                        canHighlight: false,
+                                        isEnabled: item.data.isEnabled
+                                    )
+                                
+                            case .standard:
+                                (self?.viewMap[item.data.id] as? ConversationSettingsActionView)?
+                                    .update(
+                                        with: item.data.icon,
+                                        color: (item.data.isNegativeAction ?
+                                            Colors.destructive :
+                                            Colors.text
+                                        ),
+                                        title: item.data.title,
+                                        subtitle: item.data.subtitle,
+                                        isEnabled: item.data.isEnabled
+                                    )
+                        }
+                    }
+                }
+            }
+            .store(in: &disposables)
         
         // Bind interactions
         
-        viewModel.interaction.on(.startEditingDisplayName) { [weak self] _, _, _ in
-            (self?.viewMap[.header] as? ConversationSettingsHeaderView)?.update(isEditingDisplayName: true)
-        }
+        viewModel.viewProfilePicture
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] profileImage, threadName in
+                let viewController: ProfilePictureVC = ProfilePictureVC(image: profileImage, title: threadName)
+                let navController: UINavigationController = UINavigationController(rootViewController: viewController)
+                navController.modalPresentationStyle = .fullScreen
+                
+                self?.present(navController, animated: true, completion: nil)
+            }
+            .store(in: &disposables)
         
-        viewModel.interaction.on(.cancelEditingDisplayName) { [weak self] _, _, _ in
-            (self?.viewMap[.header] as? ConversationSettingsHeaderView)?.update(isEditingDisplayName: false)
-        }
+        viewModel.viewSearch
+            .sink(receiveValue: {}) // viewModel handles everything for now
+            .store(in: &disposables)
         
-        viewModel.interaction.on(.saveUpdatedDisplayName) { [weak self] _, _, _ in
-            (self?.viewMap[.header] as? ConversationSettingsHeaderView)?.update(isEditingDisplayName: false)
-        }
+        viewModel.viewAddToGroup
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] thread in
+                let viewController: UserSelectionVC = UserSelectionVC(with: "vc_conversation_settings_invite_button_title".localized(), excluding: Set()) { selectedUsers in
+                    self?.viewModel.addUsersToOpenGoup(selectedUsers: selectedUsers)
+                }
+                
+                self?.navigationController?.pushViewController(viewController, animated: true)
+            }
+            .store(in: &disposables)
         
-        viewModel.interaction.on(.viewProfilePicture) { [weak self] thread, _, interactionImage in
-            guard let profileImage: UIImage = interactionImage as? UIImage else { return }
+        viewModel.viewEditGroup
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] threadId in
+                let viewController: EditClosedGroupVC = EditClosedGroupVC(with: threadId)
+                self?.navigationController?.pushViewController(viewController, animated: true)
+            }
+            .store(in: &disposables)
+        
+        viewModel.viewAllMedia
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] thread in
+                guard let navController: OWSNavigationController = self?.navigationController as? OWSNavigationController else {
+                    return
+                }
+                
+                // Note: Need to store the 'mediaGallery' somewhere to prevent it from being released and crashing
+                let mediaGallery: MediaGallery = MediaGallery(thread: thread, options: .sliderEnabled)
+                self?.mediaGallery = mediaGallery
+                mediaGallery.pushTileView(fromNavController: navController)
+            }
+            .store(in: &disposables)
+        
+        viewModel.viewDisappearingMessages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] thread, config in
+                let viewController: ConversationDisappearingMessagesViewController = ConversationDisappearingMessagesViewController(thread: thread, configuration: config) { [weak self] in
+                    // In case the change takes too long force the viewModel to refresh it's state
+                    self?.viewModel.forceRefreshData.send()
+                }
+                self?.navigationController?.pushViewController(viewController, animated: true)
+            }
+            .store(in: &disposables)
+        
+        viewModel.viewNotificationSettings
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] groupThread in
+                let viewController: ConversationNotificationSettingsViewController = ConversationNotificationSettingsViewController(thread: groupThread) { [weak self] in
+                    // In case the change takes too long force the viewModel to refresh it's state
+                    self?.viewModel.forceRefreshData.send()
+                }
+                self?.navigationController?.pushViewController(viewController, animated: true)
+            }
+            .store(in: &disposables)
+        
+        viewModel.viewDeleteMessagesAlert
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                let alertController: UIAlertController = UIAlertController(
+                    title: "DELETE_MESSAGES".localized(),
+                    message: "DELETE_MESSAGES_CONFIRMATION_MESSAGE".localized(),
+                    preferredStyle: .alert
+                )
+                alertController.addAction(
+                    UIAlertAction(
+                        title: "TXT_DELETE_TITLE".localized(),
+                        accessibilityIdentifier: "\(ConversationSettingsViewController.self).delete_messages_confirm",
+                        style: .destructive
+                    ) { _ in
+                        self?.viewModel.deleteMessages()
+                    }
+                )
+                alertController.addAction(OWSAlerts.cancelAction)
+                
+                self?.presentAlert(alertController)
+            }
+            .store(in: &disposables)
+        
+        viewModel.loadingStateVisible
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isLoading in
+                guard isLoading else {
+                    guard self?.presentedViewController is LoadingViewController else { return }
 
-            let threadName: String = (self?.viewModel.threadName?.isEmpty == false ?
-                (self?.viewModel.threadName ?? "Anonymous") :
-                "Anonymous"
-            )
-            let viewController: ProfilePictureVC = ProfilePictureVC(image: profileImage, title: threadName)
-            let navController: UINavigationController = UINavigationController(rootViewController: viewController)
-            navController.modalPresentationStyle = .fullScreen
-            
-            self?.present(navController, animated: true, completion: nil)
-        }
-        
-        viewModel.interaction.on(.viewAddToGroup) { [weak self] thread, _, _ in
-            let viewController: UserSelectionVC = UserSelectionVC(with: "vc_conversation_settings_invite_button_title".localized(), excluding: Set()) { selectedUsers in
-                self?.viewModel.interaction.trigger(.addToGroupCompleted, data: selectedUsers)
+                    self?.presentedViewController?.dismiss(animated: true, completion: nil)
+                    return
+                }
+                
+                let viewController: LoadingViewController = LoadingViewController()
+                viewController.modalTransitionStyle = .crossDissolve
+                viewController.modalPresentationStyle = .overCurrentContext
+                
+                self?.present(viewController, animated: true, completion: nil)
             }
-            
-            self?.navigationController?.pushViewController(viewController, animated: true)
-        }
+            .store(in: &disposables)
         
-        viewModel.interaction.on(.viewEditGroup) { [weak self] thread, _, _ in
-            guard let threadId: String = thread.uniqueId else { return }
-            
-            let viewController: EditClosedGroupVC = EditClosedGroupVC(with: threadId)
-            self?.navigationController?.pushViewController(viewController, animated: true)
-        }
-        
-        viewModel.interaction.on(.viewAllMedia) { [weak self] thread, _, _ in
-            guard let navController: OWSNavigationController = self?.navigationController as? OWSNavigationController else {
-                return
+        viewModel.viewLeaveGroupAlert
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] groupThread in
+                let userPublicKey: String = SNGeneralUtilities.getUserPublicKey()
+                let message: String
+                
+                if groupThread.groupModel.groupAdminIds.contains(userPublicKey) {
+                    message = "Because you are the creator of this group it will be deleted for everyone. This cannot be undone."
+                }
+                else {
+                    message = "CONFIRM_LEAVE_GROUP_DESCRIPTION".localized()
+                }
+                
+                let alertController: UIAlertController = UIAlertController(
+                    title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
+                    message: message,
+                    preferredStyle: .alert
+                )
+                alertController.addAction(
+                    UIAlertAction(
+                        title: "LEAVE_BUTTON_TITLE".localized(),
+                        accessibilityIdentifier: "\(ConversationSettingsViewController.self).leave_group_confirm",
+                        style: .destructive
+                    ) { _ in
+                        self?.viewModel.leaveGroup()
+                    }
+                )
+                alertController.addAction(OWSAlerts.cancelAction)
+                
+                self?.presentAlert(alertController)
             }
-            
-            // Note: Need to store the 'mediaGallery' somewhere to prevent it from being released and crashing
-            let mediaGallery: MediaGallery = MediaGallery(thread: thread, options: .sliderEnabled)
-            self?.mediaGallery = mediaGallery
-            mediaGallery.pushTileView(fromNavController: navController)
-        }
+            .store(in: &disposables)
         
-        viewModel.interaction.on(.viewDisappearingMessagesSettings) { [weak self] thread, disappearingMessageConfiguration, _ in
-            guard let config: OWSDisappearingMessagesConfiguration = disappearingMessageConfiguration else { return }
-            
-            let viewController: ConversationDisappearingMessagesViewController = ConversationDisappearingMessagesViewController(thread: thread, configuration: config) { [weak self] in
-                self?.viewModel.tryRefreshData(for: .disappearingMessages)
-            }
-            self?.navigationController?.pushViewController(viewController, animated: true)
-        }
-        
-        viewModel.interaction.on(.viewNotificationsSettings) { [weak self] thread, _, _ in
-            guard thread.isGroupThread(), let groupThread: TSGroupThread = thread as? TSGroupThread else { return }
-            
-            let viewController: ConversationNotificationSettingsViewController = ConversationNotificationSettingsViewController(thread: groupThread) { [weak self] in
-                self?.viewModel.tryRefreshData(for: .notifications)
-            }
-            self?.navigationController?.pushViewController(viewController, animated: true)
-        }
-        
-        viewModel.interaction.on(.toggleBlockUser) { [weak self] thread, _, _ in
-            guard !thread.isNoteToSelf() && !thread.isGroupThread() else { return }
-            guard let strongSelf: UIViewController = self else { return }
-            
-            // TODO: Refactor this to be more MVVM
-            // (ie. actionSheet can be triggered from here but the VM should update the blocked state)
-            if OWSBlockingManager.shared().isThreadBlocked(thread) {
-                BlockListUIUtils.showUnblockThreadActionSheet(thread, from: strongSelf, blockingManager: OWSBlockingManager.shared()) { _ in
-                    self?.viewModel.tryRefreshData(for: .blockUser)
+        viewModel.viewBlockUserAlert
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] thread in
+                guard let strongSelf: UIViewController = self else { return }
+                
+                // TODO: Refactor this to be more MVVM
+                // (ie. actionSheet can be triggered from here but the VM should update the blocked state)
+                if OWSBlockingManager.shared().isThreadBlocked(thread) {
+                    BlockListUIUtils.showUnblockThreadActionSheet(thread, from: strongSelf, blockingManager: OWSBlockingManager.shared()) { _ in
+                        self?.viewModel.forceRefreshData.send()
+                    }
+                }
+                else {
+                    BlockListUIUtils.showBlockThreadActionSheet(thread, from: strongSelf, blockingManager: OWSBlockingManager.shared()) { _ in
+                        self?.viewModel.forceRefreshData.send()
+                    }
                 }
             }
-            else {
-                BlockListUIUtils.showBlockThreadActionSheet(thread, from: strongSelf, blockingManager: OWSBlockingManager.shared()) { _ in
-                    self?.viewModel.tryRefreshData(for: .blockUser)
-                }
-            }
-        }
-        viewModel.interaction.on(.deleteMessages) { [weak self] thread, _, _ in
-            let alertController: UIAlertController = UIAlertController(
-                title: "DELETE_MESSAGES".localized(),
-                message: "DELETE_MESSAGES_CONFIRMATION_MESSAGE".localized(),
-                preferredStyle: .alert
-            )
-            alertController.addAction(
-                UIAlertAction(
-                    title: "TXT_DELETE_TITLE".localized(),
-                    accessibilityIdentifier: "\(ConversationSettingsViewController.self).delete_messages_confirm",
-                    style: .destructive
-                ) { _ in
-                    self?.viewModel.interaction.tap(.deleteMessagesConfirmed)
-                }
-            )
-            alertController.addAction(OWSAlerts.cancelAction)
-            
-            self?.presentAlert(alertController)
-        }
-        
-        viewModel.interaction.on(.deleteMessagesConfirmed) { [weak self] _, _, _ in
-            let viewController: LoadingViewController = LoadingViewController()
-            viewController.modalTransitionStyle = .crossDissolve
-            viewController.modalPresentationStyle = .overCurrentContext
-            
-            self?.present(viewController, animated: true, completion: nil)
-        }
-        
-        viewModel.interaction.on(.deleteMessagesCompleted) { [weak self] _, _, _ in
-            guard self?.presentedViewController is LoadingViewController else { return }
-
-            self?.presentedViewController?.dismiss(animated: true, completion: nil)
-        }
-        
-        viewModel.interaction.on(.leaveGroup) { [weak self] thread, _, _ in
-            guard let groupThread: TSGroupThread = thread as? TSGroupThread else { return }
-            
-            let userPublicKey: String = SNGeneralUtilities.getUserPublicKey()
-            let message: String
-            
-            if groupThread.groupModel.groupAdminIds.contains(userPublicKey) {
-                message = "Because you are the creator of this group it will be deleted for everyone. This cannot be undone."
-            }
-            else {
-                message = "CONFIRM_LEAVE_GROUP_DESCRIPTION".localized()
-            }
-            
-            let alertController: UIAlertController = UIAlertController(
-                title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
-                message: message,
-                preferredStyle: .alert
-            )
-            alertController.addAction(
-                UIAlertAction(
-                    title: "LEAVE_BUTTON_TITLE".localized(),
-                    accessibilityIdentifier: "\(ConversationSettingsViewController.self).leave_group_confirm",
-                    style: .destructive
-                ) { _ in
-                    self?.viewModel.interaction.tap(.leaveGroupConfirmed)
-                }
-            )
-            alertController.addAction(OWSAlerts.cancelAction)
-            
-            self?.presentAlert(alertController)
-        }
-        
-        viewModel.interaction.on(.leaveGroupCompleted) { [weak self] _, _, _ in
-            self?.navigationController?.popViewController(animated: true)
-        }
+            .store(in: &disposables)
     }
 }

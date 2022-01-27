@@ -782,13 +782,18 @@
 		FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */; };
 		FD59EA402799142600A18298 /* Dictionary+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */; };
 		FD59EA42279A12BB00A18298 /* String+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA41279A12BB00A18298 /* String+Localization.swift */; };
-		FD59EA44279A263200A18298 /* ClosureBarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */; };
 		FD59EA48279A72A800A18298 /* LoadingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA47279A72A800A18298 /* LoadingViewController.swift */; };
 		FD59EA5B279A748100A18298 /* ConversationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */; };
 		FD59EA5D279A749400A18298 /* DynamicValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5C279A749400A18298 /* DynamicValueTests.swift */; };
 		FD59EA62279E0F9100A18298 /* ListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA61279E0F9100A18298 /* ListenerTests.swift */; };
 		FD59EA64279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */; };
 		FD59EA66279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */; };
+		FD59EA6F279FBBCF00A18298 /* Publisher+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA6E279FBBCF00A18298 /* Publisher+Utilities.swift */; };
+		FD59EA71279FC20B00A18298 /* UIControl+Combine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA70279FC20B00A18298 /* UIControl+Combine.swift */; };
+		FD59EA73279FC53300A18298 /* UIBarButtonItem+Combine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA72279FC53300A18298 /* UIBarButtonItem+Combine.swift */; };
+		FD59EA75279FC82F00A18298 /* UIView+Combine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA74279FC82F00A18298 /* UIView+Combine.swift */; };
+		FD59EA7827A1F9B200A18298 /* DisposableBarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA7727A1F9B200A18298 /* DisposableBarButtonItem.swift */; };
+		FD59EA7A27A221F700A18298 /* ReplaySubject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA7927A221F700A18298 /* ReplaySubject.swift */; };
 		FD59FEB22794EC90003C51FB /* ConversationSettingsActionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */; };
 		FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */; };
 		FD59FEB62794EFFA003C51FB /* ConversationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */; };
@@ -1816,7 +1821,6 @@
 		FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dictionary+Convenience.swift"; sourceTree = "<group>"; };
 		FD59EA41279A12BB00A18298 /* String+Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Localization.swift"; sourceTree = "<group>"; };
-		FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosureBarButtonItem.swift; sourceTree = "<group>"; };
 		FD59EA47279A72A800A18298 /* LoadingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingViewController.swift; sourceTree = "<group>"; };
 		FD59EA4D279A744100A18298 /* SessionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SessionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModelTests.swift; sourceTree = "<group>"; };
@@ -1824,6 +1828,12 @@
 		FD59EA61279E0F9100A18298 /* ListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListenerTests.swift; sourceTree = "<group>"; };
 		FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModelTests.swift; sourceTree = "<group>"; };
 		FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDisappearingMessagesViewModelTests.swift; sourceTree = "<group>"; };
+		FD59EA6E279FBBCF00A18298 /* Publisher+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Publisher+Utilities.swift"; sourceTree = "<group>"; };
+		FD59EA70279FC20B00A18298 /* UIControl+Combine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIControl+Combine.swift"; sourceTree = "<group>"; };
+		FD59EA72279FC53300A18298 /* UIBarButtonItem+Combine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIBarButtonItem+Combine.swift"; sourceTree = "<group>"; };
+		FD59EA74279FC82F00A18298 /* UIView+Combine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIView+Combine.swift"; sourceTree = "<group>"; };
+		FD59EA7727A1F9B200A18298 /* DisposableBarButtonItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisposableBarButtonItem.swift; sourceTree = "<group>"; };
+		FD59EA7927A221F700A18298 /* ReplaySubject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplaySubject.swift; sourceTree = "<group>"; };
 		FD59FEB12794EC90003C51FB /* ConversationSettingsActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsActionView.swift; sourceTree = "<group>"; };
 		FD59FEB32794EEC6003C51FB /* ConversationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59FEB52794EFFA003C51FB /* ConversationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModel.swift; sourceTree = "<group>"; };
@@ -2078,7 +2088,6 @@
 				B83F2B87240CB75A000A54AB /* UIImage+Scaling.swift */,
 				C31A6C59247F214E001123EF /* UIView+Glow.swift */,
 				C3548F0724456AB6009433A8 /* UIView+Wrapping.swift */,
-				FD59EA43279A263200A18298 /* ClosureBarButtonItem.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -3288,6 +3297,7 @@
 		C3C2A67A255388CC00C340D1 /* SessionUtilitiesKit */ = {
 			isa = PBXGroup;
 			children = (
+				FD59EA67279F99DF00A18298 /* Combine */,
 				C3C2A68B255388D500C340D1 /* Meta */,
 				B8A582AC258C653C00AFD84C /* Crypto */,
 				B8A582AB258C64E800AFD84C /* Database */,
@@ -3663,6 +3673,27 @@
 				FD59EA61279E0F9100A18298 /* ListenerTests.swift */,
 			);
 			path = "Data Binding";
+			sourceTree = "<group>";
+		};
+		FD59EA67279F99DF00A18298 /* Combine */ = {
+			isa = PBXGroup;
+			children = (
+				FD59EA7627A1F99500A18298 /* Disposable Views */,
+				FD59EA7927A221F700A18298 /* ReplaySubject.swift */,
+				FD59EA6E279FBBCF00A18298 /* Publisher+Utilities.swift */,
+				FD59EA70279FC20B00A18298 /* UIControl+Combine.swift */,
+				FD59EA72279FC53300A18298 /* UIBarButtonItem+Combine.swift */,
+				FD59EA74279FC82F00A18298 /* UIView+Combine.swift */,
+			);
+			path = Combine;
+			sourceTree = "<group>";
+		};
+		FD59EA7627A1F99500A18298 /* Disposable Views */ = {
+			isa = PBXGroup;
+			children = (
+				FD59EA7727A1F9B200A18298 /* DisposableBarButtonItem.swift */,
+			);
+			path = "Disposable Views";
 			sourceTree = "<group>";
 		};
 		FD59FEB02794E79A003C51FB /* Views */ = {
@@ -4750,6 +4781,7 @@
 				C32C5D83256DD5B6003C73A2 /* SSKKeychainStorage.swift in Sources */,
 				C3D9E39B256763C20040E4F3 /* AppContext.m in Sources */,
 				C3BBE0A82554D4DE0050F1E3 /* JSON.swift in Sources */,
+				FD59EA73279FC53300A18298 /* UIBarButtonItem+Combine.swift in Sources */,
 				C352A36D2557858E00338F3E /* NSTimer+Proxying.m in Sources */,
 				C32C5A2D256DB849003C73A2 /* LKGroupUtilities.m in Sources */,
 				C3C2ABD22553C6C900C340D1 /* Data+SecureRandom.swift in Sources */,
@@ -4771,6 +4803,7 @@
 				C3C2AC2E2553CBEB00C340D1 /* String+Trimming.swift in Sources */,
 				C32C5B48256DC211003C73A2 /* NSNotificationCenter+OWS.m in Sources */,
 				C3D9E3C925676AF30040E4F3 /* TSYapDatabaseObject.m in Sources */,
+				FD59EA6F279FBBCF00A18298 /* Publisher+Utilities.swift in Sources */,
 				C352A3A62557B60D00338F3E /* TSRequest.m in Sources */,
 				B8AE75A425A6C6A6001A84D2 /* Data+Trimming.swift in Sources */,
 				B8856DE6256F15F2001CE70E /* String+SSK.swift in Sources */,
@@ -4788,13 +4821,17 @@
 				B8856D7B256F14F4001CE70E /* UIView+OWS.m in Sources */,
 				B88FA7FB26114EA70049422F /* Hex.swift in Sources */,
 				C35D0DB525AE5F1200B6BF49 /* UIEdgeInsets.swift in Sources */,
+				FD59EA75279FC82F00A18298 /* UIView+Combine.swift in Sources */,
 				C3D9E4F4256778AF0040E4F3 /* NSData+Image.m in Sources */,
 				C32C5E0C256DDAFA003C73A2 /* NSRegularExpression+SSK.swift in Sources */,
 				C3BBE0A92554D4DE0050F1E3 /* HTTP.swift in Sources */,
 				B8856D23256F116B001CE70E /* Weak.swift in Sources */,
 				C32C5A48256DB8F0003C73A2 /* BuildConfiguration.swift in Sources */,
+				FD59EA7827A1F9B200A18298 /* DisposableBarButtonItem.swift in Sources */,
 				B87EF18126377A1D00124B3C /* Features.swift in Sources */,
 				C300A60D2554B31900555489 /* Logging.swift in Sources */,
+				FD59EA7A27A221F700A18298 /* ReplaySubject.swift in Sources */,
+				FD59EA71279FC20B00A18298 /* UIControl+Combine.swift in Sources */,
 				B8FF8EA625C11FEF004D1F22 /* IPv4.swift in Sources */,
 				C3D9E35525675EE10040E4F3 /* MIMETypeUtil.m in Sources */,
 				C3A7219A2558C1660043A11F /* AnyPromise+Conversion.swift in Sources */,
@@ -5085,7 +5122,6 @@
 				3496957021A301A100DCFE74 /* OWSBackupIO.m in Sources */,
 				FD59FEC227953DA5003C51FB /* ConversationSettingsOptionView.swift in Sources */,
 				B8269D3325C7A8C600488AB4 /* InputViewButton.swift in Sources */,
-				FD59EA44279A263200A18298 /* ClosureBarButtonItem.swift in Sources */,
 				B8269D3D25C7B34D00488AB4 /* InputTextView.swift in Sources */,
 				76EB054018170B33006006FC /* AppDelegate.m in Sources */,
 				340FC8B6204DAC8D007AEB0F /* OWSQRCodeScanningViewController.m in Sources */,
@@ -5311,7 +5347,7 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionShareExtension/Meta/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5389,7 +5425,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionShareExtension/Meta/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5448,7 +5484,7 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionNotificationServiceExtension/Meta/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5527,7 +5563,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionNotificationServiceExtension/Meta/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5584,7 +5620,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionUIKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5663,7 +5699,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionUIKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5731,7 +5767,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SignalUtilitiesKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5818,7 +5854,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SignalUtilitiesKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5878,7 +5914,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionSnodeKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -5957,7 +5993,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionSnodeKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6017,7 +6053,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionUtilitiesKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6105,7 +6141,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionUtilitiesKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6174,7 +6210,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = SessionMessagingKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6253,7 +6289,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = SessionMessagingKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6470,7 +6506,7 @@
 					"\"$(SRCROOT)/Libraries\"/**",
 				);
 				INFOPLIST_FILE = "Session/Meta/Session-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -6541,7 +6577,7 @@
 					"\"$(SRCROOT)/Libraries\"/**",
 				);
 				INFOPLIST_FILE = "Session/Meta/Session-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

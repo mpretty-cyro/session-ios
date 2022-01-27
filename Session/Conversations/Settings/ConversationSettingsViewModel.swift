@@ -1,44 +1,25 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
 
 class ConversationSettingsViewModel {
-    enum Action: CaseIterable {
-        case nothing
+    struct NavItem {
+        enum State {
+            case standard
+            case editing
+        }
         
-        case viewProfilePicture
-        
-        case startEditingDisplayName
-        case changeDisplayName
-        case cancelEditingDisplayName
-        case saveUpdatedDisplayName
-        
-        case search
-        case viewAddToGroup
-        case addToGroupCompleted
-        case viewEditGroup
-        case viewAllMedia
-        case togglePinConversation
-        case viewDisappearingMessagesSettings
-        case toggleMuteNotifications
-        case viewNotificationsSettings
-        case deleteMessages
-        case deleteMessagesConfirmed
-        case deleteMessagesCompleted
-        case leaveGroup
-        case leaveGroupConfirmed
-        case leaveGroupCompleted
-        case toggleBlockUser
+        let systemItem: UIBarButtonItem.SystemItem
+        let subject: PassthroughSubject<Void, Never>?
+        let accessibilityIdentifier: String
     }
     
     struct Item: Equatable {
         enum Id: CaseIterable {
-            case navEdit
-            case navCancel
-            case navDone
             case header
             case search
             case addToGroup
@@ -53,7 +34,6 @@ class ConversationSettingsViewModel {
         }
         
         enum Style {
-            case navigation
             case header
             case search
             case standard
@@ -61,12 +41,11 @@ class ConversationSettingsViewModel {
             
         let id: Id
         let style: Style
-        let action: Action
         let icon: UIImage?
         let title: String
-        let barButtonItem: UIBarButtonItem.SystemItem?
         let subtitle: String?
         let isEnabled: Bool
+        let isEditing: Bool
         let isNegativeAction: Bool
         let accessibilityIdentifier: String?
 
@@ -75,505 +54,651 @@ class ConversationSettingsViewModel {
         init(
             id: Id,
             style: Style = .standard,
-            action: Action = .nothing,
             icon: UIImage? = nil,
             title: String = "",
             barButtonItem: UIBarButtonItem.SystemItem? = nil,
             subtitle: String? = nil,
             isEnabled: Bool = true,
+            isEditing: Bool = false,
             isNegativeAction: Bool = false,
             accessibilityIdentifier: String? = nil
         ) {
             self.id = id
             self.style = style
-            self.action = action
             self.icon = icon
             self.title = title
-            self.barButtonItem = barButtonItem
             self.subtitle = subtitle
             self.isEnabled = isEnabled
+            self.isEditing = isEditing
             self.isNegativeAction = isNegativeAction
             self.accessibilityIdentifier = accessibilityIdentifier
         }
+    }
+    
+    struct ActionableItem {
+        let data: Item
+        let action: PassthroughSubject<Void, Never>?
         
-        func with(
-            icon: UIImage? = nil,
-            title: String? = nil,
-            subtitle: String? = nil,
-            isEnabled: Bool? = nil
-        ) -> Item {
-            return Item(
-                id: id,
-                style: style,
-                action: action,
-                icon: (icon ?? self.icon),
-                title: (title ?? self.title),
-                barButtonItem: barButtonItem,
-                subtitle: (subtitle ?? self.subtitle),
-                isEnabled: (isEnabled ?? self.isEnabled),
-                isNegativeAction: isNegativeAction,
-                accessibilityIdentifier: accessibilityIdentifier
-            )
+        init(data: Item, action: PassthroughSubject<Void, Never>? = nil) {
+            self.data = data
+            self.action = action
         }
+    }
+    
+    enum NotificationState {
+        case all
+        case mentionsOnly
+        case mute
     }
     
     // MARK: - Variables
     
-    let thread: DynamicValue<TSThread>
+    private let thread: TSThread
     private let uiDatabaseConnection: YapDatabaseConnection
     private let didTriggerSearch: () -> ()
-    private var disappearingMessageConfiguration: OWSDisappearingMessagesConfiguration?
+    private let disappearingMessageConfiguration: OWSDisappearingMessagesConfiguration?
     
     // MARK: - Initialization
     
     init(thread: TSThread, uiDatabaseConnection: YapDatabaseConnection, didTriggerSearch: @escaping () -> ()) {
-        self.thread = DynamicValue(thread)
+        self.thread = thread
         self.uiDatabaseConnection = uiDatabaseConnection
         self.didTriggerSearch = didTriggerSearch
         
-        // Need to setup interaction binding and load in initial data
-        self.setupBinding()
-        self.refreshAllData()
+        if let uniqueId: String = thread.uniqueId {
+            if let config: OWSDisappearingMessagesConfiguration = OWSDisappearingMessagesConfiguration.fetch(uniqueId: uniqueId) {
+                self.disappearingMessageConfiguration = config
+            }
+            else {
+                self.disappearingMessageConfiguration = OWSDisappearingMessagesConfiguration(defaultWithThreadId: uniqueId)
+            }
+        }
+        else {
+            self.disappearingMessageConfiguration = nil
+        }
     }
     
-    // MARK: - Content and Interactions
+    // MARK: - Input
+    
+    @Published var displayName: String = ""
+    
+    let forceRefreshData: PassthroughSubject<Void, Never> = PassthroughSubject()
+    
+    let profilePictureTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let editDisplayNameTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let cancelEditDisplayNameTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let saveDisplayNameTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    
+    let searchTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let addToGroupTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let editGroupTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let viewAllMediaTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let pinConversationTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let disappearingMessagesTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let notificationsTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    
+    let deleteMessagesTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    private let deleteMessagesStarted: PassthroughSubject<Void, Never> = PassthroughSubject()
+    private let deleteMessagesCompleted: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let leaveGroupTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    private let leaveGroupStarted: PassthroughSubject<Void, Never> = PassthroughSubject()
+    private let leaveGroupCompleted: PassthroughSubject<Void, Never> = PassthroughSubject()
+    let blockTapped: PassthroughSubject<Void, Never> = PassthroughSubject()
+    
+    // MARK: - Content
     
     lazy var title: String = {
-        if thread.value is TSContactThread { return "vc_settings_title".localized() }
-
+        if thread is TSContactThread { return "vc_settings_title".localized() }
+        
         return "vc_group_settings_title".localized()
     }()
-    var threadName: String? { viewState[.header]?.title }
     
-    lazy var items: DynamicValue<[[Item]]> = DynamicValue(generateItemSections())
-    lazy var leftNavItems: DynamicValue<[Item]> = DynamicValue(generateLeftNavItems())
-    lazy var rightNavItems: DynamicValue<[Item]> = DynamicValue(generateRightNavItems())
-    
-    lazy var interaction: InteractionManager<Action, (TSThread, OWSDisappearingMessagesConfiguration?, Any?)> = InteractionManager { [weak self] interactionData in
-        guard let strongSelf: ConversationSettingsViewModel = self else { return nil }
-        
-        return (strongSelf.thread.value, strongSelf.disappearingMessageConfiguration, interactionData)
-    }
-    
-    // MARK: - Internal State Management
-    
-    private var isEditingDisplayName: Bool = false
-    private var editedDisplayName: String = ""
-    
-    private lazy var viewState: [Item.Id: Item] = {
-        let groupThread: TSGroupThread? = (thread.value as? TSGroupThread)
-        
-        // Note: Any 'dynamic' data can just be omitted here as the 'refreshData' function will be called
-        // on init to populate the correct values
-        return [
-            .navEdit: Item(
-                id: .navEdit,
-                style: .navigation,
-                action: .startEditingDisplayName,
-                barButtonItem: .edit,
-                accessibilityIdentifier: "Edit button"
-            ),
-            
-            .navCancel: Item(
-                id: .navCancel,
-                style: .navigation,
-                action: .cancelEditingDisplayName,
-                barButtonItem: .cancel,
-                accessibilityIdentifier: "Cancel button"
-            ),
-            
-            .navDone: Item(
-                id: .navDone,
-                style: .navigation,
-                action: .saveUpdatedDisplayName,
-                barButtonItem: .done,
-                accessibilityIdentifier: "Done button"
-            ),
-            
-            .header: Item(
-                id: .header,
-                style: .header,
-                subtitle: (thread.value is TSGroupThread ? nil : (thread.value as? TSContactThread)?.contactSessionID())
-            ),
-            
-            .search: Item(
-                id: .search,
-                style: .search,
-                action: .search,
-                icon: UIImage(named: "conversation_settings_search")?.withRenderingMode(.alwaysTemplate),
-                title: "CONVERSATION_SETTINGS_SEARCH".localized(),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).search"
-            ),
-            
-            .addToGroup: Item(
-                id: .addToGroup,
-                action: .viewAddToGroup,
-                icon: UIImage(named: "ic_plus_24")?.withRenderingMode(.alwaysTemplate),
-                title: "vc_conversation_settings_invite_button_title".localized(),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
-            ),
-            
-            .editGroup: Item(
-                id: .editGroup,
-                action: .viewEditGroup,
-                icon: UIImage(named: "table_ic_group_edit")?.withRenderingMode(.alwaysTemplate),
-                title: "EDIT_GROUP_ACTION".localized(),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
-            ),
-                
-            .allMedia: Item(
-                id: .allMedia,
-                action: .viewAllMedia,
-                icon: UIImage(named: "actionsheet_camera_roll_black")?.withRenderingMode(.alwaysTemplate),
-                title: MediaStrings.allMedia,
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).all_media"
-            ),
-            
-            .pinConversation: Item(
-                id: .pinConversation,
-                action: .togglePinConversation,
-                icon: UIImage(named: "settings_pin")?.withRenderingMode(.alwaysTemplate),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).pin_conversation"
-            ),
-            
-            .disappearingMessages: Item(
-                id: .disappearingMessages,
-                action: .viewDisappearingMessagesSettings,
-                icon: UIImage(named: "timer_55")?.withRenderingMode(.alwaysTemplate),
-                title: "DISAPPEARING_MESSAGES".localized(),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).disappearing_messages"
-            ),
-            
-            .notifications: Item(
-                id: .notifications,
-                action: (thread.value.isGroupThread() ?
-                    .viewNotificationsSettings :
-                    .toggleMuteNotifications
-                ),
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).mute"
-            ),
-            
-            .deleteMessages: Item(
-                id: .deleteMessages,
-                action: .deleteMessages,
-                icon: UIImage(named: "trash")?.withRenderingMode(.alwaysTemplate),
-                title: "DELETE_MESSAGES".localized(),
-                isNegativeAction: true,
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).delete_messages"
-            ),
-            
-            .blockUser: Item(
-                id: .blockUser,
-                action: .toggleBlockUser,
-                icon: UIImage(named: "table_ic_block")?.withRenderingMode(.alwaysTemplate),
-                isNegativeAction: true,
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).block"
-            ),
-            
-            .leaveGroup: Item(
-                id: .leaveGroup,
-                action: .leaveGroup,
-                icon: UIImage(named: "table_ic_group_leave")?.withRenderingMode(.alwaysTemplate),
-                title: "LEAVE_GROUP_ACTION".localized(),
-                isNegativeAction: true,
-                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).leave_group"
-            )
-        ]
+    lazy var profileContent: AnyPublisher<TSThread, Never> = {
+        forceRefreshData
+            .compactMap { [weak self] in self?.thread }
+            .eraseToAnyPublisher()
     }()
     
-    private func generateItemSections() -> [[Item]] {
-        let groupThread: TSGroupThread? = (thread.value as? TSGroupThread)
-        let isClosedGroupAndMemeber: Bool = (groupThread != nil && groupThread?.isClosedGroup == true && groupThread?.isUserMember(inGroup: SNGeneralUtilities.getUserPublicKey()) == true)
-        let isOpenGroup: Bool = (groupThread != nil && groupThread?.isOpenGroup == true)
-        
-        return [
-            // Header section
-            [
-                viewState[.header]
-            ].compactMap { $0 },
-            
-            // Search section
-            [
-                viewState[.search]
-            ].compactMap { $0 },
-            
-            // Main section
-            [
-                (isOpenGroup ? viewState[.addToGroup] : nil),
-                (isClosedGroupAndMemeber ? viewState[.editGroup] : nil),
-                viewState[.allMedia],
-                viewState[.pinConversation],
-                (!isOpenGroup ? viewState[.disappearingMessages] : nil),
-                (!thread.value.isNoteToSelf() ? viewState[.notifications] : nil)
-            ]
-            .compactMap { $0 },
-            
-            // Destructive Actions
-            [
-                // TODO: Setup 'deleteMessages'
-                viewState[.deleteMessages],
-                (!thread.value.isNoteToSelf() && !thread.value.isGroupThread() ? viewState[.blockUser] : nil),
-                (isClosedGroupAndMemeber ? viewState[.leaveGroup] : nil)
-            ]
-            .compactMap { $0 }
-        ]
-    }
-    
-    private func generateLeftNavItems() -> [Item] {
-        guard thread.value is TSContactThread && isEditingDisplayName else { return [] }
-        
-        return [ viewState[.navCancel] ].compactMap { $0 }
-    }
-    
-    private func generateRightNavItems() -> [Item] {
-        guard thread.value is TSContactThread else { return [] }
-        guard isEditingDisplayName else {
-            return [ viewState[.navEdit] ].compactMap { $0 }
-        }
-        
-        return [ viewState[.navDone] ].compactMap { $0 }
-    }
-    
-    private func setupBinding() {
-        interaction.on(.startEditingDisplayName, forceToMainThread: false) { [weak self] thread, _, _ in
-            guard thread is TSContactThread else { return }
-            
-            self?.isEditingDisplayName = true
-            self?.editedDisplayName = (self?.viewState[.header]?.title ?? "")
-            self?.leftNavItems.value = (self?.generateLeftNavItems() ?? [])
-            self?.rightNavItems.value = (self?.generateRightNavItems() ?? [])
-        }
-        
-        interaction.on(.changeDisplayName, forceToMainThread: false) { [weak self] thread, _, updatedNameValue in
-            guard thread is TSContactThread else { return }
-            guard let updatedName: String = updatedNameValue as? String else { return }
-            
-            self?.editedDisplayName = updatedName
-        }
-        
-        interaction.on(.cancelEditingDisplayName, forceToMainThread: false) { [weak self] thread, _, _ in
-            guard thread is TSContactThread else { return }
-            
-            self?.isEditingDisplayName = false
-            self?.leftNavItems.value = (self?.generateLeftNavItems() ?? [])
-            self?.rightNavItems.value = (self?.generateRightNavItems() ?? [])
-        }
-        
-        interaction.on(.saveUpdatedDisplayName, forceToMainThread: false) { [weak self] thread, _, _ in
-            guard let contactThread: TSContactThread = thread as? TSContactThread else { return }
-            guard let editedDisplayName: String = self?.editedDisplayName else { return }
-            
-            self?.isEditingDisplayName = false
-            self?.leftNavItems.value = (self?.generateLeftNavItems() ?? [])
-            self?.rightNavItems.value = (self?.generateRightNavItems() ?? [])
-            
-            let sessionId: String = contactThread.contactSessionID()
-            let contact: Contact = (Storage.shared.getContact(with: sessionId) ?? Contact(sessionID: sessionId))
-            contact.nickname = (editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
-                nil :
-                editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var threadName: String {
+        if let contactThread: TSContactThread = thread as? TSContactThread {
+            return (
+                Storage.shared.getContact(with: contactThread.contactSessionID())?
+                    .displayName(for: .regular) ??
+                "Anonymous"
             )
-            
-            Storage.write { transaction in
-                Storage.shared.setContact(contact, using: transaction)
-                
-                self?.tryRefreshData(for: .header)
-            }
         }
-        
-        interaction.on(.search, forceToMainThread: false) { [weak self] _, _, _ in
-            // TODO: Refactor this to use the same setup as GlobalSearch when done
-            self?.didTriggerSearch()
-        }
-        
-        interaction.on(.addToGroupCompleted, forceToMainThread: false) { thread, _, selectedUsers in
-            guard let threadId: String = thread.uniqueId else { return }
-            guard let openGroup: OpenGroupV2 = Storage.shared.getV2OpenGroup(for: threadId) else { return }
-            guard let selectedUsers: Set<String> = selectedUsers as? Set<String> else { return }
-            
-            let url = "\(openGroup.server)/\(openGroup.room)?public_key=\(openGroup.publicKey)"
-            
-            selectedUsers.forEach { user in
-                let message: VisibleMessage = VisibleMessage()
-                message.sentTimestamp = NSDate.millisecondTimestamp()
-                message.openGroupInvitation = VisibleMessage.OpenGroupInvitation(name: openGroup.name, url: url)
-                
-                let thread: TSContactThread = TSContactThread.getOrCreateThread(contactSessionID: user)
-                let tsMessage: TSOutgoingMessage = TSOutgoingMessage.from(message, associatedWith: thread)
-                
-                Storage.write { transaction in
-                    tsMessage.save(with: transaction)
-                }
-                Storage.write { transaction in
-                    MessageSender.send(message, in: thread, using: transaction)
-                }
-            }
-        }
-        
-        interaction.on(.togglePinConversation, forceToMainThread: false) { [weak self] thread, _, _ in
-            thread.isPinned = !thread.isPinned
-            thread.save()
-            
-            self?.tryRefreshData(for: .pinConversation)
-        }
-        
-        interaction.on(.toggleMuteNotifications, forceToMainThread: false) { [weak self] thread, _, _ in
-            guard !thread.isNoteToSelf() && !thread.isGroupThread() else { return }
-            
-            Storage.write { transaction in
-                thread.updateWithMuted(
-                    until: (thread.isMuted ? nil : Date.distantFuture),
-                    transaction: transaction
-                )
-                
-                self?.tryRefreshData(for: .notifications)
-            }
-        }
-        
-        interaction.on(.deleteMessagesConfirmed, forceToMainThread: false) { [weak self] thread, _, _ in
-            Storage.write { transaction in
-                thread.removeAllThreadInteractions(with: transaction)
-                self?.interaction.trigger(.deleteMessagesCompleted)
-            }
-        }
-        
-        interaction.on(.leaveGroupConfirmed, forceToMainThread: false) { [weak self] thread, _, _ in
-            guard let groupThread: TSGroupThread = thread as? TSGroupThread else { return }
-            guard groupThread.isClosedGroup else { return }
-            
-            let groupPublicKey: String = LKGroupUtilities.getDecodedGroupID(groupThread.groupModel.groupId)
-            
-            Storage.write { transaction in
-                MessageSender.leave(groupPublicKey, using: transaction).retainUntilComplete()
-                
-                // Need to refresh the screen as some settings might be disabled by this
-                self?.refreshAllData()
-                self?.interaction.trigger(.leaveGroupCompleted)
-            }
-        }
+
+        let threadName: String = thread.name()
+
+        return (threadName.isEmpty && thread is TSGroupThread ?
+            MessageStrings.newGroupDefaultTitle :
+            threadName
+        )
     }
+    
+    private lazy var navState: AnyPublisher<NavItem.State, Never> = {
+        Publishers
+            .MergeMany(
+                editDisplayNameTapped
+                    .map { _ in .editing }
+                    .eraseToAnyPublisher(),
+                cancelEditDisplayNameTapped
+                    .map { _ in .standard }
+                    .eraseToAnyPublisher(),
+                saveDisplayNameTapped
+                    .compactMap { [weak self] _ -> TSContactThread? in self?.thread as? TSContactThread }
+                    .handleEvents(receiveOutput: { [weak self] contactThread in
+                        guard let editedDisplayName: String = self?.displayName else { return }
+                        
+                        let sessionId: String = contactThread.contactSessionID()
+                        let contact: Contact = (Storage.shared.getContact(with: sessionId) ?? Contact(sessionID: sessionId))
+                        contact.nickname = (editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
+                            nil :
+                            editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        
+                        Storage.write { transaction in
+                            Storage.shared.setContact(contact, using: transaction)
+                        }
+                    })
+                    .map { _ in .standard }
+                    .eraseToAnyPublisher()
+            )
+            .prepend(.standard)     // Initial value
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var leftNavItems: AnyPublisher<[NavItem], Never> = {
+        return navState
+            .map { [weak self] navState -> [NavItem] in
+                // Only show the 'Edit' button if it's a contact thread
+                guard self?.thread is TSContactThread else { return [] }
+                guard navState == .editing else { return [] }
+                
+                return [
+                    NavItem(
+                        systemItem: .cancel,
+                        subject: self?.cancelEditDisplayNameTapped,
+                        accessibilityIdentifier: "Cancel button"
+                    )
+                ]
+            }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var rightNavItems: AnyPublisher<[NavItem], Never> = {
+        navState
+            .map { [weak self] navState -> [NavItem] in
+                // Only show the 'Edit' button if it's a contact thread
+                guard self?.thread is TSContactThread else { return [] }
+                
+                switch navState {
+                    case .editing:
+                        return [
+                            NavItem(
+                                systemItem: .done,
+                                subject: self?.saveDisplayNameTapped,
+                                accessibilityIdentifier: "Done button"
+                            )
+                        ]
+                    
+                    case .standard:
+                        return [
+                            NavItem(
+                                systemItem: .edit,
+                                subject: self?.editDisplayNameTapped,
+                                accessibilityIdentifier: "Edit button"
+                            )
+                        ]
+                }
+            }
+            .eraseToAnyPublisher()
+    }()
+    
+    private lazy var isPinned: AnyPublisher<Bool, Never> = {
+        pinConversationTapped
+            .handleEvents(receiveOutput: { [weak self] _ in
+                guard let thread: TSThread = self?.thread else { return }
+                
+                thread.isPinned = !thread.isPinned
+                thread.save()
+            })
+            .prepend(())    // Trigger an event to have an initial state
+            .compactMap { [weak self] _ -> Bool? in self?.thread.isPinned }
+            .eraseToAnyPublisher()
+    }()
+    
+    private lazy var isGroupAndCurrentMember: AnyPublisher<Bool, Never> = {
+        profileContent
+            .map { thread -> Bool in
+                guard let groupThread: TSGroupThread = thread as? TSGroupThread else { return false }
+
+                return groupThread.isCurrentUserMemberInGroup()
+            }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }()
+    
+    private lazy var notificationState: AnyPublisher<NotificationState, Never> = {
+        Publishers
+            .CombineLatest(
+                notificationsTapped
+                    .filter { [weak self] _ in self?.thread is TSContactThread }
+                    .handleEvents(receiveOutput: { [weak self] _ in
+                        guard let thread: TSThread = self?.thread else { return }
+                        guard !thread.isNoteToSelf() && !thread.isGroupThread() else { return }
+                        
+                        Storage.write { transaction in
+                            thread.updateWithMuted(
+                                until: (thread.isMuted ? nil : Date.distantFuture),
+                                transaction: transaction
+                            )
+                        }
+                    })
+                    .prepend(()),
+                isGroupAndCurrentMember
+            )
+            .map { [weak self] _, isGroupAndCurrentMember -> NotificationState in
+                guard let thread: TSThread = self?.thread else { return .mute }
+                
+                if let groupThread: TSGroupThread = thread as? TSGroupThread {
+                    if thread.isMuted || !isGroupAndCurrentMember {
+                        return .mute
+                    }
+                    else if groupThread.isOnlyNotifyingForMentions {
+                        return .mentionsOnly
+                    }
+                    
+                    return .all
+                }
+                
+                return (thread.isMuted || thread.isNoteToSelf() ?
+                    .mute :
+                    .all
+                )
+            }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var items: AnyPublisher<[[ActionableItem]], Never> = {
+        Publishers
+            .CombineLatest4(
+                Publishers
+                    .CombineLatest(
+                        // Thread state changes
+                        forceRefreshData,
+                        isPinned.mapToVoid()
+                    ),
+                navState,
+                notificationState,
+                Publishers
+                    .CombineLatest(
+                        // Store the initial state so we can ditinguish between sections which should
+                        // be hidden vs shown in a disabled state
+                        isGroupAndCurrentMember.first(),
+                        // Note: This will be triggered on 'forceRefreshData' so we don't need to include
+                        // that to trigger updates on view appearance
+                        isGroupAndCurrentMember
+                    )
+                    .map { initialState, currentState -> (initialState: Bool, currentState: Bool) in
+                        (initialState, currentState)
+                    }
+            )
+            .map { [weak self] _, navState, notificationState, isGroupAndCurrentMember -> [[ActionableItem]] in
+                guard let thread: TSThread = self?.thread else { return [] }
+                
+                let groupThread: TSGroupThread? = (thread as? TSGroupThread)
+                let isOpenGroup: Bool = (groupThread != nil && groupThread?.isOpenGroup == true)
+                let isClosedGroup: Bool = (groupThread != nil && groupThread?.isClosedGroup == true)
+                let threadName: String = (self?.threadName ?? "Anonymous")
+                
+                // Generate the sections
+                return [
+                    // Header section
+                    [
+                        ActionableItem(
+                            data: Item(
+                                id: .header,
+                                style: .header,
+                                title: threadName,
+                                subtitle: (self?.thread is TSGroupThread ?
+                                    nil :
+                                    (self?.thread as? TSContactThread)?.contactSessionID()
+                                ),
+                                isEditing: (navState == .editing)
+                            )
+                        )
+                    ],
+                    
+                    // Search section
+                    [
+                        ActionableItem(
+                            data: Item(
+                                id: .search,
+                                style: .search,
+                                icon: UIImage(named: "conversation_settings_search")?
+                                    .withRenderingMode(.alwaysTemplate),
+                                title: "CONVERSATION_SETTINGS_SEARCH".localized(),
+                                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).search"
+                            ),
+                            action: self?.searchTapped
+                        )
+                    ],
+                    
+                    // Main section
+                    [
+                        (!isOpenGroup ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .addToGroup,
+                                    icon: UIImage(named: "ic_plus_24")?
+                                        .withRenderingMode(.alwaysTemplate),
+                                    title: "vc_conversation_settings_invite_button_title".localized(),
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
+                                ),
+                                action: self?.addToGroupTapped
+                            )
+                        ),
+                        
+                        (!isClosedGroup || !isGroupAndCurrentMember.initialState ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .editGroup,
+                                    icon: UIImage(named: "table_ic_group_edit")?
+                                        .withRenderingMode(.alwaysTemplate),
+                                    title: "EDIT_GROUP_ACTION".localized(),
+                                    isEnabled: isGroupAndCurrentMember.currentState,
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).edit_group"
+                                ),
+                                action: self?.editGroupTapped
+                            )
+                        ),
+                        
+                        ActionableItem(
+                            data: Item(
+                                id: .allMedia,
+                                icon: UIImage(named: "actionsheet_camera_roll_black")?
+                                    .withRenderingMode(.alwaysTemplate),
+                                title: MediaStrings.allMedia,
+                                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).all_media"
+                            ),
+                            action: self?.viewAllMediaTapped
+                        ),
+                        
+                        ActionableItem(
+                            data: Item(
+                                id: .pinConversation,
+                                icon: UIImage(named: "settings_pin")?
+                                    .withRenderingMode(.alwaysTemplate),
+                                title: (thread.isPinned ?
+                                    "CONVERSATION_SETTINGS_UNPIN".localized() :
+                                    "CONVERSATION_SETTINGS_PIN".localized()
+                                ),
+                                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).pin_conversation"
+                            ),
+                            action: self?.pinConversationTapped
+                        ),
+                        
+                        (isOpenGroup ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .disappearingMessages,
+                                    icon: UIImage(named: "timer_55")?
+                                        .withRenderingMode(.alwaysTemplate),
+                                    title: "DISAPPEARING_MESSAGES".localized(),
+                                    subtitle: {
+                                        guard let config: OWSDisappearingMessagesConfiguration = self?.disappearingMessageConfiguration else {
+                                            return "DISAPPEARING_MESSAGES_OFF".localized()
+                                        }
+                                        
+                                        return (config.isEnabled ?
+                                            config.shortDurationString :
+                                            "DISAPPEARING_MESSAGES_OFF".localized()
+                                        )
+                                    }(),
+                                    isEnabled: (!thread.isGroupThread() || isGroupAndCurrentMember.currentState),
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).disappearing_messages"
+                                ),
+                                action: self?.disappearingMessagesTapped
+                            )
+                        ),
+                        
+                        (thread.isNoteToSelf() ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .notifications,
+                                    icon: (thread.isMuted || thread.isGroupThread() ?
+                                        UIImage(named: "unmute_unfilled")?.withRenderingMode(.alwaysTemplate) :
+                                        UIImage(named: "mute_unfilled")?.withRenderingMode(.alwaysTemplate)
+                                    ),
+                                    title: (thread.isGroupThread() ?
+                                        "CONVERSATION_SETTINGS_MESSAGE_NOTIFICATIONS".localized() :
+                                        (thread.isMuted ?
+                                            "CONVERSATION_SETTINGS_UNMUTE_ACTION_NEW".localized() :
+                                            "CONVERSATION_SETTINGS_MUTE_ACTION_NEW".localized()
+                                        )
+                                    ),
+                                    subtitle: (!thread.isGroupThread() ?
+                                        nil :
+                                        (thread.isMuted || !isGroupAndCurrentMember.currentState ?
+                                            "vc_conversation_notifications_settings_mute_title".localized() :
+                                            (groupThread?.isOnlyNotifyingForMentions == true ?
+                                                "vc_conversation_notifications_settings_mentions_only_title_short".localized() :
+                                                "vc_conversation_notifications_settings_all_title".localized()
+                                            )
+                                        )
+                                    ),
+                                    isEnabled: (!thread.isGroupThread() || isGroupAndCurrentMember.currentState),
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).mute"
+                                ),
+                                action: self?.notificationsTapped
+                            )
+                        )
+                    ]
+                    .compactMap { $0 },
+                    
+                    // Destructive Actions
+                    [
+                        ActionableItem(
+                            data: Item(
+                                id: .deleteMessages,
+                                icon: UIImage(named: "trash")?
+                                    .withRenderingMode(.alwaysTemplate),
+                                title: "DELETE_MESSAGES".localized(),
+                                isNegativeAction: true,
+                                accessibilityIdentifier: "\(ConversationSettingsViewModel.self).delete_messages"
+                            ),
+                            action: self?.deleteMessagesTapped
+                        ),
+                        
+                        (thread.isNoteToSelf() || thread.isGroupThread() ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .blockUser,
+                                    icon: UIImage(named: "table_ic_block")?
+                                        .withRenderingMode(.alwaysTemplate),
+                                    title: (OWSBlockingManager.shared().isThreadBlocked(thread) ?
+                                        "CONVERSATION_SETTINGS_UNBLOCK_USER".localized() :
+                                        "CONVERSATION_SETTINGS_BLOCK_USER".localized()
+                                    ),
+                                    isNegativeAction: true,
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).block"
+                                ),
+                                action: self?.blockTapped
+                            )
+                        ),
+                        
+                        (!isClosedGroup || !isGroupAndCurrentMember.initialState ? nil :
+                            ActionableItem(
+                                data: Item(
+                                    id: .leaveGroup,
+                                    icon: UIImage(named: "table_ic_group_leave")?
+                                        .withRenderingMode(.alwaysTemplate),
+                                    title: "LEAVE_GROUP_ACTION".localized(),
+                                    isEnabled: isGroupAndCurrentMember.currentState,
+                                    isNegativeAction: true,
+                                    accessibilityIdentifier: "\(ConversationSettingsViewModel.self).leave_group"
+                                ),
+                                action: self?.leaveGroupTapped
+                            )
+                        )
+                    ]
+                    .compactMap { $0 }
+                ]
+            }
+            .shareReplay(1)
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var loadingStateVisible: AnyPublisher<Bool, Never> = {
+        Publishers
+            .Merge4(
+                deleteMessagesStarted.map { _ in true },
+                leaveGroupStarted.map { _ in true },
+                deleteMessagesCompleted.map { _ in false },
+                leaveGroupCompleted.map { _ in false }
+            )
+            .prepend(false)     // Start with the loading hidden
+            .removeDuplicates() // Only emit changes to the state
+            .dropFirst()        // Ignore the first emission because the loading is hidden
+            .eraseToAnyPublisher()
+    }()
     
     // MARK: - Functions
     
-    private func refreshData(for itemId: Item.Id) {
-        let groupThread: TSGroupThread? = (thread.value as? TSGroupThread)
+    func addUsersToOpenGoup(selectedUsers: Set<String>) {
+        guard let threadId: String = thread.uniqueId else { return }
+        guard let openGroup: OpenGroupV2 = Storage.shared.getV2OpenGroup(for: threadId) else { return }
         
-        switch itemId {
-            case .header:
-                let updatedTitle: String
-                
-                if let contactThread: TSContactThread = thread.value as? TSContactThread {
-                    updatedTitle = (Storage.shared.getContact(with: contactThread.contactSessionID())?.displayName(for: .regular) ?? "Anonymous")
-                }
-                else {
-                    let threadName: String = thread.value.name()
-
-                    updatedTitle = (threadName.count == 0 && thread.value is TSGroupThread ?
-                        MessageStrings.newGroupDefaultTitle :
-                        threadName
-                    )
-                }
-                
-                self.viewState[.header] = self.viewState[.header]?.with(
-                    title: updatedTitle
-                )
-                
-            case .editGroup:
-                self.viewState[.editGroup] = self.viewState[.editGroup]?.with(
-                    isEnabled: (groupThread?.isCurrentUserMemberInGroup() != false)
-                )
-                
-            case .pinConversation:
-                self.viewState[.pinConversation] = self.viewState[.pinConversation]?.with(
-                    title: (thread.value.isPinned ?
-                        "CONVERSATION_SETTINGS_UNPIN".localized() :
-                        "CONVERSATION_SETTINGS_PIN".localized()
-                    )
-                )
-                
-            case .disappearingMessages:
-                guard let uniqueId: String = thread.value.uniqueId else { return }
-                
-                // Ensure the 'disappearingMessageConfiguration' value is set to something
-                let targetConfig: OWSDisappearingMessagesConfiguration
-                
-                if let config: OWSDisappearingMessagesConfiguration = self.disappearingMessageConfiguration {
-                    targetConfig = config
-                }
-                else if let config: OWSDisappearingMessagesConfiguration = OWSDisappearingMessagesConfiguration.fetch(uniqueId: uniqueId) {
-                    targetConfig = config
-                }
-                else {
-                    targetConfig = OWSDisappearingMessagesConfiguration(defaultWithThreadId: uniqueId)
-                }
-                
-                // Update the data store
-                self.disappearingMessageConfiguration = targetConfig
-                self.viewState[.disappearingMessages] = self.viewState[.disappearingMessages]?.with(
-                    subtitle: (targetConfig.isEnabled ?
-                        targetConfig.shortDurationString :
-                        "DISAPPEARING_MESSAGES_OFF".localized()
-                    ),
-                    isEnabled: (groupThread?.isCurrentUserMemberInGroup() != false)
-                )
-                
-            case .notifications:
-                guard !thread.value.isNoteToSelf() && !thread.value.isGroupThread() else {
-                    self.viewState[.notifications] = self.viewState[.notifications]?.with(
-                        icon: UIImage(named: "unmute_unfilled")?.withRenderingMode(.alwaysTemplate),
-                        title: "CONVERSATION_SETTINGS_MESSAGE_NOTIFICATIONS".localized(),
-                        subtitle: (groupThread?.isMuted == true || groupThread?.isCurrentUserMemberInGroup() == false ?
-                            "vc_conversation_notifications_settings_mute_title".localized() :
-                            (groupThread?.isOnlyNotifyingForMentions == true ?
-                                "vc_conversation_notifications_settings_mentions_only_title_short".localized() :
-                                "vc_conversation_notifications_settings_all_title".localized()
-                            )
-                        ),
-                        isEnabled: (groupThread?.isCurrentUserMemberInGroup() != false)
-                    )
-                    return
-                }
-
-                self.viewState[.notifications] = self.viewState[.notifications]?.with(
-                    icon: (thread.value.isMuted ?
-                        UIImage(named: "unmute_unfilled")?.withRenderingMode(.alwaysTemplate) :
-                        UIImage(named: "mute_unfilled")?.withRenderingMode(.alwaysTemplate)
-                    ),
-                    title: (thread.value.isMuted ?
-                        "CONVERSATION_SETTINGS_UNMUTE_ACTION_NEW".localized() :
-                        "CONVERSATION_SETTINGS_MUTE_ACTION_NEW".localized()
-                    )
-                )
-                
-            case .blockUser:
-                guard !thread.value.isNoteToSelf() && !thread.value.isGroupThread() else { return }
-                
-                self.viewState[.blockUser] = self.viewState[.blockUser]?.with(
-                    title: (OWSBlockingManager.shared().isThreadBlocked(thread.value) ?
-                        "CONVERSATION_SETTINGS_UNBLOCK_USER".localized() :
-                        "CONVERSATION_SETTINGS_BLOCK_USER".localized()
-                    )
-                )
-                
-            case .leaveGroup:
-                self.viewState[.leaveGroup] = self.viewState[.leaveGroup]?.with(
-                    isEnabled: (groupThread?.isCurrentUserMemberInGroup() != false)
-                )
-                
-            // Data cannot be updated so don't make any changes
-            default: return
+        let url = "\(openGroup.server)/\(openGroup.room)?public_key=\(openGroup.publicKey)"
+        
+        selectedUsers.forEach { user in
+            let message: VisibleMessage = VisibleMessage()
+            message.sentTimestamp = NSDate.millisecondTimestamp()
+            message.openGroupInvitation = VisibleMessage.OpenGroupInvitation(name: openGroup.name, url: url)
+            
+            let thread: TSContactThread = TSContactThread.getOrCreateThread(contactSessionID: user)
+            let tsMessage: TSOutgoingMessage = TSOutgoingMessage.from(message, associatedWith: thread)
+            
+            Storage.write { transaction in
+                tsMessage.save(with: transaction)
+            }
+            Storage.write { transaction in
+                MessageSender.send(message, in: thread, using: transaction)
+            }
         }
     }
     
-    private func refreshAllData() {
-        // Loop through the array and refresh the data then update the items
-        Item.Id.allCases.forEach { refreshData(for: $0) }
-        items.value = generateItemSections()
+    func deleteMessages() {
+        deleteMessagesStarted.send()
+        
+        Storage.write { [weak self] transaction in
+            self?.thread.removeAllThreadInteractions(with: transaction)
+            self?.deleteMessagesCompleted.send()
+        }
     }
     
-    func tryRefreshData(for itemId: Item.Id) {
-        // Refresh the desired data and update the items
-        refreshData(for: itemId)
-        items.value = generateItemSections()
+    func leaveGroup() {
+        guard let groupThread: TSGroupThread = thread as? TSGroupThread else { return }
+        guard groupThread.isClosedGroup else { return }
+        
+        let groupPublicKey: String = LKGroupUtilities.getDecodedGroupID(groupThread.groupModel.groupId)
+        
+        leaveGroupStarted.send()
+        
+        Storage.write { [weak self] transaction in
+            MessageSender
+                .leave(groupPublicKey, using: transaction)
+                .done { _ in
+                    self?.forceRefreshData.send()
+                    self?.leaveGroupCompleted.send()
+                }
+                .retainUntilComplete()
+        }
     }
+    
+    // MARK: - Transitions
+    
+    lazy var viewProfilePicture: AnyPublisher<(UIImage, String), Never> = {
+        profilePictureTapped
+            .compactMap { [weak self] _ -> UIImage? in
+                guard let contactThread: TSContactThread = self?.thread as? TSContactThread else {
+                    return nil
+                }
+                
+                return OWSProfileManager.shared().profileAvatar(
+                    forRecipientId: contactThread.contactSessionID()
+                )
+            }
+            .compactMap { [weak self] profileImage -> (UIImage, String)? in
+                guard let threadName: String = self?.threadName else { return nil }
+                
+                return (profileImage, threadName)
+            }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewSearch: AnyPublisher<Void, Never> = {
+        searchTapped
+            .handleEvents(receiveOutput: { [weak self] _ in
+                // TODO: Refactor this to use the same setup as GlobalSearch when done
+                self?.didTriggerSearch()
+            })
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewAddToGroup: AnyPublisher<TSThread, Never> = {
+        addToGroupTapped
+            .compactMap { [weak self] _ -> TSThread? in self?.thread }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewEditGroup: AnyPublisher<String, Never> = {
+        editGroupTapped
+            .compactMap { [weak self] _ -> String? in self?.thread.uniqueId }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewAllMedia: AnyPublisher<TSThread, Never> = {
+        viewAllMediaTapped
+            .compactMap { [weak self] _ -> TSThread? in self?.thread }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewDisappearingMessages: AnyPublisher<(TSThread, OWSDisappearingMessagesConfiguration), Never> = {
+        disappearingMessagesTapped
+            .compactMap { [weak self] _ -> (TSThread, OWSDisappearingMessagesConfiguration)? in
+                guard let thread: TSThread = self?.thread else { return nil }
+                guard let config: OWSDisappearingMessagesConfiguration = self?.disappearingMessageConfiguration else {
+                    return nil
+                }
+                
+                return (thread, config)
+            }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewNotificationSettings: AnyPublisher<TSGroupThread, Never> = {
+        notificationsTapped
+            .filter { [weak self] _ -> Bool in self?.thread.isGroupThread() == true }
+            .compactMap { [weak self] _ -> TSGroupThread? in self?.thread as? TSGroupThread }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewDeleteMessagesAlert: AnyPublisher<Void, Never> = {
+        deleteMessagesTapped
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewLeaveGroupAlert: AnyPublisher<TSGroupThread, Never> = {
+        leaveGroupTapped
+            .compactMap { [weak self] _ -> TSGroupThread? in self?.thread as? TSGroupThread }
+            .eraseToAnyPublisher()
+    }()
+    
+    lazy var viewBlockUserAlert: AnyPublisher<TSThread, Never> = {
+        blockTapped
+            .compactMap { [weak self] _ -> TSThread? in self?.thread }
+            .eraseToAnyPublisher()
+    }()
 }

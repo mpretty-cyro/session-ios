@@ -1,12 +1,13 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import SessionUIKit
 
 class ConversationSettingsActionView: UIView {
     static let minHeight: CGFloat = 50
     
-    var viewTapped: (() -> ())?
+    var disposables: Set<AnyCancellable> = Set()
     
     // MARK: - Initialization
     
@@ -29,8 +30,6 @@ class ConversationSettingsActionView: UIView {
     }
     
     // MARK: - UI
-    
-    private lazy var tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(internalViewTapped))
     
     private lazy var highlightView: UIView = {
         let view: UIView = UIView()
@@ -95,7 +94,6 @@ class ConversationSettingsActionView: UIView {
     
     private func setupUI() {
         backgroundColor = Colors.cellBackground
-        addGestureRecognizer(tapGestureRecognizer)
         
         addSubview(highlightView)
         addSubview(stackView)
@@ -147,7 +145,7 @@ class ConversationSettingsActionView: UIView {
         highlightView.isHidden = (!canHighlight || !isEnabled)
         
         disabledView.isHidden = isEnabled
-        tapGestureRecognizer.isEnabled = isEnabled
+        isUserInteractionEnabled = isEnabled
     }
     
     // MARK: - Interaction
@@ -169,9 +167,5 @@ class ConversationSettingsActionView: UIView {
         super.touchesCancelled(touches, with: event)
         
         highlightView.alpha = 0
-    }
-    
-    @objc private func internalViewTapped() {
-        viewTapped?()
     }
 }

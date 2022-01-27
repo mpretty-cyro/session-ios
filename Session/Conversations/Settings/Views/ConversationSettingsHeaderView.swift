@@ -1,13 +1,13 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import SessionUIKit
+import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
-    var profilePictureTapped: ((UIImage?) -> ())?
-    var displayNameTapped: (() -> ())?
-    var textChanged: ((String) -> ())?
+class ConversationSettingsHeaderView: UIView {
+    var disposables: Set<AnyCancellable> = Set()
     
     // MARK: - Initialization
     
@@ -54,25 +54,19 @@ class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
         return stackView
     }()
     
-    private lazy var profilePictureView: ProfilePictureView = {
+    fileprivate let profilePictureView: ProfilePictureView = {
         let view: ProfilePictureView = ProfilePictureView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.size = Values.largeProfilePictureSize
         
-        let tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(internalProfilePictureTapped))
-        view.addGestureRecognizer(tapGestureRecognizer)
-        
         return view
     }()
     
-    private lazy var displayNameContainer: UIView = {
+    fileprivate let displayNameContainer: UIView = {
         let view: UIView = UIView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.accessibilityLabel = "Edit name text field"
         view.isAccessibilityElement = true
-        
-        let tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(internalDisplayNameTapped))
-        view.addGestureRecognizer(tapGestureRecognizer)
         
         return view
     }()
@@ -88,18 +82,17 @@ class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
         return label
     }()
     
-    private lazy var displayNameTextField: UITextField = {
+    fileprivate let displayNameTextField: UITextField = {
         let textField: TextField = TextField(placeholder: "Enter a name", usesDefaultHeight: false)
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.textAlignment = .center
         textField.accessibilityLabel = "Edit name text field"
         textField.alpha = 0
-        textField.delegate = self
         
         return textField
     }()
     
-    private lazy var sessionIdLabel: SRCopyableLabel = {
+    private let sessionIdLabel: SRCopyableLabel = {
         let label: SRCopyableLabel = SRCopyableLabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = UIFont.ows_lightFont(withSize: Values.smallFontSize)
@@ -153,7 +146,7 @@ class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
     
     // MARK: - Content
     
-    func update(with thread: TSThread) {
+    func updateProfile(with thread: TSThread) {
         profilePictureView.update(for: thread)
     }
     
@@ -163,10 +156,17 @@ class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
         sessionIdLabel.isHidden = (contactSessionId?.isEmpty != false)
     }
     
-    func update(isEditingDisplayName: Bool) {
-        UIView.animate(withDuration: 0.25) { [weak self] in
+    func update(isEditingDisplayName: Bool, animated: Bool) {
+        let changes = { [weak self] in
             self?.displayNameLabel.alpha = (isEditingDisplayName ? 0 : 1)
             self?.displayNameTextField.alpha = (isEditingDisplayName ? 1 : 0)
+        }
+        
+        if animated {
+            UIView.animate(withDuration: 0.25, animations: changes)
+        }
+        else {
+            changes()
         }
         
         if isEditingDisplayName {
@@ -176,26 +176,26 @@ class ConversationSettingsHeaderView: UIView, UITextFieldDelegate {
             displayNameTextField.resignFirstResponder()
         }
     }
-    
-    // MARK: - Interaction
-    
-    @objc private func internalProfilePictureTapped() {
-        profilePictureTapped?(profilePictureView.getProfilePicture())
+}
+
+// MARK: - Compose
+
+extension CombineCompatible where Self: ConversationSettingsHeaderView {
+    var textPublisher: AnyPublisher<String, Never> {
+        return self.displayNameTextField.publisher(for: .editingChanged)
+            .map { textField -> String in (textField.text ?? "") }
+            .eraseToAnyPublisher()
     }
     
-    @objc private func internalDisplayNameTapped() {
-        displayNameTapped?()
+    var displayNameTapPublisher: AnyPublisher<Void, Never> {
+        return self.displayNameContainer.tapPublisher
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
     
-    // MARK: - UITextFieldDelegate
-    
-    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
-        if let text: String = textField.text, let range: Range = Range(range, in: text) {
-            let updatedText: String = text.replacingCharacters(in: range, with: string)
-            
-            textChanged?(updatedText)
-        }
-        
-        return true
+    var profilePictureTapPublisher: AnyPublisher<Void, Never> {
+        return self.profilePictureView.tapPublisher
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }
