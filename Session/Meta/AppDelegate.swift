@@ -45,11 +45,7 @@ extension AppDelegate {
         let userDefaults = UserDefaults.standard
         
         guard userDefaults.dictionaryRepresentation().keys.contains("appMode") else {
-            if #available(iOS 13.0, *) {
-                return UITraitCollection.current.userInterfaceStyle == .dark ? .dark : .light
-            } else {
-                return .light
-            }
+            return UITraitCollection.current.userInterfaceStyle == .dark ? .dark : .light
         }
         
         let mode = userDefaults.integer(forKey: "appMode")
