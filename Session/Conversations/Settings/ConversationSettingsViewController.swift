@@ -102,15 +102,15 @@ class ConversationSettingsViewController: BaseVC {
             .sink { [weak self] items in
                 self?.navigationItem.setLeftBarButtonItems(
                     items.map { item -> DisposableBarButtonItem in
-                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.systemItem, target: nil, action: nil, accessibilityIdentifier: item.accessibilityIdentifier)
+                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.data.systemItem, target: nil, action: nil, accessibilityIdentifier: item.data.accessibilityIdentifier)
                         buttonItem.tintColor = Colors.text
-                        buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
-                        buttonItem.accessibilityLabel = item.accessibilityIdentifier
+                        buttonItem.accessibilityIdentifier = item.data.accessibilityIdentifier
+                        buttonItem.accessibilityLabel = item.data.accessibilityIdentifier
                         buttonItem.isAccessibilityElement = true
                         
                         buttonItem.tapPublisher
                             .mapToVoid()
-                            .sink(into: item.subject)
+                            .sink(into: item.action)
                             .store(in: &buttonItem.disposables)
                         
                         return buttonItem
@@ -125,15 +125,15 @@ class ConversationSettingsViewController: BaseVC {
             .sink { [weak self] items in
                 self?.navigationItem.setRightBarButtonItems(
                     items.map { item -> DisposableBarButtonItem in
-                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.systemItem, target: nil, action: nil, accessibilityIdentifier: item.accessibilityIdentifier)
+                        let buttonItem: DisposableBarButtonItem = DisposableBarButtonItem(barButtonSystemItem: item.data.systemItem, target: nil, action: nil, accessibilityIdentifier: item.data.accessibilityIdentifier)
                         buttonItem.tintColor = Colors.text
-                        buttonItem.accessibilityIdentifier = item.accessibilityIdentifier
-                        buttonItem.accessibilityLabel = item.accessibilityIdentifier
+                        buttonItem.accessibilityIdentifier = item.data.accessibilityIdentifier
+                        buttonItem.accessibilityLabel = item.data.accessibilityIdentifier
                         buttonItem.isAccessibilityElement = true
                         
                         buttonItem.tapPublisher
                             .mapToVoid()
-                            .sink(into: item.subject)
+                            .sink(into: item.action)
                             .store(in: &buttonItem.disposables)
                         
                         return buttonItem

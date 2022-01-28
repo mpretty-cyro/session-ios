@@ -1,16 +1,20 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import XCTest
+import Combine
 import Nimble
 
 @testable import Session
 
 class ConversationDisappearingMessagesViewModelTests: XCTestCase {
+    typealias Item = ConversationDisappearingMessagesViewModel.Item
+    
+    var disposables: Set<AnyCancellable>!
     var dataChangedCallbackTriggered: Bool = false
     var thread: TSThread!
     var config: OWSDisappearingMessagesConfiguration!
     var contact: Contact!
-    var defaultItems: [ConversationDisappearingMessagesViewModel.Item]!
+    var defaultItems: [Item]!
     var viewModel: ConversationDisappearingMessagesViewModel!
     
     // MARK: - Configuration
@@ -18,22 +22,23 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
     override func setUpWithError() throws {
         dataChangedCallbackTriggered = false
         
+        disposables = Set()
         thread = TSContactThread(uniqueId: "TestId")
         config = OWSDisappearingMessagesConfiguration(defaultWithThreadId: "TestId")
         contact = Contact(sessionID: "TestContactId")
         defaultItems = [
-            ConversationDisappearingMessagesViewModel.Item(id: 0, title: "Off", isActive: true),
-            ConversationDisappearingMessagesViewModel.Item(id: 1, title: "5 seconds", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 2, title: "10 seconds", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 3, title: "30 seconds", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 4, title: "1 minute", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 5, title: "5 minutes", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 6, title: "30 minutes", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 7, title: "1 hour", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 8, title: "6 hours", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 9, title: "12 hours", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 10, title: "1 day", isActive: false),
-            ConversationDisappearingMessagesViewModel.Item(id: 11, title: "1 week", isActive: false)
+            Item(id: 0, title: "Off", isActive: true),
+            Item(id: 1, title: "5 seconds", isActive: false),
+            Item(id: 2, title: "10 seconds", isActive: false),
+            Item(id: 3, title: "30 seconds", isActive: false),
+            Item(id: 4, title: "1 minute", isActive: false),
+            Item(id: 5, title: "5 minutes", isActive: false),
+            Item(id: 6, title: "30 minutes", isActive: false),
+            Item(id: 7, title: "1 hour", isActive: false),
+            Item(id: 8, title: "6 hours", isActive: false),
+            Item(id: 9, title: "12 hours", isActive: false),
+            Item(id: 10, title: "1 day", isActive: false),
+            Item(id: 11, title: "1 week", isActive: false)
         ]
         
         viewModel = ConversationDisappearingMessagesViewModel(thread: thread, disappearingMessagesConfiguration: config) { [weak self] in
@@ -42,30 +47,13 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
     }
     
     override func tearDownWithError() throws {
+        disposables = nil
         dataChangedCallbackTriggered = false
         thread = nil
         config = nil
         contact = nil
         defaultItems = nil
         viewModel = nil
-    }
-    
-    // MARK: - ConversationDisappearingMessagesViewModel.Item
-    
-    func testItDefaultsToTheExistingValuesWhenUpdatedWithNullValues() throws {
-        var item: ConversationDisappearingMessagesViewModel.Item = ConversationDisappearingMessagesViewModel.Item(
-            id: 1,
-            title: "Test",
-            isActive: true
-        )
-        
-        expect(item.isActive).to(beTrue())
-        
-        item = item.with(isActive: nil)
-        expect(item.isActive).to(beTrue())
-        
-        item = item.with(isActive: false)
-        expect(item.isActive).to(beFalse())
     }
     
     // MARK: - Basic Tests
@@ -186,13 +174,21 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
     }
     
     func testItHasTheCorrectNumberOfItems() throws {
-        expect(self.viewModel.items.value.count).to(equal(12))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                haveCount(12),
+                timeout: .milliseconds(100)
+            )
     }
     
     func testItHasTheCorrectDefaultState() throws {
-        expect(self.viewModel.items.value).to(equal(defaultItems))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                equal(defaultItems),
+                timeout: .milliseconds(100)
+            )
     }
-    
+
     func testItStartsWithTheCorrectItemActiveIfNotDefault() throws {
         config = OWSDisappearingMessagesConfiguration(defaultWithThreadId: "TestId1")
         config.isEnabled = true
@@ -200,91 +196,77 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
         viewModel = ConversationDisappearingMessagesViewModel(thread: thread, disappearingMessagesConfiguration: config) { [weak self] in
             self?.dataChangedCallbackTriggered = true
         }
+
+        var nonDefaultItems: [Item] = defaultItems
+        nonDefaultItems[0] = Item(id: nonDefaultItems[0].id, title: nonDefaultItems[0].title, isActive: false)
+        nonDefaultItems[3] = Item(id: nonDefaultItems[3].id, title: nonDefaultItems[3].title, isActive: true)
         
-        var nonDefaultItems: [ConversationDisappearingMessagesViewModel.Item] = defaultItems
-        nonDefaultItems[0] = nonDefaultItems[0].with(isActive: false)
-        nonDefaultItems[3] = nonDefaultItems[3].with(isActive: true)
-        expect(self.viewModel.items.value).to(equal(nonDefaultItems))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                equal(nonDefaultItems),
+                timeout: .milliseconds(100)
+            )
     }
-    
+
     // MARK: - Interactions
-    
-    func testItProvidesTheThreadAndGivenDataWhenAnInteractionOccurs() throws {
-        var interactionThread: TSThread? = nil
 
-        self.viewModel.interaction.on(0) { thread in
-            interactionThread = thread
-        }
+    func testItSelectsTheItemCorrectly() throws {
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                satisfyAllOf(
+                    haveCountGreaterThan(3),
+                    valueFor(\.id, at: 3, to: equal(3)),
+                    valueFor(\.isActive, at: 3, to: beFalse())
+                ),
+                timeout: .milliseconds(100)
+            )
 
-        self.viewModel.interaction.tap(0)
+        viewModel.itemSelected.send(3)
 
-        expect(interactionThread).to(equal(self.thread))
-    }
-
-    func testItRefreshesTheDataCorrectly() throws {
-        expect(self.viewModel.items.value.count).to(beGreaterThan(3))
-        expect(self.viewModel.items.value[3].id).to(equal(3))
-        expect(self.viewModel.items.value[3].isActive).to(beFalse())
-        
-        config.isEnabled = true
-        config.durationSeconds = 30
-        
-        viewModel.tryRefreshData(for: 3)
-
-        expect(self.viewModel.items.value[3].id).to(equal(3))
-        expect(self.viewModel.items.value[3].isActive).to(beTrue())
-    }
-    
-    func testItDoesNotSetAnItemToActiveIfTheConfigIsNotEnabled() throws {
-        expect(self.viewModel.items.value.count).to(beGreaterThan(3))
-        expect(self.viewModel.items.value[3].id).to(equal(3))
-        expect(self.viewModel.items.value[3].isActive).to(beFalse())
-        
-        config.durationSeconds = 30
-        
-        viewModel.tryRefreshData(for: 3)
-
-        expect(self.viewModel.items.value[3].id).to(equal(3))
-        expect(self.viewModel.items.value[3].isActive).to(beFalse())
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                satisfyAllOf(
+                    valueFor(\.id, at: 3, to: equal(3)),
+                    valueFor(\.isActive, at: 3, to: beTrue())
+                ),
+                timeout: .milliseconds(100)
+            )
     }
 
     func testItUpdatesToADifferentValue() throws {
-        expect(self.viewModel.items.value.count).to(beGreaterThan(3))
-        expect(self.viewModel.items.value[0].id).to(equal(0))
-        expect(self.viewModel.items.value[0].isActive).to(beTrue())
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                satisfyAllOf(
+                    haveCountGreaterThan(3),
+                    valueFor(\.id, at: 0, to: equal(0)),
+                    valueFor(\.isActive, at: 0, to: beTrue())
+                ),
+                timeout: .milliseconds(100)
+            )
 
-        viewModel.interaction.tap(3)
-
-        expect(self.viewModel.items.value[0].id)
+        viewModel.itemSelected.send(3)
+        
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(0),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value[0].isActive)
-            .toEventually(
-                beFalse(),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value[3].id)
-            .toEventually(
-                equal(3),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value[3].isActive)
-            .toEventually(
-                beTrue(),
+                satisfyAllOf(
+                    valueFor(\.id, at: 0, to: equal(0)),
+                    valueFor(\.isActive, at: 0, to: beFalse()),
+                    valueFor(\.id, at: 3, to: equal(3)),
+                    valueFor(\.isActive, at: 3, to: beTrue())
+                ),
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItUpdatesTheConfigWhenChangingValue() throws {
         // Note: Default for 'durationSectionds' is OWSDisappearingMessagesConfigurationDefaultExpirationDuration
         // currently set to 86400
         expect(self.config.isEnabled).to(beFalse())
         expect(self.config.durationSeconds).to(equal(86400))
 
-        viewModel.interaction.tap(3)
-        
+        viewModel.items.sink(receiveValue: { _ in }).store(in: &disposables)
+        viewModel.itemSelected.send(3)
+
         expect(self.config.isEnabled)
             .toEventually(
                 beTrue(),
@@ -296,12 +278,13 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItDisablesTheConfigWhenSetToZero() throws {
         config.isEnabled = true
 
-        viewModel.interaction.tap(0)
-        
+        viewModel.items.sink(receiveValue: { _ in }).store(in: &disposables)
+        viewModel.itemSelected.send(0)
+
         expect(self.config.isEnabled)
             .toEventually(
                 beFalse(),
@@ -313,10 +296,10 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItDoesNotSaveChangesIfTheConfigHasNotChangedFromItsDefaultState() {
         viewModel.trySaveChanges()
-        
+
         // TODO: Mock out Storage.write
         expect(self.dataChangedCallbackTriggered)
             .toEventually(
@@ -324,13 +307,13 @@ class ConversationDisappearingMessagesViewModelTests: XCTestCase {
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItDoesSaveChangesIfTheConfigHasChanged() {
         config.isEnabled = true
         config.durationSeconds = 30
-        
+
         viewModel.trySaveChanges()
-        
+
         // TODO: Mock out Storage.write
         expect(self.dataChangedCallbackTriggered)
             .toEventually(

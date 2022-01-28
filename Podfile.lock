@@ -17,6 +17,7 @@ PODS:
   - CocoaLumberjack (3.7.4):
     - CocoaLumberjack/Core (= 3.7.4)
   - CocoaLumberjack/Core (3.7.4)
+  - CombineExpectations (0.10.0)
   - CryptoSwift (1.4.2)
   - Curve25519Kit (2.1.0):
     - CocoaLumberjack
@@ -122,6 +123,7 @@ PODS:
 
 DEPENDENCIES:
   - AFNetworking
+  - CombineExpectations (from `https://github.com/groue/CombineExpectations.git`)
   - CryptoSwift
   - Curve25519Kit (from `https://github.com/signalapp/Curve25519Kit.git`)
   - Mantle (from `https://github.com/signalapp/Mantle`, branch `signal-master`)
@@ -156,6 +158,8 @@ SPEC REPOS:
     - ZXingObjC
 
 EXTERNAL SOURCES:
+  CombineExpectations:
+    :git: https://github.com/groue/CombineExpectations.git
   Curve25519Kit:
     :git: https://github.com/signalapp/Curve25519Kit.git
   Mantle:
@@ -171,6 +175,9 @@ EXTERNAL SOURCES:
     :git: https://github.com/signalapp/YYImage
 
 CHECKOUT OPTIONS:
+  CombineExpectations:
+    :commit: 04d4e4b21c9e8361925f03f64a7ecda89ef9974f
+    :git: https://github.com/groue/CombineExpectations.git
   Curve25519Kit:
     :commit: 4fc1c10e98fff2534b5379a9bb587430fdb8e577
     :git: https://github.com/signalapp/Curve25519Kit.git
@@ -190,6 +197,7 @@ CHECKOUT OPTIONS:
 SPEC CHECKSUMS:
   AFNetworking: 7864c38297c79aaca1500c33288e429c3451fdce
   CocoaLumberjack: 543c79c114dadc3b1aba95641d8738b06b05b646
+  CombineExpectations: f5182cf0a71d83e9abcfda64347bc6a11b849023
   CryptoSwift: a532e74ed010f8c95f611d00b8bbae42e9fe7c17
   Curve25519Kit: e63f9859ede02438ae3defc5e1a87e09d1ec7ee6
   Mantle: 2fa750afa478cd625a94230fbf1c13462f29395b
@@ -208,6 +216,6 @@ SPEC CHECKSUMS:
   YYImage: f1ddd15ac032a58b78bbed1e012b50302d318331
   ZXingObjC: fdbb269f25dd2032da343e06f10224d62f537bdb
 
-PODFILE CHECKSUM: 62b2a7be2f92acac7755b06250ffb56fd34f7c5f
+PODFILE CHECKSUM: 93983a826291b8d2526bd92cca42c08d5b9825dc
 
 COCOAPODS: 1.11.2

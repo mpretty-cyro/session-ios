@@ -11,18 +11,6 @@ class ConversationDisappearingMessagesViewModel {
         let id: Id
         let title: String
         let isActive: Bool
-        
-        // Convenience
-        
-        func with(
-            isActive: Bool? = nil
-        ) -> Item {
-            return Item(
-                id: id,
-                title: title,
-                isActive: (isActive ?? self.isActive)
-            )
-        }
     }
     
     // MARK: - Variables

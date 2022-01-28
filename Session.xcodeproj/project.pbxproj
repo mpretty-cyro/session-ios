@@ -131,6 +131,7 @@
 		4CC1ECFB211A553000CC13BE /* AppUpdateNag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC1ECFA211A553000CC13BE /* AppUpdateNag.swift */; };
 		4CC613362227A00400E21A3A /* ConversationSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC613352227A00400E21A3A /* ConversationSearch.swift */; };
 		70377AAB1918450100CAF501 /* MobileCoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 70377AAA1918450100CAF501 /* MobileCoreServices.framework */; };
+		735A52D95B3DD10003B6D375 /* Pods_SessionTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8C08E10F5D72B399E2334E2A /* Pods_SessionTests.framework */; };
 		768A1A2B17FC9CD300E00ED8 /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 768A1A2A17FC9CD300E00ED8 /* libz.dylib */; };
 		76C87F19181EFCE600C4ACAB /* MediaPlayer.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76C87F18181EFCE600C4ACAB /* MediaPlayer.framework */; };
 		76EB054018170B33006006FC /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 76EB03C318170B33006006FC /* AppDelegate.m */; };
@@ -770,22 +771,16 @@
 		D24B5BD5169F568C00681372 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D24B5BD4169F568C00681372 /* AudioToolbox.framework */; };
 		D2AEACDC16C426DA00C364C0 /* CFNetwork.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2AEACDB16C426DA00C364C0 /* CFNetwork.framework */; };
 		D48CEFD2222D323FEFEFC6CC /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SignalUtilitiesKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8962372EEC51D3F56FE3A68A /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SignalUtilitiesKit.framework */; };
-		EF7444BD2CC85B6E40864E81 /* Pods_GlobalDependencies_Session_SessionTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CC23DD6F748261855354612 /* Pods_GlobalDependencies_Session_SessionTests.framework */; };
 		EF764C351DB67CC5000D9A87 /* UIViewController+Permissions.m in Sources */ = {isa = PBXBuildFile; fileRef = EF764C341DB67CC5000D9A87 /* UIViewController+Permissions.m */; };
 		F5765D284BC6ECAC0C1D33F0 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_SessionNotificationServiceExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4A93ECA93B3DE800CC7D7F6 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_SessionNotificationServiceExtension.framework */; };
 		FC3BD9881A30A790005B96BB /* Social.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC3BD9871A30A790005B96BB /* Social.framework */; };
 		FCB11D8C1A129A76002F93FB /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FCB11D8B1A129A76002F93FB /* CoreMedia.framework */; };
-		FD59EA342798D7FC00A18298 /* DynamicValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA332798D7FC00A18298 /* DynamicValue.swift */; };
-		FD59EA382798DC9100A18298 /* InteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA372798DC9100A18298 /* InteractionManager.swift */; };
-		FD59EA3A2798DE6200A18298 /* Listener.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA392798DE6200A18298 /* Listener.swift */; };
 		FD59EA3C2799075600A18298 /* ConversationNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */; };
 		FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */; };
 		FD59EA402799142600A18298 /* Dictionary+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */; };
 		FD59EA42279A12BB00A18298 /* String+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA41279A12BB00A18298 /* String+Localization.swift */; };
 		FD59EA48279A72A800A18298 /* LoadingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA47279A72A800A18298 /* LoadingViewController.swift */; };
 		FD59EA5B279A748100A18298 /* ConversationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */; };
-		FD59EA5D279A749400A18298 /* DynamicValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA5C279A749400A18298 /* DynamicValueTests.swift */; };
-		FD59EA62279E0F9100A18298 /* ListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA61279E0F9100A18298 /* ListenerTests.swift */; };
 		FD59EA64279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */; };
 		FD59EA66279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */; };
 		FD59EA6F279FBBCF00A18298 /* Publisher+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59EA6E279FBBCF00A18298 /* Publisher+Utilities.swift */; };
@@ -802,6 +797,8 @@
 		FD59FEBE27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEBD27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift */; };
 		FD59FEC027953D3C003C51FB /* Array+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */; };
 		FD59FEC227953DA5003C51FB /* ConversationSettingsOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */; };
+		FD88BAD227A258F000BBC442 /* Publisher+TestUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD88BAD127A258F000BBC442 /* Publisher+TestUtils.swift */; };
+		FD88BAD627A3526F00BBC442 /* Nimble+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD88BAD527A3526F00BBC442 /* Nimble+Utilities.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1154,13 +1151,13 @@
 		7BC01A3F241F40AB00BC7C55 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7BDCFC0424206E7300641C39 /* SessionNotificationServiceExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SessionNotificationServiceExtension.entitlements; sourceTree = "<group>"; };
 		7BDCFC07242186E700641C39 /* NotificationServiceExtensionContext.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotificationServiceExtensionContext.swift; sourceTree = "<group>"; };
-		7CC23DD6F748261855354612 /* Pods_GlobalDependencies_Session_SessionTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_GlobalDependencies_Session_SessionTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7D2176E949A052F37AD7C34A /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.app store release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.app store release.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.app store release.xcconfig"; sourceTree = "<group>"; };
 		7DD180F770F8518B4E8796F2 /* Pods-SessionUtilitiesKit.app store release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SessionUtilitiesKit.app store release.xcconfig"; path = "Pods/Target Support Files/Pods-SessionUtilitiesKit/Pods-SessionUtilitiesKit.app store release.xcconfig"; sourceTree = "<group>"; };
 		7FE200DAC207C27151388BC4 /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionMessagingKit.app store release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionMessagingKit.app store release.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionMessagingKit/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionMessagingKit.app store release.xcconfig"; sourceTree = "<group>"; };
 		871E24CC4E053248B2C01E96 /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionShareExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionShareExtension.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionShareExtension/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionShareExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		8962372EEC51D3F56FE3A68A /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SignalUtilitiesKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SignalUtilitiesKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		8981C8F64D94D3C52EB67A2C /* Pods-SignalTests.test.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalTests.test.xcconfig"; path = "Pods/Target Support Files/Pods-SignalTests/Pods-SignalTests.test.xcconfig"; sourceTree = "<group>"; };
+		8C08E10F5D72B399E2334E2A /* Pods_SessionTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SessionTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		8EEE74B0753448C085B48721 /* Pods-SignalMessaging.app store release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalMessaging.app store release.xcconfig"; path = "Pods/Target Support Files/Pods-SignalMessaging/Pods-SignalMessaging.app store release.xcconfig"; sourceTree = "<group>"; };
 		948239851C08032C842937CC /* Pods-SignalMessaging.test.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SignalMessaging.test.xcconfig"; path = "Pods/Target Support Files/Pods-SignalMessaging/Pods-SignalMessaging.test.xcconfig"; sourceTree = "<group>"; };
 		9739CC9398116CDA1CD5D840 /* Pods-SessionTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SessionTests.debug.xcconfig"; path = "Pods/Target Support Files/Pods-SessionTests/Pods-SessionTests.debug.xcconfig"; sourceTree = "<group>"; };
@@ -1838,9 +1835,6 @@
 		F9BBF530D71905BA9007675F /* Pods-SessionShareExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SessionShareExtension.debug.xcconfig"; path = "Pods/Target Support Files/Pods-SessionShareExtension/Pods-SessionShareExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		FC3BD9871A30A790005B96BB /* Social.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Social.framework; path = System/Library/Frameworks/Social.framework; sourceTree = SDKROOT; };
 		FCB11D8B1A129A76002F93FB /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
-		FD59EA332798D7FC00A18298 /* DynamicValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicValue.swift; sourceTree = "<group>"; };
-		FD59EA372798DC9100A18298 /* InteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionManager.swift; sourceTree = "<group>"; };
-		FD59EA392798DE6200A18298 /* Listener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Listener.swift; sourceTree = "<group>"; };
 		FD59EA3B2799075600A18298 /* ConversationNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD59EA3D2799076200A18298 /* ConversationNotificationSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewController.swift; sourceTree = "<group>"; };
 		FD59EA3F2799142600A18298 /* Dictionary+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dictionary+Convenience.swift"; sourceTree = "<group>"; };
@@ -1848,8 +1842,6 @@
 		FD59EA47279A72A800A18298 /* LoadingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingViewController.swift; sourceTree = "<group>"; };
 		FD59EA4D279A744100A18298 /* SessionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SessionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD59EA5A279A748100A18298 /* ConversationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsViewModelTests.swift; sourceTree = "<group>"; };
-		FD59EA5C279A749400A18298 /* DynamicValueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicValueTests.swift; sourceTree = "<group>"; };
-		FD59EA61279E0F9100A18298 /* ListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListenerTests.swift; sourceTree = "<group>"; };
 		FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNotificationSettingsViewModelTests.swift; sourceTree = "<group>"; };
 		FD59EA65279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDisappearingMessagesViewModelTests.swift; sourceTree = "<group>"; };
 		FD59EA6E279FBBCF00A18298 /* Publisher+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Publisher+Utilities.swift"; sourceTree = "<group>"; };
@@ -1866,6 +1858,8 @@
 		FD59FEBD27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDisappearingMessagesViewModel.swift; sourceTree = "<group>"; };
 		FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Convenience.swift"; sourceTree = "<group>"; };
 		FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsOptionView.swift; sourceTree = "<group>"; };
+		FD88BAD127A258F000BBC442 /* Publisher+TestUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Publisher+TestUtils.swift"; sourceTree = "<group>"; };
+		FD88BAD527A3526F00BBC442 /* Nimble+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Nimble+Utilities.swift"; sourceTree = "<group>"; };
 		FD9039443F7CB729CF71350E /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		FEDBAE1B98C49BBE8C87F575 /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionUtilitiesKit.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionUtilitiesKit.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionUtilitiesKit/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-ExtendedDependencies-SessionUtilitiesKit.debug.xcconfig"; sourceTree = "<group>"; };
 		FF9BA33D021B115B1F5B4E46 /* Pods-SessionMessagingKit.app store release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SessionMessagingKit.app store release.xcconfig"; path = "Pods/Target Support Files/Pods-SessionMessagingKit/Pods-SessionMessagingKit.app store release.xcconfig"; sourceTree = "<group>"; };
@@ -1986,7 +1980,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EF7444BD2CC85B6E40864E81 /* Pods_GlobalDependencies_Session_SessionTests.framework in Frameworks */,
+				735A52D95B3DD10003B6D375 /* Pods_SessionTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2081,7 +2075,6 @@
 		76EB03C118170B33006006FC /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
-				FD59EA322798D7F100A18298 /* Data Binding */,
 				451166BF1FD86B98000739BA /* AccountManager.swift */,
 				4C090A1A210FD9C7001FD7F9 /* HapticFeedback.swift */,
 				34D5CCA71EAE3D30005515DB /* AvatarViewHelper.h */,
@@ -3645,7 +3638,7 @@
 				038A3BABD5BA0CE41D8C17F5 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionShareExtension.framework */,
 				C5060C3B36A848B71CCE4685 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionUtilitiesKit.framework */,
 				8962372EEC51D3F56FE3A68A /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SignalUtilitiesKit.framework */,
-				7CC23DD6F748261855354612 /* Pods_GlobalDependencies_Session_SessionTests.framework */,
+				8C08E10F5D72B399E2334E2A /* Pods_SessionTests.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -3673,21 +3666,11 @@
 			path = Session;
 			sourceTree = "<group>";
 		};
-		FD59EA322798D7F100A18298 /* Data Binding */ = {
-			isa = PBXGroup;
-			children = (
-				FD59EA332798D7FC00A18298 /* DynamicValue.swift */,
-				FD59EA372798DC9100A18298 /* InteractionManager.swift */,
-				FD59EA392798DE6200A18298 /* Listener.swift */,
-			);
-			path = "Data Binding";
-			sourceTree = "<group>";
-		};
 		FD59EA4E279A744100A18298 /* SessionTests */ = {
 			isa = PBXGroup;
 			children = (
+				FD88BAD027A258DE00BBC442 /* _TestUtilities */,
 				FD59EA56279A745A00A18298 /* Conversations */,
-				FD59EA58279A746A00A18298 /* Utilities */,
 			);
 			path = SessionTests;
 			sourceTree = "<group>";
@@ -3708,23 +3691,6 @@
 				FD59EA63279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift */,
 			);
 			path = Settings;
-			sourceTree = "<group>";
-		};
-		FD59EA58279A746A00A18298 /* Utilities */ = {
-			isa = PBXGroup;
-			children = (
-				FD59EA59279A746F00A18298 /* Data Binding */,
-			);
-			path = Utilities;
-			sourceTree = "<group>";
-		};
-		FD59EA59279A746F00A18298 /* Data Binding */ = {
-			isa = PBXGroup;
-			children = (
-				FD59EA5C279A749400A18298 /* DynamicValueTests.swift */,
-				FD59EA61279E0F9100A18298 /* ListenerTests.swift */,
-			);
-			path = "Data Binding";
 			sourceTree = "<group>";
 		};
 		FD59EA67279F99DF00A18298 /* Combine */ = {
@@ -3756,6 +3722,15 @@
 				FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		FD88BAD027A258DE00BBC442 /* _TestUtilities */ = {
+			isa = PBXGroup;
+			children = (
+				FD88BAD127A258F000BBC442 /* Publisher+TestUtils.swift */,
+				FD88BAD527A3526F00BBC442 /* Nimble+Utilities.swift */,
+			);
+			path = _TestUtilities;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -4442,7 +4417,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-GlobalDependencies-Session-SessionTests-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-SessionTests-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -4516,15 +4491,15 @@
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-GlobalDependencies-Session-SessionTests/Pods-GlobalDependencies-Session-SessionTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-SessionTests/Pods-SessionTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-GlobalDependencies-Session-SessionTests/Pods-GlobalDependencies-Session-SessionTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-SessionTests/Pods-SessionTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-GlobalDependencies-Session-SessionTests/Pods-GlobalDependencies-Session-SessionTests-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SessionTests/Pods-SessionTests-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		7E2D14F857C70F98DED3B8E9 /* [CP] Check Pods Manifest.lock */ = {
@@ -5067,7 +5042,6 @@
 				B84A89BC25DE328A0040017D /* ProfilePictureVC.swift in Sources */,
 				34386A54207D271D009F5D9C /* NeverClearView.swift in Sources */,
 				FD59FEB42794EEC6003C51FB /* ConversationSettingsViewController.swift in Sources */,
-				FD59EA342798D7FC00A18298 /* DynamicValue.swift in Sources */,
 				451166C01FD86B98000739BA /* AccountManager.swift in Sources */,
 				C374EEF425DB31D40073A857 /* VoiceMessageRecordingView.swift in Sources */,
 				B83F2B88240CB75A000A54AB /* UIImage+Scaling.swift in Sources */,
@@ -5083,7 +5057,6 @@
 				34A8B3512190A40E00218A25 /* MediaAlbumView.swift in Sources */,
 				7B7CB18B270591630079FF93 /* ShareLogsModal.swift in Sources */,
 				4C4AEC4520EC343B0020E72B /* DismissableTextField.swift in Sources */,
-				FD59EA3A2798DE6200A18298 /* Listener.swift in Sources */,
 				3496955E219B605E00DCFE74 /* PhotoLibrary.swift in Sources */,
 				C3A76A8D25DB83F90074CB90 /* PermissionMissingModal.swift in Sources */,
 				340FC8A9204DAC8D007AEB0F /* NotificationSettingsOptionsViewController.m in Sources */,
@@ -5092,7 +5065,6 @@
 				C3548F0624456447009433A8 /* PNModeVC.swift in Sources */,
 				B80A579F23DFF1F300876683 /* NewClosedGroupVC.swift in Sources */,
 				D221A09A169C9E5E00537ABF /* main.m in Sources */,
-				FD59EA382798DC9100A18298 /* InteractionManager.swift in Sources */,
 				3496957221A301A100DCFE74 /* OWSBackup.m in Sources */,
 				B835247925C38D880089A44F /* MessageCell.swift in Sources */,
 				B86BD08623399CEF000F5AE3 /* SeedModal.swift in Sources */,
@@ -5219,10 +5191,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FD59EA62279E0F9100A18298 /* ListenerTests.swift in Sources */,
-				FD59EA5D279A749400A18298 /* DynamicValueTests.swift in Sources */,
 				FD59EA5B279A748100A18298 /* ConversationSettingsViewModelTests.swift in Sources */,
 				FD59EA64279E1C5800A18298 /* ConversationNotificationSettingsViewModelTests.swift in Sources */,
+				FD88BAD227A258F000BBC442 /* Publisher+TestUtils.swift in Sources */,
+				FD88BAD627A3526F00BBC442 /* Nimble+Utilities.swift in Sources */,
 				FD59EA66279E26FF00A18298 /* ConversationDisappearingMessagesViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -6656,7 +6628,7 @@
 		};
 		FD59EA54279A744100A18298 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1D62A57020DF96A11D996230 /* Pods-GlobalDependencies-Session-SessionTests.debug.xcconfig */;
+			baseConfigurationReference = 9739CC9398116CDA1CD5D840 /* Pods-SessionTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ANALYZER_NONNULL = YES;
@@ -6699,7 +6671,7 @@
 		};
 		FD59EA55279A744100A18298 /* App Store Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = B4B3DC45C69601B52B0813DE /* Pods-GlobalDependencies-Session-SessionTests.app store release.xcconfig */;
+			baseConfigurationReference = 5BC8AEEE7E7C06756DFA2E1C /* Pods-SessionTests.app store release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				BUNDLE_LOADER = "$(TEST_HOST)";

@@ -7,14 +7,13 @@ import SessionMessagingKit
 import SignalUtilitiesKit
 
 class ConversationSettingsViewModel {
-    struct NavItem {
+    struct NavItem: Equatable {
         enum State {
             case standard
             case editing
         }
         
         let systemItem: UIBarButtonItem.SystemItem
-        let subject: PassthroughSubject<Void, Never>?
         let accessibilityIdentifier: String
     }
     
@@ -56,7 +55,6 @@ class ConversationSettingsViewModel {
             style: Style = .standard,
             icon: UIImage? = nil,
             title: String = "",
-            barButtonItem: UIBarButtonItem.SystemItem? = nil,
             subtitle: String? = nil,
             isEnabled: Bool = true,
             isEditing: Bool = false,
@@ -75,11 +73,11 @@ class ConversationSettingsViewModel {
         }
     }
     
-    struct ActionableItem {
-        let data: Item
+    struct ActionableItem<T> {
+        let data: T
         let action: PassthroughSubject<Void, Never>?
         
-        init(data: Item, action: PassthroughSubject<Void, Never>? = nil) {
+        init(data: T, action: PassthroughSubject<Void, Never>? = nil) {
             self.data = data
             self.action = action
         }
@@ -155,7 +153,9 @@ class ConversationSettingsViewModel {
     
     lazy var profileContent: AnyPublisher<TSThread, Never> = {
         forceRefreshData
+            .prepend(())
             .compactMap { [weak self] in self?.thread }
+            .removeDuplicates()
             .eraseToAnyPublisher()
     }()
     
@@ -208,46 +208,52 @@ class ConversationSettingsViewModel {
             .eraseToAnyPublisher()
     }()
     
-    lazy var leftNavItems: AnyPublisher<[NavItem], Never> = {
+    lazy var leftNavItems: AnyPublisher<[ActionableItem<NavItem>], Never> = {
         return navState
-            .map { [weak self] navState -> [NavItem] in
+            .map { [weak self] navState -> [ActionableItem<NavItem>] in
                 // Only show the 'Edit' button if it's a contact thread
                 guard self?.thread is TSContactThread else { return [] }
                 guard navState == .editing else { return [] }
                 
                 return [
-                    NavItem(
-                        systemItem: .cancel,
-                        subject: self?.cancelEditDisplayNameTapped,
-                        accessibilityIdentifier: "Cancel button"
+                    ActionableItem(
+                        data: NavItem(
+                            systemItem: .cancel,
+                            accessibilityIdentifier: "Cancel button"
+                        ),
+                        action: self?.cancelEditDisplayNameTapped
                     )
                 ]
             }
             .eraseToAnyPublisher()
     }()
     
-    lazy var rightNavItems: AnyPublisher<[NavItem], Never> = {
+    lazy var rightNavItems: AnyPublisher<[ActionableItem<NavItem>], Never> = {
         navState
-            .map { [weak self] navState -> [NavItem] in
+            .map { [weak self] navState -> [ActionableItem<NavItem>] in
                 // Only show the 'Edit' button if it's a contact thread
                 guard self?.thread is TSContactThread else { return [] }
                 
                 switch navState {
                     case .editing:
                         return [
-                            NavItem(
-                                systemItem: .done,
-                                subject: self?.saveDisplayNameTapped,
-                                accessibilityIdentifier: "Done button"
+                            ActionableItem(
+                                data: NavItem(
+                                    systemItem: .done,
+                                    accessibilityIdentifier: "Done button"
+                                ),
+                                action: self?.saveDisplayNameTapped
                             )
                         ]
                     
                     case .standard:
                         return [
-                            NavItem(
-                                systemItem: .edit,
-                                subject: self?.editDisplayNameTapped,
-                                accessibilityIdentifier: "Edit button"
+                            ActionableItem(
+                                data: NavItem(
+                                    systemItem: .edit,
+                                    accessibilityIdentifier: "Edit button"
+                                ),
+                                action: self?.editDisplayNameTapped
                             )
                         ]
                 }
@@ -320,11 +326,11 @@ class ConversationSettingsViewModel {
             .eraseToAnyPublisher()
     }()
     
-    lazy var items: AnyPublisher<[[ActionableItem]], Never> = {
+    lazy var items: AnyPublisher<[[ActionableItem<Item>]], Never> = {
         Publishers
             .CombineLatest4(
                 Publishers
-                    .CombineLatest(
+                    .Merge(
                         // Thread state changes
                         forceRefreshData,
                         isPinned.mapToVoid()
@@ -344,7 +350,7 @@ class ConversationSettingsViewModel {
                         (initialState, currentState)
                     }
             )
-            .map { [weak self] _, navState, notificationState, isGroupAndCurrentMember -> [[ActionableItem]] in
+            .map { [weak self] _, navState, notificationState, isGroupAndCurrentMember -> [[ActionableItem<Item>]] in
                 guard let thread: TSThread = self?.thread else { return [] }
                 
                 let groupThread: TSGroupThread? = (thread as? TSGroupThread)

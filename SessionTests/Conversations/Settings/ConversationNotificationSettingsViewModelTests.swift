@@ -1,21 +1,25 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import XCTest
+import Combine
 import Nimble
 
 @testable import Session
 
 class ConversationNotificationSettingsViewModelTests: XCTestCase {
+    typealias Item = ConversationNotificationSettingsViewModel.Item
+    
+    var disposables: Set<AnyCancellable>!
     var dataChangedCallbackTriggered: Bool = false
     var thread: TSGroupThread!
     var defaultItems: [ConversationNotificationSettingsViewModel.Item]!
     var viewModel: ConversationNotificationSettingsViewModel!
-    
+
     // MARK: - Configuration
 
     override func setUpWithError() throws {
+        disposables = Set()
         dataChangedCallbackTriggered = false
-        
         thread = TSGroupThread(uniqueId: "TestId")
         defaultItems = [
             ConversationNotificationSettingsViewModel.Item(
@@ -34,56 +38,45 @@ class ConversationNotificationSettingsViewModelTests: XCTestCase {
                 isActive: false
             )
         ]
-        
+
         viewModel = ConversationNotificationSettingsViewModel(thread: thread) { [weak self] in
             self?.dataChangedCallbackTriggered = true
         }
     }
-    
+
     override func tearDownWithError() throws {
+        disposables = nil
         dataChangedCallbackTriggered = false
         thread = nil
         defaultItems = nil
         viewModel = nil
     }
-    
-    
-    
-    // MARK: - ConversationNotificationSettingsViewModel.Item
-    
-    func testItDefaultsToTheExistingValuesWhenUpdatedWithNullValues() throws {
-        var item: ConversationNotificationSettingsViewModel.Item = ConversationNotificationSettingsViewModel.Item(
-            id: .mentionsOnly,
-            title: "Test",
-            isActive: true
-        )
-        
-        expect(item.isActive).to(beTrue())
-        
-        item = item.with(isActive: nil)
-        expect(item.isActive).to(beTrue())
-        
-        item = item.with(isActive: false)
-        expect(item.isActive).to(beFalse())
-    }
-    
+
     // MARK: - Basic Tests
-    
+
     func testItHasTheCorrectTitle() throws {
         expect(self.viewModel.title).to(equal("CONVERSATION_SETTINGS_MESSAGE_NOTIFICATIONS".localized()))
     }
-    
+
     func testItHasTheCorrectNumberOfItems() throws {
-        expect(self.viewModel.items.value.count).to(equal(3))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                haveCount(3),
+                timeout: .milliseconds(100)
+            )
     }
-    
+
     func testItHasTheCorrectDefaultState() throws {
-        expect(self.viewModel.items.value).to(equal(defaultItems))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                equal(defaultItems),
+                timeout: .milliseconds(100)
+            )
     }
-    
+
     func testItStartsWithTheCorrectItemActiveIfNotDefault() throws {
         var hasWrittenToStorage: Bool = false
-        
+
         Storage.write { [weak self] transaction in
             guard let strongSelf = self else { return }
             
@@ -92,141 +85,134 @@ class ConversationNotificationSettingsViewModelTests: XCTestCase {
             strongSelf.viewModel = ConversationNotificationSettingsViewModel(thread: strongSelf.thread) { [weak self] in
                 self?.dataChangedCallbackTriggered = true
             }
-            
+
             hasWrittenToStorage = true
         }
-        
-        var nonDefaultItems: [ConversationNotificationSettingsViewModel.Item] = defaultItems
-        nonDefaultItems[0] = nonDefaultItems[0].with(isActive: false)
-        nonDefaultItems[2] = nonDefaultItems[2].with(isActive: true)
-        
-        // Note: We need this to ensure the test doesn't run before the subsequent 'expect' doesn't
-        // run before the viewModel gets recreated in the 'Storage.write'
+
+        var nonDefaultItems: [Item] = defaultItems
+        nonDefaultItems[0] = Item(id: nonDefaultItems[0].id, title: nonDefaultItems[0].title, isActive: false)
+        nonDefaultItems[2] = Item(id: nonDefaultItems[2].id, title: nonDefaultItems[2].title, isActive: true)
+
+        // Note: We need this to ensure the desired 'expect' doesn't run before the 'hasWrittenToStorage'
+        // flag is set as the viewModel gets recreated in the 'Storage.write'
         expect(hasWrittenToStorage)
             .toEventually(
                 beTrue(),
                 timeout: .milliseconds(100)
             )
-        expect(self.viewModel.items.value).to(equal(nonDefaultItems))
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                equal(nonDefaultItems),
+                timeout: .milliseconds(100)
+            )
     }
-    
-    // MARK: - Interactions
-    
-    func testItProvidesTheThreadAndGivenDataWhenAnInteractionOccurs() throws {
-        var interactionThread: TSThread? = nil
-        var interactionData: String? = nil
-        
-        self.viewModel.interaction.on(.all) { thread, data in
-            interactionThread = thread
-            interactionData = (data as? String)
-        }
-        
-        self.viewModel.interaction.tap(.all, data: "Test")
-        
-        expect(interactionThread).to(equal(self.thread))
-        expect(interactionData).to(equal("Test"))
-    }
-    
-    func testItRefreshesTheDataCorrectly() throws {
-        expect(self.viewModel.items.value.first?.id).to(equal(.all))
-        expect(self.viewModel.items.value.first?.isActive).to(beTrue())
-        expect(self.viewModel.items.value.last?.id).to(equal(.mute))
-        expect(self.viewModel.items.value.last?.isActive).to(beFalse())
-        
-        // TODO: Mock out 'Storage'
-        Storage.write { [weak self] transaction in
-            self?.thread.updateWithMuted(until: Date.distantFuture, transaction: transaction)
 
-            self?.viewModel.tryRefreshData(for: .all)
-            self?.viewModel.tryRefreshData(for: .mute)
-        }
+    // MARK: - Interactions
+
+    func testItSelectsTheItemCorrectly() throws {
+        expect(self.viewModel.items.newest)
+            .toEventually(
+                satisfyAllOf(
+                    haveCountGreaterThan(2),
+                    valueFor(\.id, at: 0, to: equal(.all)),
+                    valueFor(\.isActive, at: 0, to: beTrue()),
+                    valueFor(\.id, at: 2, to: equal(.mute)),
+                    valueFor(\.isActive, at: 2, to: beFalse())
+                ),
+                timeout: .milliseconds(100)
+            )
+
+        // Trigger the change
+        viewModel.itemSelected.send(.mute)
         
-        expect(self.viewModel.items.value.first?.id)
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(.all),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value.first?.isActive)
-            .toEventually(
-                beFalse(),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value.last?.id)
-            .toEventually(
-                equal(.mute),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value.last?.isActive)
-            .toEventually(
-                beTrue(),
+                satisfyAllOf(
+                    haveCountGreaterThan(2),
+                    valueFor(\.id, at: 0, to: equal(.all)),
+                    valueFor(\.isActive, at: 0, to: beFalse()),
+                    valueFor(\.id, at: 2, to: equal(.mute)),
+                    valueFor(\.isActive, at: 2, to: beTrue())
+                ),
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItUpdatesToAll() throws {
         // Need to set it to something else first
-        viewModel.interaction.tap(.mentionsOnly)
-        
-        expect(self.viewModel.items.value.count).to(beGreaterThan(0))
-        expect(self.viewModel.items.value[0].id)
+        viewModel.items.sink(receiveValue: { _ in }).store(in: &disposables)
+        viewModel.itemSelected.send(.mentionsOnly)
+
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(.all),
+                satisfyAllOf(
+                    haveCountGreaterThan(0),
+                    valueFor(\.id, at: 0, to: equal(.all)),
+                    valueFor(\.isActive, at: 0, to: beFalse())
+                ),
                 timeout: .milliseconds(100)
             )
-        expect(self.viewModel.items.value[0].isActive)
-            .toEventually(
-                beFalse(),
-                timeout: .milliseconds(100)
-            )
+
+        // Trigger the change
+        viewModel.itemSelected.send(.all)
         
-        viewModel.interaction.tap(.all)
-        
-        expect(self.viewModel.items.value[0].id)
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(.all),
-                timeout: .milliseconds(100)
-            )
-        expect(self.viewModel.items.value[0].isActive)
-            .toEventually(
-                beTrue(),
+                satisfyAllOf(
+                    haveCountGreaterThan(0),
+                    valueFor(\.id, at: 0, to: equal(.all)),
+                    valueFor(\.isActive, at: 0, to: beTrue())
+                ),
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItUpdatesToMentionsOnly() throws {
-        expect(self.viewModel.items.value.count).to(beGreaterThan(1))
-        expect(self.viewModel.items.value[1].id).to(equal(.mentionsOnly))
-        expect(self.viewModel.items.value[1].isActive).to(beFalse())
-        
-        viewModel.interaction.tap(.mentionsOnly)
-        
-        expect(self.viewModel.items.value[1].id)
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(.mentionsOnly),
+                satisfyAllOf(
+                    haveCountGreaterThan(1),
+                    valueFor(\.id, at: 1, to: equal(.mentionsOnly)),
+                    valueFor(\.isActive, at: 1, to: beFalse())
+                ),
                 timeout: .milliseconds(100)
             )
-        expect(self.viewModel.items.value[1].isActive)
+
+        // Trigger the change
+        viewModel.itemSelected.send(.mentionsOnly)
+        
+        expect(self.viewModel.items.newest)
             .toEventually(
-                beTrue(),
+                satisfyAllOf(
+                    haveCountGreaterThan(1),
+                    valueFor(\.id, at: 1, to: equal(.mentionsOnly)),
+                    valueFor(\.isActive, at: 1, to: beTrue())
+                ),
                 timeout: .milliseconds(100)
             )
     }
-    
+
     func testItUpdatesToMute() throws {
-        expect(self.viewModel.items.value.count).to(beGreaterThan(2))
-        expect(self.viewModel.items.value[2].id).to(equal(.mute))
-        expect(self.viewModel.items.value[2].isActive).to(beFalse())
-        
-        viewModel.interaction.tap(.mute)
-        
-        expect(self.viewModel.items.value[2].id)
+        expect(self.viewModel.items.newest)
             .toEventually(
-                equal(.mute),
+                satisfyAllOf(
+                    haveCountGreaterThan(2),
+                    valueFor(\.id, at: 2, to: equal(.mute)),
+                    valueFor(\.isActive, at: 2, to: beFalse())
+                ),
                 timeout: .milliseconds(100)
             )
-        expect(self.viewModel.items.value[2].isActive)
+
+        // Trigger the change
+        viewModel.itemSelected.send(.mute)
+        
+        expect(self.viewModel.items.newest)
             .toEventually(
-                beTrue(),
+                satisfyAllOf(
+                    haveCountGreaterThan(2),
+                    valueFor(\.id, at: 2, to: equal(.mute)),
+                    valueFor(\.isActive, at: 2, to: beTrue())
+                ),
                 timeout: .milliseconds(100)
             )
     }

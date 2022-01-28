@@ -21,7 +21,10 @@ abstract_target 'GlobalDependencies' do
     pod 'ZXingObjC'
 
     target 'SessionTests' do
+      inherit! :search_paths
+      
       pod 'Nimble'
+      pod 'CombineExpectations', git: 'https://github.com/groue/CombineExpectations.git'
     end
   end
   
