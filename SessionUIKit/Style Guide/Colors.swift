@@ -42,5 +42,6 @@ public final class Colors : NSObject {
     @objc public static var pnOptionBorder: UIColor { UIColor(named: "session_pn_option_border")! }
     @objc public static var pathsBuilding: UIColor { UIColor(named: "session_paths_building")! }
     @objc public static var pinIcon: UIColor { UIColor(named: "session_pin_icon")! }
+    @objc public static var sessionHeading: UIColor { UIColor(named: "session_heading")! }
     @objc public static var settingsBackground: UIColor { UIColor(named: "session_settings_background")! }
 }
