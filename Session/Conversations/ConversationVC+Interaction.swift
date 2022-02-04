@@ -996,3 +996,88 @@ extension ConversationVC : InputViewDelegate, MessageCellDelegate, ContextMenuAc
         OWSAlerts.showAlert(title: title, message: message)
     }
 }
+
+// MARK: - MediaPresentationContextProvider
+
+extension ConversationVC: MediaPresentationContextProvider {
+    func mediaPresentationContext(item: Media, in coordinateSpace: UICoordinateSpace) -> MediaPresentationContext? {
+        guard case let .gallery(galleryItem) = item else { return nil }
+        guard let uniqueId: String = galleryItem.message.uniqueId else { return nil }
+        guard let indexPath = viewModel.ensureLoadWindowContainsInteractionId(uniqueId) else { return nil }
+        
+        guard let visibleIndex = messagesTableView.indexPathsForVisibleRows?.firstIndex(of: indexPath) else {
+            // This could happen if, after presenting media, you navigated within the gallery
+            // to media not within the collectionView's visible bounds.
+            return nil
+        }
+        guard let messageCell = messagesTableView.visibleCells[safe: visibleIndex] as? VisibleMessageCell else {
+            return nil
+        }
+        guard let mediaView = messageCell.albumView?.itemViews.first(where: { mediaView in mediaView.attachment.serverId == galleryItem.attachmentStream.serverId }) else {
+            return nil
+        }
+        guard let mediaSuperview = mediaView.superview else { return nil }
+
+        let cornerRadius: CGFloat
+        let cornerMask: CACornerMask
+        let presentationFrame = coordinateSpace.convert(mediaView.frame, from: mediaSuperview)
+
+        if messageCell.bubbleView.bounds == mediaView.bounds {
+            cornerRadius = messageCell.bubbleView.layer.cornerRadius
+            cornerMask = messageCell.bubbleView.layer.maskedCorners
+        }
+        else {
+            // If the frames don't match then assume it's either multiple images or there is a caption
+            // and determine which corners need to be rounded
+            cornerRadius = messageCell.bubbleView.layer.cornerRadius
+            
+            var newCornerMask = CACornerMask()
+            let cellMaskedCorners: CACornerMask = messageCell.bubbleView.layer.maskedCorners
+            
+            if
+                cellMaskedCorners.contains(.layerMinXMinYCorner) &&
+                mediaView.frame.minX < CGFloat.leastNonzeroMagnitude &&
+                mediaView.frame.minY < CGFloat.leastNonzeroMagnitude
+            {
+                newCornerMask.insert(.layerMinXMinYCorner)
+            }
+            
+            if
+                cellMaskedCorners.contains(.layerMaxXMinYCorner) &&
+                abs(mediaView.frame.maxX - messageCell.bubbleView.bounds.width) < CGFloat.leastNonzeroMagnitude &&
+                mediaView.frame.minY < CGFloat.leastNonzeroMagnitude
+            {
+                newCornerMask.insert(.layerMaxXMinYCorner)
+            }
+            
+            if
+                cellMaskedCorners.contains(.layerMinXMaxYCorner) &&
+                mediaView.frame.minX < CGFloat.leastNonzeroMagnitude &&
+                abs(mediaView.frame.maxY - messageCell.bubbleView.bounds.height) < CGFloat.leastNonzeroMagnitude
+            {
+                newCornerMask.insert(.layerMinXMaxYCorner)
+            }
+            
+            if
+                cellMaskedCorners.contains(.layerMaxXMaxYCorner) &&
+                abs(mediaView.frame.maxX - messageCell.bubbleView.bounds.width) < CGFloat.leastNonzeroMagnitude &&
+                abs(mediaView.frame.maxY - messageCell.bubbleView.bounds.height) < CGFloat.leastNonzeroMagnitude
+            {
+                newCornerMask.insert(.layerMaxXMaxYCorner)
+            }
+            
+            cornerMask = newCornerMask
+        }
+        
+        return MediaPresentationContext(
+            mediaView: mediaView,
+            presentationFrame: presentationFrame,
+            cornerRadius: cornerRadius,
+            cornerMask: cornerMask
+        )
+    }
+
+    func snapshotOverlayView(in coordinateSpace: UICoordinateSpace) -> (UIView, CGRect)? {
+        return self.navigationController?.navigationBar.generateSnapshot(in: coordinateSpace)
+    }
+}

@@ -359,7 +359,7 @@ class ConversationSettingsViewController: BaseVC {
                 }
                 
                 // Note: Need to store the 'mediaGallery' somewhere to prevent it from being released and crashing
-                let mediaGallery: MediaGallery = MediaGallery(thread: thread, options: .sliderEnabled)
+                let mediaGallery: MediaGallery = MediaGallery(thread: thread, options: [ .sliderEnabled, .newestFirst ])
                 self?.mediaGallery = mediaGallery
                 mediaGallery.pushTileView(fromNavController: navController)
             }

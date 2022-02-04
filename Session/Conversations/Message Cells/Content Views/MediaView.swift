@@ -6,6 +6,7 @@ import Foundation
 
 @objc(OWSMediaView)
 public class MediaView: UIView {
+    static let contentMode: UIView.ContentMode = .scaleAspectFill
 
     private enum MediaError {
         case missing
@@ -173,7 +174,7 @@ public class MediaView: UIView {
         let animatedImageView = YYAnimatedImageView()
         // We need to specify a contentMode since the size of the image
         // might not match the aspect ratio of the view.
-        animatedImageView.contentMode = .scaleAspectFill
+        animatedImageView.contentMode = MediaView.contentMode
         // Use trilinear filters for better scaling quality at
         // some performance cost.
         animatedImageView.layer.minificationFilter = .trilinear
@@ -232,7 +233,7 @@ public class MediaView: UIView {
         let stillImageView = UIImageView()
         // We need to specify a contentMode since the size of the image
         // might not match the aspect ratio of the view.
-        stillImageView.contentMode = .scaleAspectFill
+        stillImageView.contentMode = MediaView.contentMode
         // Use trilinear filters for better scaling quality at
         // some performance cost.
         stillImageView.layer.minificationFilter = .trilinear
@@ -287,7 +288,7 @@ public class MediaView: UIView {
         let stillImageView = UIImageView()
         // We need to specify a contentMode since the size of the image
         // might not match the aspect ratio of the view.
-        stillImageView.contentMode = .scaleAspectFill
+        stillImageView.contentMode = MediaView.contentMode
         // Use trilinear filters for better scaling quality at
         // some performance cost.
         stillImageView.layer.minificationFilter = .trilinear

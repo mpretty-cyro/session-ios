@@ -88,9 +88,9 @@ public class MediaGalleryItem: Equatable, Hashable {
     }
 
     // MARK: Hashable
-
-    public var hashValue: Int {
-        return attachmentStream.uniqueId?.hashValue ?? attachmentStream.hashValue
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(attachmentStream.uniqueId?.hashValue ?? attachmentStream.hashValue)
     }
 
     // MARK: Sorting
@@ -210,7 +210,7 @@ public struct GalleryDate: Hashable, Comparable, Equatable {
     }
 }
 
-protocol MediaGalleryDataSource: class {
+protocol MediaGalleryDataSource: AnyObject {
     var hasFetchedOldest: Bool { get }
     var hasFetchedMostRecent: Bool { get }
 
@@ -234,7 +234,7 @@ protocol MediaGalleryDataSource: class {
     func delete(items: [MediaGalleryItem], initiatedBy: AnyObject)
 }
 
-protocol MediaGalleryDataSourceDelegate: class {
+protocol MediaGalleryDataSourceDelegate: AnyObject {
     func mediaGalleryDataSource(_ mediaGalleryDataSource: MediaGalleryDataSource, willDelete items: [MediaGalleryItem], initiatedBy: AnyObject)
     func mediaGalleryDataSource(_ mediaGalleryDataSource: MediaGalleryDataSource, deletedSections: IndexSet, deletedItems: [IndexPath])
 }
@@ -306,7 +306,7 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
 
     private var initialDetailItem: MediaGalleryItem?
     private let thread: TSThread
-    private let options: MediaGalleryOption
+    private var options: MediaGalleryOption
 
     // we start with a small range size for quick loading.
     private let fetchRangeSize: UInt = 10
@@ -323,12 +323,15 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
 
         self.options = options
         self.mediaGalleryFinder = OWSMediaGalleryFinder(thread: thread)
+        
         super.init()
 
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(uiDatabaseDidUpdate),
-                                               name: .OWSUIDatabaseConnectionDidUpdate,
-                                               object: OWSPrimaryStorage.shared().dbNotificationObject)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(uiDatabaseDidUpdate),
+            name: .OWSUIDatabaseConnectionDidUpdate,
+            object: OWSPrimaryStorage.shared().dbNotificationObject
+        )
     }
 
     // MARK: Present/Dismiss
@@ -373,8 +376,8 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
 
         navigationController.setViewControllers([pageViewController], animated: false)
 
-        navigationController.modalPresentationStyle = .fullScreen
-        navigationController.modalTransitionStyle = .crossDissolve
+        navigationController.modalPresentationStyle = .overFullScreen
+        navigationController.transitioningDelegate = pageViewController
 
         fromViewController.present(navigationController, animated: true, completion: nil)
     }
@@ -401,20 +404,40 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
     }
 
     func showAllMedia(focusedItem: MediaGalleryItem) {
-        // TODO fancy animation - zoom media item into it's tile in the all media grid
+        // Reset the sorting for going to the 'allMedia' screen (want newest first there)
+        self.options.insert(.newestFirst)
+        
         ensureGalleryItemsLoaded(.around, item: focusedItem, amount: 100)
 
         if let fromNavController = self.fromNavController {
             // If from conversation settings view, we've already pushed
             fromNavController.popViewController(animated: true)
-        } else {
-            // If from conversation view
+        }
+        else {
+            // If from conversation view (or media detail view)
             mediaTileViewController.focusedItem = focusedItem
-            navigationController.pushViewController(mediaTileViewController, animated: true)
+            let navController = MediaGalleryNavigationController()
+            navController.retainUntilDismissed = self
+
+            navController.setViewControllers([mediaTileViewController], animated: false)
+
+            navController.modalPresentationStyle = .overFullScreen
+            navController.transitioningDelegate = mediaTileViewController//pageViewController
+
+            navigationController.present(navController, animated: true, completion: nil)
         }
     }
 
     // MARK: MediaTileViewControllerDelegate
+    
+    func mediaTileViewControllerWillDismiss(_ viewController: MediaTileViewController) {
+        guard self.fromNavController == nil else { return }
+        
+        // If we got to the gallery via the conversation view then we need to reset the,
+        // gallery order back to "oldest first" so the paging behaviour in the conversation
+        // screen isn't strange
+        self.options.remove(.newestFirst)
+    }
 
     func mediaTileViewController(_ viewController: MediaTileViewController, didTapView tappedView: UIView, mediaGalleryItem: MediaGalleryItem) {
         if self.fromNavController != nil {
@@ -430,7 +453,8 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
             //
 
             self.presentDetailView(fromViewController: mediaTileViewController, initialDetailItem: mediaGalleryItem)
-        } else {
+        }
+        else {
             // If we got to the gallery via the conversation view, pop the tile view
             // to return to the detail view
             //
@@ -450,9 +474,9 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
 
             pageViewController.setCurrentItem(mediaGalleryItem, direction: .forward, animated: false)
             pageViewController.willBePresentedAgain()
-
-            // TODO fancy zoom animation
-            self.navigationController.popViewController(animated: true)
+            
+            mediaTileViewController.focusedItem = mediaGalleryItem
+            mediaTileViewController.dismiss(animated: true, completion: nil)
         }
     }
 
@@ -465,11 +489,8 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
 
         let completion = {
             completionParam?()
-            UIApplication.shared.isStatusBarHidden = false
             presentingViewController.setNeedsStatusBarAppearanceUpdate()
         }
-
-        navigationController.view.isUserInteractionEnabled = false
 
         presentingViewController.dismiss(animated: true, completion: completion)
     }
@@ -542,6 +563,7 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
     lazy var mediaTileViewController: MediaTileViewController = {
         let vc = MediaTileViewController(mediaGalleryDataSource: self, uiDatabaseConnection: self.uiDatabaseConnection)
         vc.delegate = self
+        vc.transitioningDelegate = vc
 
         self.addDataSourceDelegate(vc)
 
@@ -670,34 +692,47 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
                     }
 
                     Logger.debug("fetching set: \(unfetchedSet)")
-                    let nsRange: NSRange = NSRange(location: unfetchedSet.min()!, length: unfetchedSet.count)
-                    self.mediaGalleryFinder.enumerateMediaAttachments(range: nsRange, transaction: transaction) { (attachment: TSAttachment) in
+                    let existingItemAttachmentAlbumMessageIds: [String] = galleryItems
+                        .compactMap { $0.attachmentStream.albumMessageId }
+                    
+                    // Note: The 'unfetchedSet' can actually contain multiple ranges (ie. before and after
+                    // the currently fetched items) so we need to loop through and fetch them to avoid
+                    // incorrectly re-fetching items already in the gallery)
+                    let unfetchedRanges: [NSRange] = unfetchedSet.rangeView
+                        .map { $0.indices.startIndex..<$0.indices.endIndex }
+                        .map { NSRange(location: $0.lowerBound, length: $0.count) }
+                    
+                    unfetchedRanges.forEach { range in
+                        self.mediaGalleryFinder.enumerateMediaAttachments(range: range, transaction: transaction) { (attachment: TSAttachment) in
 
-                        guard !self.deletedAttachments.contains(attachment) else {
-                            Logger.debug("skipping \(attachment) which has been deleted.")
-                            return
-                        }
+                            guard !self.deletedAttachments.contains(attachment) else {
+                                Logger.debug("skipping \(attachment) which has been deleted.")
+                                return
+                            }
+                            
+                            guard let item: MediaGalleryItem = self.buildGalleryItem(attachment: attachment, transaction: transaction) else {
+                                owsFailDebug("unexpectedly failed to buildGalleryItem")
+                                return
+                            }
 
-                        guard let item: MediaGalleryItem = self.buildGalleryItem(attachment: attachment, transaction: transaction) else {
-                            owsFailDebug("unexpectedly failed to buildGalleryItem")
-                            return
-                        }
+                            let date = item.galleryDate
 
-                        let date = item.galleryDate
+                            galleryItems.append(item)
+                            
+                            if sections[date] != nil {
+                                sections[date]!.append(item)
 
-                        galleryItems.append(item)
-                        if sections[date] != nil {
-                            sections[date]!.append(item)
+                                // so we can update collectionView
+                                newGalleryItems.append(item)
+                            }
+                            else {
+                                sectionDates.append(date)
+                                sections[date] = [item]
 
-                            // so we can update collectionView
-                            newGalleryItems.append(item)
-                        } else {
-                            sectionDates.append(date)
-                            sections[date] = [item]
-
-                            // so we can update collectionView
-                            newDates.append(date)
-                            newGalleryItems.append(item)
+                                // so we can update collectionView
+                                newDates.append(date)
+                                newGalleryItems.append(item)
+                            }
                         }
                     }
 
@@ -715,17 +750,21 @@ class MediaGallery: NSObject, MediaGalleryDataSource, MediaTileViewControllerDel
         }
 
         // TODO only sort if changed
+        let newestFirst: Bool = self.options.contains(.newestFirst)
         var sortedSections: [GalleryDate: [MediaGalleryItem]] = [:]
 
         Bench(title: "sorting gallery items") {
+            // Want newest items first
             galleryItems.sort { lhs, rhs -> Bool in
-                return lhs.orderingKey < rhs.orderingKey
+                return (newestFirst ? lhs.orderingKey > rhs.orderingKey : lhs.orderingKey < rhs.orderingKey)
             }
-            sectionDates.sort()
+            sectionDates.sort { lhs, rhs in
+                return (newestFirst ? lhs > rhs : lhs < rhs)
+            }
 
             for (date, galleryItems) in sections {
                 sortedSections[date] = galleryItems.sorted { lhs, rhs -> Bool in
-                    return lhs.orderingKey < rhs.orderingKey
+                    return (newestFirst ? lhs.orderingKey > rhs.orderingKey : lhs.orderingKey < rhs.orderingKey)
                 }
             }
         }

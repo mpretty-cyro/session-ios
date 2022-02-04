@@ -14,7 +14,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 typedef NS_OPTIONS(NSInteger, MediaGalleryOption) {
     MediaGalleryOptionSliderEnabled = 1 << 0,
-    MediaGalleryOptionShowAllMediaButton = 1 << 1
+    MediaGalleryOptionShowAllMediaButton = 1 << 1,
+    MediaGalleryOptionNewestFirst = 1 << 2
 };
 
 @protocol MediaDetailViewControllerDelegate <NSObject>
@@ -31,6 +32,7 @@ typedef NS_OPTIONS(NSInteger, MediaGalleryOption) {
 
 @interface MediaDetailViewController : OWSViewController
 
+@property (nonatomic, readonly) UIView *mediaView;
 @property (nonatomic, weak) id<MediaDetailViewControllerDelegate> delegate;
 @property (nonatomic, readonly) GalleryItemBox *galleryItemBox;
 

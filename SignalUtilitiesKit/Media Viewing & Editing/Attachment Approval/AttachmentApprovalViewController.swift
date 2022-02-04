@@ -731,6 +731,12 @@ extension AttachmentApprovalViewController: AttachmentPrepViewControllerDelegate
 // MARK: GalleryRail
 
 extension SignalAttachmentItem: GalleryRailItem {
+    func isEqual(to other: GalleryRailItem) -> Bool {
+        guard let otherItem: SignalAttachmentItem = other as? SignalAttachmentItem else { return false }
+        
+        return (self == otherItem)
+    }
+    
     func buildRailItemView() -> UIView {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill

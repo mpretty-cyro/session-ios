@@ -800,6 +800,11 @@
 		FD59FEBE27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEBD27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift */; };
 		FD59FEC027953D3C003C51FB /* Array+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */; };
 		FD59FEC227953DA5003C51FB /* ConversationSettingsOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */; };
+		FD5D201427AB7A6400FEA984 /* MediaZoomAnimationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5D201327AB7A6400FEA984 /* MediaZoomAnimationController.swift */; };
+		FD5D201627AB7AD300FEA984 /* MediaPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5D201527AB7AD300FEA984 /* MediaPresentationContext.swift */; };
+		FD5D201827AB7B4C00FEA984 /* MediaDismissAnimationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5D201727AB7B4C00FEA984 /* MediaDismissAnimationController.swift */; };
+		FD5D201A27AB7B7B00FEA984 /* MediaInteractiveDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5D201927AB7B7B00FEA984 /* MediaInteractiveDismiss.swift */; };
+		FD5D201C27ACE80300FEA984 /* UINavigationBar+Snapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5D201B27ACE80300FEA984 /* UINavigationBar+Snapshot.swift */; };
 		FD88BAD227A258F000BBC442 /* Publisher+TestUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD88BAD127A258F000BBC442 /* Publisher+TestUtils.swift */; };
 		FD88BAD627A3526F00BBC442 /* Nimble+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD88BAD527A3526F00BBC442 /* Nimble+Utilities.swift */; };
 /* End PBXBuildFile section */
@@ -1148,10 +1153,10 @@
 		7B4C75CA26B37E0F0000AC89 /* UnsendRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsendRequest.swift; sourceTree = "<group>"; };
 		7B4C75CC26BB92060000AC89 /* DeletedMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletedMessageView.swift; sourceTree = "<group>"; };
 		7B7CB18A270591630079FF93 /* ShareLogsModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareLogsModal.swift; sourceTree = "<group>"; };
+		7BA6F47DAD18D44D75B7110F /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig"; sourceTree = "<group>"; };
 		7BA7F4BA279F9F5800B3A466 /* EmptySearchResultCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptySearchResultCell.swift; sourceTree = "<group>"; };
 		7BA7F4BC27A216B600B3A466 /* Storage+RecentSearchResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Storage+RecentSearchResults.swift"; sourceTree = "<group>"; };
 		7BA9057D27911C5800998B3C /* GlobalSearchViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchViewController.swift; sourceTree = "<group>"; };
-		7BA6F47DAD18D44D75B7110F /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionSnodeKit.debug.xcconfig"; sourceTree = "<group>"; };
 		7BC01A3B241F40AB00BC7C55 /* SessionNotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SessionNotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7BC01A3D241F40AB00BC7C55 /* NotificationServiceExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationServiceExtension.swift; sourceTree = "<group>"; };
 		7BC01A3F241F40AB00BC7C55 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -1864,6 +1869,11 @@
 		FD59FEBD27953A48003C51FB /* ConversationDisappearingMessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDisappearingMessagesViewModel.swift; sourceTree = "<group>"; };
 		FD59FEBF27953D3C003C51FB /* Array+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Convenience.swift"; sourceTree = "<group>"; };
 		FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSettingsOptionView.swift; sourceTree = "<group>"; };
+		FD5D201327AB7A6400FEA984 /* MediaZoomAnimationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaZoomAnimationController.swift; sourceTree = "<group>"; };
+		FD5D201527AB7AD300FEA984 /* MediaPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPresentationContext.swift; sourceTree = "<group>"; };
+		FD5D201727AB7B4C00FEA984 /* MediaDismissAnimationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDismissAnimationController.swift; sourceTree = "<group>"; };
+		FD5D201927AB7B7B00FEA984 /* MediaInteractiveDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInteractiveDismiss.swift; sourceTree = "<group>"; };
+		FD5D201B27ACE80300FEA984 /* UINavigationBar+Snapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UINavigationBar+Snapshot.swift"; sourceTree = "<group>"; };
 		FD88BAD127A258F000BBC442 /* Publisher+TestUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Publisher+TestUtils.swift"; sourceTree = "<group>"; };
 		FD88BAD527A3526F00BBC442 /* Nimble+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Nimble+Utilities.swift"; sourceTree = "<group>"; };
 		FD9039443F7CB729CF71350E /* Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig"; path = "Pods/Target Support Files/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension/Pods-GlobalDependencies-FrameworkAndExtensionDependencies-SessionNotificationServiceExtension.debug.xcconfig"; sourceTree = "<group>"; };
@@ -2113,6 +2123,7 @@
 				B83F2B87240CB75A000A54AB /* UIImage+Scaling.swift */,
 				C31A6C59247F214E001123EF /* UIView+Glow.swift */,
 				C3548F0724456AB6009433A8 /* UIView+Wrapping.swift */,
+				FD5D201B27ACE80300FEA984 /* UINavigationBar+Snapshot.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -2981,6 +2992,7 @@
 		C36096BA25AD1B14008B62B2 /* Media Viewing & Editing */ = {
 			isa = PBXGroup;
 			children = (
+				FD5D201227AB7A5800FEA984 /* Transitions */,
 				C36096B925AD1ACF008B62B2 /* GIFs */,
 				34E3E5671EC4B19400495BAC /* AudioProgressView.swift */,
 				346B66301F4E29B200E5122F /* CropScaleImageViewController.swift */,
@@ -3739,6 +3751,17 @@
 				FD59FEC127953DA5003C51FB /* ConversationSettingsOptionView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		FD5D201227AB7A5800FEA984 /* Transitions */ = {
+			isa = PBXGroup;
+			children = (
+				FD5D201327AB7A6400FEA984 /* MediaZoomAnimationController.swift */,
+				FD5D201527AB7AD300FEA984 /* MediaPresentationContext.swift */,
+				FD5D201727AB7B4C00FEA984 /* MediaDismissAnimationController.swift */,
+				FD5D201927AB7B7B00FEA984 /* MediaInteractiveDismiss.swift */,
+			);
+			path = Transitions;
 			sourceTree = "<group>";
 		};
 		FD88BAD027A258DE00BBC442 /* _TestUtilities */ = {
@@ -5033,6 +5056,7 @@
 				B8041AA725C90927003C2166 /* TypingIndicatorCell.swift in Sources */,
 				B8CCF63723961D6D0091D419 /* NewDMVC.swift in Sources */,
 				452EC6DF205E9E30000E787C /* MediaGalleryViewController.swift in Sources */,
+				FD5D201427AB7A6400FEA984 /* MediaZoomAnimationController.swift in Sources */,
 				3496956E21A301A100DCFE74 /* OWSBackupExportJob.m in Sources */,
 				4C1885D2218F8E1C00B67051 /* PhotoGridViewCell.swift in Sources */,
 				34D1F0501F7D45A60066283D /* GifPickerCell.swift in Sources */,
@@ -5041,6 +5065,7 @@
 				B8783E9E23EB948D00404FB8 /* UILabel+Interaction.swift in Sources */,
 				B893063F2383961A005EAA8E /* ScanQRCodeWrapperVC.swift in Sources */,
 				B879D449247E1BE300DB3608 /* PathVC.swift in Sources */,
+				FD5D201827AB7B4C00FEA984 /* MediaDismissAnimationController.swift in Sources */,
 				454A84042059C787008B8C75 /* MediaTileViewController.swift in Sources */,
 				340FC8B4204DAC8D007AEB0F /* OWSBackupSettingsViewController.m in Sources */,
 				FD59EA3E2799076200A18298 /* ConversationNotificationSettingsViewController.swift in Sources */,
@@ -5151,6 +5176,7 @@
 				C328253025CA55370062D0A7 /* ContextMenuWindow.swift in Sources */,
 				34BECE2E1F7ABCE000D7438D /* GifPickerViewController.swift in Sources */,
 				B84664F5235022F30083A1CD /* MentionUtilities.swift in Sources */,
+				FD5D201627AB7AD300FEA984 /* MediaPresentationContext.swift in Sources */,
 				34D1F0C01F8EC1760066283D /* MessageRecipientStatusUtils.swift in Sources */,
 				C328250F25CA06020062D0A7 /* VoiceMessageView.swift in Sources */,
 				B82B4090239DD75000A248E7 /* RestoreVC.swift in Sources */,
@@ -5197,7 +5223,9 @@
 				FD59FEB82794F562003C51FB /* ConversationSettingsHeaderView.swift in Sources */,
 				C328254025CA55880062D0A7 /* ContextMenuVC.swift in Sources */,
 				3427C64320F500E000EEC730 /* OWSMessageTimerView.m in Sources */,
+				FD5D201A27AB7B7B00FEA984 /* MediaInteractiveDismiss.swift in Sources */,
 				FD59FEB22794EC90003C51FB /* ConversationSettingsActionView.swift in Sources */,
+				FD5D201C27ACE80300FEA984 /* UINavigationBar+Snapshot.swift in Sources */,
 				B90418E6183E9DD40038554A /* DateUtil.m in Sources */,
 				C33100092558FF6D00070591 /* UserCell.swift in Sources */,
 				7BA7F4BD27A216B600B3A466 /* Storage+RecentSearchResults.swift in Sources */,

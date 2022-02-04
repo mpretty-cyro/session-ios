@@ -123,6 +123,18 @@ NS_ASSUME_NONNULL_BEGIN
     [self resetMediaFrame];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    
+    if ([self.mediaView isKindOfClass:[YYAnimatedImageView class]]) {
+        // Add a slight delay before starting the gif animation to prevent it from looking buggy due to
+        // the custom transition
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25f * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [(YYAnimatedImageView *)self.mediaView startAnimating];
+        });
+    }
+}
+
 - (void)viewDidLayoutSubviews
 {
     [super viewDidLayoutSubviews];
@@ -184,7 +196,7 @@ NS_ASSUME_NONNULL_BEGIN
     scrollView.showsVerticalScrollIndicator = NO;
     scrollView.showsHorizontalScrollIndicator = NO;
     scrollView.decelerationRate = UIScrollViewDecelerationRateFast;
-    [scrollView contentInsetAdjustmentBehavior];
+    scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
 
     [scrollView ows_autoPinToSuperviewEdges];
 
@@ -192,9 +204,11 @@ NS_ASSUME_NONNULL_BEGIN
         if (self.attachmentStream.isValidImage) {
             YYImage *animatedGif = [YYImage imageWithContentsOfFile:self.attachmentStream.originalFilePath];
             YYAnimatedImageView *animatedView = [YYAnimatedImageView new];
+            animatedView.autoPlayAnimatedImage = NO;
             animatedView.image = animatedGif;
             self.mediaView = animatedView;
-        } else {
+        }
+        else {
             self.mediaView = [UIView new];
             self.mediaView.backgroundColor = Theme.offBackgroundColor;
         }
@@ -375,8 +389,25 @@ NS_ASSUME_NONNULL_BEGIN
 
     CGSize scrollViewSize = self.scrollView.bounds.size;
     CGSize imageViewSize = self.mediaView.frame.size;
+    
+    
+    // We want to modify the yOffset so the content remains centered on the screen (we can do this
+    // by subtracting half the parentViewController's y position)
+    //
+    // Note: Due to weird partial-pixel value rendering behaviours we need to round the inset either
+    // up or down depending on which direction the partial-pixel would end up rounded to make it
+    // align correctly
+    CGFloat halfHeightDiff = ((self.scrollView.bounds.size.height - self.mediaView.frame.size.height) / 2);
+    BOOL shouldRoundUp = (round(halfHeightDiff) - halfHeightDiff > 0);
 
-    CGFloat yOffset = MAX(0, (scrollViewSize.height - imageViewSize.height) / 2);
+    CGFloat yOffset = (
+        round((scrollViewSize.height - imageViewSize.height) / 2) -
+        (shouldRoundUp ?
+            ceil(self.parentViewController.view.frame.origin.y / 2) :
+            floor(self.parentViewController.view.frame.origin.y / 2)
+        )
+    );
+    
     self.mediaViewTopConstraint.constant = yOffset;
     self.mediaViewBottomConstraint.constant = yOffset;
 

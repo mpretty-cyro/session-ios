@@ -5,15 +5,16 @@
 import PromiseKit
 import SessionUIKit
 
-public protocol GalleryRailItemProvider: class {
+public protocol GalleryRailItemProvider: AnyObject {
     var railItems: [GalleryRailItem] { get }
 }
 
-public protocol GalleryRailItem: class {
+public protocol GalleryRailItem: AnyObject {
+    func isEqual(to other: GalleryRailItem) -> Bool
     func buildRailItemView() -> UIView
 }
 
-protocol GalleryRailCellViewDelegate: class {
+protocol GalleryRailCellViewDelegate: AnyObject {
     func didTapGalleryRailCellView(_ galleryRailCellView: GalleryRailCellView)
 }
 
@@ -106,6 +107,8 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
     var cellViewItems: [GalleryRailItem] {
         get { return cellViews.compactMap { $0.item } }
     }
+    
+    var onInitialLayout: (() -> ())?
 
     // MARK: Initializers
 
@@ -120,6 +123,17 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
 
     public required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    // MARK: - Layout
+    
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        
+        if bounds.size != CGSize.zero && onInitialLayout != nil {
+            onInitialLayout?()
+            onInitialLayout = nil
+        }
     }
 
     // MARK: Public
@@ -186,7 +200,12 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         stackView.autoPinEdgesToSuperviewEdges()
         stackView.autoMatch(.height, to: .height, of: scrollView)
 
-        updateFocusedItem(focusedItem)
+        onInitialLayout = { [weak self] in self?.updateFocusedItem(focusedItem) }
+        
+        if bounds.size != CGSize.zero {
+            onInitialLayout?()
+            onInitialLayout = nil
+        }
     }
 
     // MARK: GalleryRailCellViewDelegate
@@ -224,43 +243,46 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
     var scrollFocusMode: ScrollFocusMode = .keepCentered
     func updateFocusedItem(_ focusedItem: GalleryRailItem?) {
         var selectedCellView: GalleryRailCellView?
+
         cellViews.forEach { cellView in
-            if cellView.item === focusedItem {
+            if let focusedItem = focusedItem, cellView.item?.isEqual(to: focusedItem) == true {
                 assert(selectedCellView == nil)
                 selectedCellView = cellView
                 cellView.setIsSelected(true)
-            } else {
+            }
+            else {
                 cellView.setIsSelected(false)
             }
         }
-
+        
         self.layoutIfNeeded()
         switch scrollFocusMode {
-        case .keepCentered:
-            guard let selectedCell = selectedCellView else {
-                owsFailDebug("selectedCell was unexpectedly nil")
-                return
-            }
+            case .keepCentered:
+                guard let selectedCell = selectedCellView else {
+                    owsFailDebug("selectedCell was unexpectedly nil")
+                    return
+                }
 
-            let cellViewCenter = selectedCell.superview!.convert(selectedCell.center, to: scrollView)
-            let additionalInset = scrollView.center.x - cellViewCenter.x
+                let cellViewCenter = selectedCell.superview!.convert(selectedCell.center, to: scrollView)
+                let additionalInset = scrollView.center.x - cellViewCenter.x
 
-            var inset = scrollView.contentInset
-            inset.left = additionalInset
-            scrollView.contentInset = inset
+                var inset = scrollView.contentInset
+                inset.left = additionalInset
+                scrollView.contentInset = inset
 
-            var offset = scrollView.contentOffset
-            offset.x = -additionalInset
-            scrollView.contentOffset = offset
-        case .keepWithinBounds:
-            guard let selectedCell = selectedCellView else {
-                owsFailDebug("selectedCell was unexpectedly nil")
-                return
-            }
+                var offset = scrollView.contentOffset
+                offset.x = -additionalInset
+                scrollView.contentOffset = offset
+                
+            case .keepWithinBounds:
+                guard let selectedCell = selectedCellView else {
+                    owsFailDebug("selectedCell was unexpectedly nil")
+                    return
+                }
 
-            let cellFrame = selectedCell.superview!.convert(selectedCell.frame, to: scrollView)
+                let cellFrame = selectedCell.superview!.convert(selectedCell.frame, to: scrollView)
 
-            scrollView.scrollRectToVisible(cellFrame, animated: true)
+                scrollView.scrollRectToVisible(cellFrame, animated: true)
         }
     }
 }

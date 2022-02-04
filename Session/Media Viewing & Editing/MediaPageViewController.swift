@@ -33,9 +33,14 @@ fileprivate extension MediaDetailViewController {
     }
 }
 
-class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate, MediaDetailViewControllerDelegate, MediaGalleryDataSourceDelegate {
+class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate, MediaDetailViewControllerDelegate, MediaGalleryDataSourceDelegate, InteractivelyDismissableViewController {
+    class DynamicallySizedView: UIView {
+        override var intrinsicContentSize: CGSize { CGSize.zero }
+    }
 
     private weak var mediaGalleryDataSource: MediaGalleryDataSource?
+    
+    fileprivate var mediaInteractiveDismiss: MediaInteractiveDismiss?
 
     private var cachedPages: [MediaGalleryItem: MediaDetailViewController] = [:]
     private var initialPage: MediaDetailViewController!
@@ -82,6 +87,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         self.dataSource = self
         self.delegate = self
+        self.modalPresentationStyle = .overFullScreen
+        self.transitioningDelegate = self
 
         guard let initialPage = self.buildGalleryPage(galleryItem: initialItem) else {
             owsFailDebug("unexpectedly unable to build initial gallery item")
@@ -102,6 +109,13 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     // MARK: - Subview
 
+    private var hasAppeared: Bool = false
+    override var canBecomeFirstResponder: Bool { hasAppeared }
+    
+    override var inputAccessoryView: UIView? {
+        return bottomContainer
+    }
+    
     // MARK: Bottom Bar
     var bottomContainer: UIView!
     var footerBar: UIToolbar!
@@ -117,27 +131,25 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         // Navigation
 
-        // Note: using a custom leftBarButtonItem breaks the interactive pop gesture, but we don't want to be able
-        // to swipe to go back in the pager view anyway, instead swiping back should show the next page.
         let backButton = OWSViewController.createOWSBackButton(withTarget: self, selector: #selector(didPressDismissButton))
         self.navigationItem.leftBarButtonItem = backButton
-
         self.navigationItem.titleView = portraitHeaderView
 
         if showAllMediaButton {
             self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: MediaStrings.allMedia, style: .plain, target: self, action: #selector(didPressAllMediaButton))
         }
-
-        // Even though bars are opaque, we want content to be layed out behind them.
-        // The bars might obscure part of the content, but they can easily be hidden by tapping
-        // The alternative would be that content would shift when the navbars hide.
-        self.extendedLayoutIncludesOpaqueBars = true
-        self.automaticallyAdjustsScrollViewInsets = false
+        
+        // Disable the interactivePopGestureRecognizer as we want to be able to swipe between
+        // different pages
+        self.navigationController?.interactivePopGestureRecognizer?.isEnabled = false
+        self.mediaInteractiveDismiss = MediaInteractiveDismiss(targetViewController: self)
+        self.mediaInteractiveDismiss?.addGestureRecognizer(to: view)
 
         // Get reference to paged content which lives in a scrollView created by the superclass
         // We show/hide this content during presentation
         for view in self.view.subviews {
             if let pagerScrollView = view as? UIScrollView {
+                pagerScrollView.contentInsetAdjustmentBehavior = .never
                 self.pagerScrollView = pagerScrollView
             }
         }
@@ -159,31 +171,29 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         captionContainerView.delegate = self
         updateCaptionContainerVisibility()
 
+        galleryRailView.isHidden = true
         galleryRailView.delegate = self
         galleryRailView.autoSetDimension(.height, toSize: 72)
 
         let footerBar = self.makeClearToolbar()
-        self.footerBar = footerBar
         footerBar.tintColor = Colors.text
         footerBar.setBackgroundImage(UIImage(), forToolbarPosition: .any, barMetrics: UIBarMetrics.default)
         footerBar.setShadowImage(UIImage(), forToolbarPosition: .any)
         footerBar.isTranslucent = false
         footerBar.barTintColor = Colors.navigationBarBackground
+        footerBar.autoSetDimension(.height, toSize: 44)
+        self.footerBar = footerBar
 
-        let bottomContainer = UIView()
-        self.bottomContainer = bottomContainer
+        let bottomContainer = DynamicallySizedView()
+        bottomContainer.autoresizingMask = .flexibleHeight
         bottomContainer.backgroundColor = Colors.navigationBarBackground
+        self.bottomContainer = bottomContainer
 
         let bottomStack = UIStackView(arrangedSubviews: [captionContainerView, galleryRailView, footerBar])
         bottomStack.axis = .vertical
+        bottomStack.isLayoutMarginsRelativeArrangement = true
         bottomContainer.addSubview(bottomStack)
         bottomStack.autoPinEdgesToSuperviewEdges()
-
-        self.view.addSubview(bottomContainer)
-        bottomContainer.autoPinWidthToSuperview()
-        bottomContainer.autoPinEdge(.bottom, to: .bottom, of: view)
-        footerBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor).isActive = true
-        footerBar.autoSetDimension(.height, toSize: 44)
 
         updateTitle()
         updateCaption(item: currentItem)
@@ -201,6 +211,19 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         navigationBar.shadowImage = UIImage()
         navigationBar.isTranslucent = false
         navigationBar.barTintColor = Colors.navigationBarBackground
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        hasAppeared = true
+        becomeFirstResponder()
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        
+        resignFirstResponder()
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -340,9 +363,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             return
         }
 
-        galleryRailView.configureCellViews(itemProvider: currentItem.album,
-                                           focusedItem: currentItem,
-                                           cellViewBuilder: { _ in return GalleryRailCellView() })
+        galleryRailView.configureCellViews(itemProvider: currentItem.album, focusedItem: currentItem, cellViewBuilder: { _ in return GalleryRailCellView() })
     }
 
     // MARK: Actions
@@ -624,9 +645,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
 
         if IsLandscapeOrientationEnabled() {
-            mediaGalleryDataSource.dismissMediaDetailViewController(self,
-                                                                    animated: isAnimated,
-                                                                    completion: completion)
+            mediaGalleryDataSource.dismissMediaDetailViewController(self, animated: isAnimated, completion: completion)
         } else {
             mediaGalleryDataSource.dismissMediaDetailViewController(self, animated: isAnimated) {
                 UIDevice.current.ows_setOrientation(.portrait)
@@ -784,9 +803,21 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             portraitHeaderView.frame = headerFrame
         }
     }
+    
+    // MARK: - InteractivelyDismissableViewController
+    
+    func performInteractiveDismissal(animated: Bool) {
+        dismissSelf(animated: true)
+    }
 }
 
 extension MediaGalleryItem: GalleryRailItem {
+    public func isEqual(to other: GalleryRailItem) -> Bool {
+        guard let otherItem: MediaGalleryItem = other as? MediaGalleryItem else { return false }
+        
+        return (self == otherItem)
+    }
+    
     public func buildRailItemView() -> UIView {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
@@ -847,5 +878,55 @@ extension MediaPageViewController: CaptionContainerViewDelegate {
         }
 
         captionContainerView.isHidden = true
+    }
+}
+
+// MARK: - UIViewControllerTransitioningDelegate
+
+extension MediaPageViewController: UIViewControllerTransitioningDelegate {
+    public func animationController(forPresented presented: UIViewController, presenting: UIViewController, source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        guard self == presented || self.navigationController == presented else { return nil }
+        guard let currentItem = currentItem else { return nil }
+
+        return MediaZoomAnimationController(galleryItem: currentItem)
+    }
+
+    public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        guard self == dismissed || self.navigationController == dismissed else { return nil }
+        guard let currentItem = currentItem else { return nil }
+
+        let animationController = MediaDismissAnimationController(galleryItem: currentItem, interactionController: mediaInteractiveDismiss)
+        mediaInteractiveDismiss?.interactiveDismissDelegate = animationController
+
+        return animationController
+    }
+
+    public func interactionControllerForDismissal(using animator: UIViewControllerAnimatedTransitioning) -> UIViewControllerInteractiveTransitioning? {
+        guard let animator = animator as? MediaDismissAnimationController,
+              let interactionController = animator.interactionController,
+              interactionController.interactionInProgress
+        else {
+            return nil
+        }
+        
+        return interactionController
+    }
+}
+
+// MARK: - MediaPresentationContextProvider
+
+extension MediaPageViewController: MediaPresentationContextProvider {
+    func mediaPresentationContext(item: Media, in coordinateSpace: UICoordinateSpace) -> MediaPresentationContext? {
+        let mediaView = currentViewController.mediaView
+
+        guard let mediaSuperview: UIView = mediaView.superview else { return nil }
+        
+        let presentationFrame = coordinateSpace.convert(mediaView.frame, from: mediaSuperview)
+        
+        return MediaPresentationContext(mediaView: mediaView, presentationFrame: presentationFrame, cornerRadius: 0, cornerMask: CACornerMask())
+    }
+
+    func snapshotOverlayView(in coordinateSpace: UICoordinateSpace) -> (UIView, CGRect)? {
+        return self.navigationController?.navigationBar.generateSnapshot(in: coordinateSpace)
     }
 }

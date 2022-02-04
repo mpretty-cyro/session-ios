@@ -6,6 +6,10 @@ import Foundation
 import PromiseKit
 
 class AddMoreRailItem: GalleryRailItem {
+    func isEqual(to other: GalleryRailItem) -> Bool {
+        return (other is AddMoreRailItem)
+    }
+    
     func buildRailItemView() -> UIView {
         let view = UIView()
         view.backgroundColor = UIColor.black.withAlphaComponent(0.33)
