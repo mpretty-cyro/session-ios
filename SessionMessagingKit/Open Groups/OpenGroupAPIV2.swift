@@ -126,7 +126,7 @@ public final class OpenGroupAPIV2 : NSObject {
             if request.isAuthRequired, let room = request.room { // Because auth happens on a per-room basis, we need both to make an authenticated request
                 return getAuthToken(for: room, on: request.server).then(on: OpenGroupAPIV2.workQueue) { authToken -> Promise<JSON> in
                     tsRequest.setValue(authToken, forHTTPHeaderField: "Authorization")
-                    let promise = OnionRequestAPI.sendOnionRequest(tsRequest, to: request.server, using: publicKey)
+                    let promise = RequestAPI.sendRequest(tsRequest, to: request.server, using: publicKey)
                     promise.catch(on: OpenGroupAPIV2.workQueue) { error in
                         // A 401 means that we didn't provide a (valid) auth token for a route that required one. We use this as an
                         // indication that the token we're using has expired. Note that a 403 has a different meaning; it means that
@@ -141,7 +141,7 @@ public final class OpenGroupAPIV2 : NSObject {
                     return promise
                 }
             } else {
-                return OnionRequestAPI.sendOnionRequest(tsRequest, to: request.server, using: publicKey)
+                return RequestAPI.sendRequest(tsRequest, to: request.server, using: publicKey)
             }
         } else {
             preconditionFailure("It's currently not allowed to send non onion routed requests.")

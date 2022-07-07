@@ -79,7 +79,7 @@ public final class FileServerAPIV2 : NSObject {
         }
         tsRequest.allHTTPHeaderFields = request.headers
         if request.useOnionRouting {
-            return OnionRequestAPI.sendOnionRequest(tsRequest, to: server, using: serverPublicKey)
+            return RequestAPI.sendRequest(tsRequest, to: server, using: serverPublicKey)
         } else {
             preconditionFailure("It's currently not allowed to send non onion routed requests.")
         }

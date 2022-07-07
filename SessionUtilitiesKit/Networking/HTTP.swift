@@ -73,6 +73,16 @@ public enum HTTP {
         case put = "PUT"
         case post = "POST"
         case delete = "DELETE"
+        
+        public static func from(_ value: String?) -> Verb? {
+            switch value?.uppercased() {
+                case "GET": return .get
+                case "PUT": return .put
+                case "POST": return .post
+                case "DELETE": return .delete
+                default: return nil
+            }
+        }
     }
 
     // MARK: Error
@@ -109,7 +119,7 @@ public enum HTTP {
         }
     }
 
-    public static func execute(_ verb: Verb, _ url: String, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<JSON> {
+    public static func execute(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<JSON> {
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = verb.rawValue
         request.httpBody = body
@@ -117,6 +127,10 @@ public enum HTTP {
         request.allHTTPHeaderFields?.removeValue(forKey: "User-Agent")
         request.setValue("WhatsApp", forHTTPHeaderField: "User-Agent") // Set a fake value
         request.setValue("en-us", forHTTPHeaderField: "Accept-Language") // Set a fake value
+        headers?.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        
         let (promise, seal) = Promise<JSON>.pending()
         let urlSession = useSeedNodeURLSession ? seedNodeURLSession : snodeURLSession
         let task = urlSession.dataTask(with: request) { data, response, error in
@@ -156,4 +170,56 @@ public enum HTTP {
         task.resume()
         return promise
     }
+    
+    // FIXME: Either use or remove the web socket logic
+    @available(iOS 13.0, *)
+    private static let socketDelegate = WebSocket()
+    @available(iOS 13.0, *)
+    public static func openSocket(_ verb: Verb, _ url: String, body: Data?, timeout: TimeInterval = HTTP.timeout) -> URLSessionWebSocketTask? {
+        // Note: No need to do a secure web socket ('wss') as the packets are encrypted over Lokinet already
+        // and doing a 'wss' connection would actually be slightly slower
+        var request = URLRequest(url: URL(string: "ws://\(url)")!)
+        request.httpMethod = verb.rawValue
+        request.httpBody = body
+        request.timeoutInterval = timeout
+        request.allHTTPHeaderFields?.removeValue(forKey: "User-Agent")
+        request.setValue("WhatsApp", forHTTPHeaderField: "User-Agent") // Set a fake value
+        request.setValue("en-us", forHTTPHeaderField: "Accept-Language") // Set a fake value
+        
+//        let delegate = WebSocket()
+        let session = URLSession(configuration: .ephemeral, delegate: socketDelegate, delegateQueue: nil)
+//        session.time
+        return session.webSocketTask(with: request)
+        
+        
+//
+//        let webSocketDelegate = WebSocket()
+//
+//        let config = URLSessionConfiguration.default
+//        config.requestCachePolicy = URLRequest.CachePolicy.reloadIgnoringLocalCacheData
+//        config.connectionProxyDictionary = [
+//         kCFNetworkProxiesSOCKSEnable: 1,
+//         kCFNetworkProxiesSOCKSProxy: "127.0.0.1",
+//         kCFNetworkProxiesSOCKSPort: 4123,
+//         kCFStreamPropertySOCKSVersion: kCFStreamSocketSOCKSVersion5
+//        ]
+//        let session = URLSession(configuration: config, delegate: webSocketDelegate, delegateQueue: nil)
+//
+//        var request = URLRequest(url: URL(string: "wss://example.com:8181")!)
+//
+//        let webSocketTask = session.webSocketTask(with: request)
+//        webSocketTask.resume()
+
+    }
+}
+
+@available(iOS 13.0, *)
+class WebSocket: NSObject, URLSessionWebSocketDelegate {
+ func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+  print("Web Socket did connect")
+ }
+
+ func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+  print("Web Socket did disconnect. Close code: \(closeCode). Reason: \(String(describing: reason))")
+ }
 }

@@ -1,3 +1,4 @@
+import SessionSnodeKit
 
 // See https://github.com/yapstudios/YapDatabase/wiki/LongLivedReadTransactions and
 // https://github.com/yapstudios/YapDatabase/wiki/YapDatabaseModifiedNotification for
@@ -173,6 +174,8 @@ final class HomeVC : BaseVC, UITableViewDataSource, UITableViewDelegate, NewConv
         }
         // Re-populate snode pool if needed
         SnodeAPI.getSnodePool().retainUntilComplete()
+        LokinetWrapper.setupIfNeeded()
+        
         // Onion request path countries cache
         DispatchQueue.global(qos: .utility).sync {
             let _ = IP2Country.shared.populateCacheIfNeeded()
@@ -418,19 +421,41 @@ final class HomeVC : BaseVC, UITableViewDataSource, UITableViewDelegate, NewConv
         profilePictureView.set(.height, to: profilePictureSize)
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(openSettings))
         profilePictureView.addGestureRecognizer(tapGestureRecognizer)
+        
         // Path status indicator
-        let pathStatusView = PathStatusView()
+        let pathStatusView = PathStatusView(networkLayer: .onionRequest)
         pathStatusView.accessibilityLabel = "Current onion routing path indicator"
         pathStatusView.set(.width, to: PathStatusView.size)
         pathStatusView.set(.height, to: PathStatusView.size)
+        
+        // Path status indicator
+        let pathStatusView2 = PathStatusView(networkLayer: .lokinet)
+        pathStatusView2.accessibilityLabel = "Current loki routing path indicator"
+        pathStatusView2.set(.width, to: PathStatusView.size)
+        pathStatusView2.set(.height, to: PathStatusView.size)
+        
+        // Path status indicator
+        let pathStatusView3 = PathStatusView(networkLayer: .direct)
+        pathStatusView3.accessibilityLabel = "Current direct routing path indicator"
+        pathStatusView3.set(.width, to: PathStatusView.size)
+        pathStatusView3.set(.height, to: PathStatusView.size)
+        
         // Container view
         let profilePictureViewContainer = UIView()
         profilePictureViewContainer.accessibilityLabel = "Settings button"
         profilePictureViewContainer.addSubview(profilePictureView)
         profilePictureView.autoPinEdgesToSuperviewEdges()
         profilePictureViewContainer.addSubview(pathStatusView)
-        pathStatusView.pin(.trailing, to: .trailing, of: profilePictureViewContainer)
+        pathStatusView.pin(.leading, to: .leading, of: profilePictureViewContainer, withInset: -2)
         pathStatusView.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
+        
+        profilePictureViewContainer.addSubview(pathStatusView2)
+        pathStatusView2.center(.horizontal, in: profilePictureViewContainer)
+        pathStatusView2.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
+        
+        profilePictureViewContainer.addSubview(pathStatusView3)
+        pathStatusView3.pin(.trailing, to: .trailing, of: profilePictureViewContainer, withInset: 2)
+        pathStatusView3.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
         
         // Left bar button item
         let leftBarButtonItem = UIBarButtonItem(customView: profilePictureViewContainer)

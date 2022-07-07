@@ -1,5 +1,6 @@
 import UIKit
 import SessionMessagingKit
+import SessionSnodeKit
 
 final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
     private var profilePictureToBeUploaded: UIImage?
@@ -134,6 +135,11 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
     private static let buttonHeight = isIPhone5OrSmaller ? CGFloat(52) : CGFloat(75)
     
     // MARK: Lifecycle
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         setUpGradientBackground()
@@ -215,6 +221,8 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
         stackView.pin(to: scrollView)
         view.addSubview(scrollView)
         scrollView.pin(to: view)
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(didChangeNetworkLayer), name: .networkLayerChanged, object: nil)
     }
     
     private func getSettingButtons() -> [UIView] {
@@ -250,7 +258,7 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
         }
         
         let pathButton = getSettingButton(withTitle: NSLocalizedString("vc_path_title", comment: ""), color: Colors.text, action: #selector(showPath))
-        let pathStatusView = PathStatusView()
+        let pathStatusView = PathStatusView(networkLayer: .onionRequest)
         pathStatusView.set(.width, to: PathStatusView.size)
         pathStatusView.set(.height, to: PathStatusView.size)
         
@@ -258,7 +266,11 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
         pathStatusView.pin(.leading, to: .trailing, of: pathButton.titleLabel!, withInset: Values.smallSpacing)
         pathStatusView.autoVCenterInSuperview()
         
+        let networkLayer: RequestAPI.NetworkLayer = (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        
         return [
+            getSeparator(),
+            getSettingButton(withTitle: "Network Layer: \(networkLayer.name)", color: Colors.text, action: #selector(changeNetworkLayer)),
             getSeparator(),
             pathButton,
             getSeparator(),
@@ -415,6 +427,16 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
         updateLogo()
     }
     
+    @objc private func didChangeNetworkLayer() {
+        settingButtonsStackView.arrangedSubviews.forEach { settingButton in
+            settingButtonsStackView.removeArrangedSubview(settingButton)
+            settingButton.removeFromSuperview()
+        }
+        getSettingButtons().forEach { settingButtonOrSeparator in
+            settingButtonsStackView.addArrangedSubview(settingButtonOrSeparator) // Re-do the setting buttons
+        }
+    }
+    
     private func updateLogo() {
         let logoName = isLightMode ? "OxenLightMode" : "OxenDarkMode"
         logoImageView.image = UIImage(named: logoName)!
@@ -501,6 +523,11 @@ final class SettingsVC : BaseVC, AvatarViewHelperDelegate {
             shareVC.popoverPresentationController?.sourceRect = self.view.bounds
         }
         navigationController!.present(shareVC, animated: true, completion: nil)
+    }
+    
+    @objc private func changeNetworkLayer() {
+        let networkLayerVC = NetworkLayerViewController()
+        navigationController!.pushViewController(networkLayerVC, animated: true)
     }
     
     @objc private func showPath() {

@@ -277,6 +277,7 @@ public enum OnionRequestAPI {
         var encryptionResult: AESGCM.EncryptionResult!
         var snodeToExclude: Snode?
         if case .snode(let snode) = destination { snodeToExclude = snode }
+        
         return getPath(excluding: snodeToExclude).then2 { path -> Promise<AESGCM.EncryptionResult> in
             guardSnode = path.first!
             // Encrypt in reverse order, i.e. the destination first
@@ -363,7 +364,7 @@ public enum OnionRequestAPI {
         return promise
     }
 
-    public static func sendOnionRequest(with payload: JSON, to destination: Destination) -> Promise<JSON> {
+    internal static func sendOnionRequest(with payload: JSON, to destination: Destination) -> Promise<JSON> {
         let (promise, seal) = Promise<JSON>.pending()
         var guardSnode: Snode?
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`

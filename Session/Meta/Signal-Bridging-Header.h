@@ -27,6 +27,7 @@
 #import "OWSProgressView.h"
 #import "OWSWindowManager.h"
 #import "PrivacySettingsTableViewController.h"
+#import "NetworkLayerViewController.h"
 #import "OWSQRCodeScanningViewController.h"
 #import "SignalApp.h"
 #import "UIViewController+Permissions.h"

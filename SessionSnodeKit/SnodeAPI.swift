@@ -142,7 +142,7 @@ public final class SnodeAPI : NSObject {
     // MARK: Internal API
     internal static func invoke(_ method: Snode.Method, on snode: Snode, associatedWith publicKey: String? = nil, parameters: JSON) -> RawResponsePromise {
         if Features.useOnionRequests {
-            return OnionRequestAPI.sendOnionRequest(to: snode, invoking: method, with: parameters, associatedWith: publicKey)
+            return RequestAPI.sendRequest(to: snode, invoking: method, with: parameters, associatedWith: publicKey)
                 .map2 { json in
                     if let hf = json["hf"] as? [Int] {
                         if hf[1] > softfork {

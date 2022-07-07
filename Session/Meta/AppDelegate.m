@@ -384,6 +384,7 @@ static NSTimeInterval launchStartedAt;
             }
             
             [[SNSnodeAPI getSnodePool] retainUntilComplete];
+            [SSKLokinetWrapper setupIfNeeded];
             
             [self startPollerIfNeeded];
             [self startClosedGroupPoller];

@@ -62,7 +62,7 @@ abstract_target 'GlobalDependencies' do
   end
 end
 
-# No dependencies for this
+# No dependencies for these
 target 'SessionUIKit'
 
 # Actions to perform post-install

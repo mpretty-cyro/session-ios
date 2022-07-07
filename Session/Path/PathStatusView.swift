@@ -1,35 +1,72 @@
 import UIKit
+import SessionUIKit
+import SessionSnodeKit
 
-final class PathStatusView : UIView {
+final class PathStatusView: UIView {
     
-    static let size = CGFloat(8)
+    static let size = CGFloat(10)
     
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setUpViewHierarchy()
-        registerObservers()
+    private lazy var layerLabel: UILabel = {
+        let result: UILabel = UILabel()
+        result.font = .boldSystemFont(ofSize: 6)
+        result.textAlignment = .center
+        
+        return result
+    }()
+    
+    init(networkLayer: RequestAPI.NetworkLayer) {
+        super.init(frame: .zero)
+        
+        setUpViewHierarchy(networkLayer: networkLayer)
+        registerObservers(networkLayer: networkLayer)
     }
-
+    
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setUpViewHierarchy()
-        registerObservers()
+        fatalError("use init(layer:) instead")
     }
     
-    private func setUpViewHierarchy() {
-        layer.cornerRadius = PathStatusView.size / 2
+    private func setUpViewHierarchy(networkLayer: RequestAPI.NetworkLayer) {
+        layer.cornerRadius = (PathStatusView.size / 2)
         layer.masksToBounds = false
-        if OnionRequestAPI.paths.isEmpty {
-            OnionRequestAPI.paths = Storage.shared.getOnionRequestPaths()
+        
+        addSubview(layerLabel)
+        layerLabel.pin(to: self, withInset: 2)
+        
+        switch networkLayer {
+            case .onionRequest:
+                if OnionRequestAPI.paths.isEmpty {
+                    OnionRequestAPI.paths = Storage.shared.getOnionRequestPaths()
+                }
+                let color = (!OnionRequestAPI.paths.isEmpty ? Colors.accent : Colors.pathsBuilding)
+                layerLabel.text = "O"
+                setColor(to: color, isAnimated: false)
+                
+            case .lokinet:
+                let color = (LokinetWrapper.isReady ? Colors.accent : Colors.pathsBuilding)
+                layerLabel.text = "L"
+                setColor(to: color, isAnimated: false)
+                
+            case .nativeLokinet: break
+                
+            case .direct:
+                layerLabel.text = "D"
+                setColor(to: Colors.accent, isAnimated: false)
         }
-        let color = (!OnionRequestAPI.paths.isEmpty) ? Colors.accent : Colors.pathsBuilding
-        setColor(to: color, isAnimated: false)
     }
 
-    private func registerObservers() {
-        let notificationCenter = NotificationCenter.default
-        notificationCenter.addObserver(self, selector: #selector(handleBuildingPathsNotification), name: .buildingPaths, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(handlePathsBuiltNotification), name: .pathsBuilt, object: nil)
+    private func registerObservers(networkLayer: RequestAPI.NetworkLayer) {
+        switch networkLayer {
+            case .onionRequest:
+                NotificationCenter.default.addObserver(self, selector: #selector(handleBuildingPathsNotification), name: .buildingPaths, object: nil)
+                NotificationCenter.default.addObserver(self, selector: #selector(handlePathsBuiltNotification), name: .pathsBuilt, object: nil)
+                
+            case .lokinet:
+                NotificationCenter.default.addObserver(self, selector: #selector(handleBuildingPathsNotification), name: .buildingPathsLoki, object: nil)
+                NotificationCenter.default.addObserver(self, selector: #selector(handlePathsBuiltNotification), name: .pathsBuiltLoki, object: nil)
+                
+            case .nativeLokinet: break
+            case .direct: break
+        }
     }
 
     deinit {
