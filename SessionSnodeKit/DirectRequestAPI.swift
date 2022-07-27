@@ -18,7 +18,7 @@ public enum DirectRequestAPI {
             let maybeFinalUrlString: String? = {
                 switch destination {
                     case .server(let host, _, _, let scheme, _):
-                        return "\(scheme ?? "https")://\(host)/legacy/\(endpoint)"
+                        return "\(scheme ?? "https")://\(host)/\(endpoint)"
                         
                     case .snode(let snode):
                         return "\(snode.address):\(snode.port)/\(endpoint)"

@@ -34,7 +34,7 @@ public enum NativeLokinetRequestAPI {
                             return nil
                         }
                         
-                        return "\(scheme ?? "https")://\(addressInfo.address):\(addressInfo.port)/legacy/\(endpoint)"
+                        return "\(scheme ?? "https")://\(addressInfo.address):\(addressInfo.port)/\(endpoint)"
                         
                     case .snode(let snode):
                         guard

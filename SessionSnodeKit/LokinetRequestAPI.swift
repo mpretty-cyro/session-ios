@@ -53,7 +53,7 @@ public enum LokinetRequestAPI {
                         
                         /// Note: Lokinet encrypts the packets sent over it so no need to send requests over HTTPS (which would end
                         /// up being slower with no real benefit)
-                        return "http://\(targetAddress)/legacy/\(endpoint)"
+                        return "http://\(targetAddress)/\(endpoint)"
                         
                     case .snode(let snode):
                         guard let targetLokiAddress = LokinetWrapper.base32SnodePublicKey(publicKey: snode.ed25519PublicKey) else {
