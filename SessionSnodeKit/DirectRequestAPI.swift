@@ -5,82 +5,43 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public enum DirectRequestAPI {
-    internal static func sendDirectRequest(with payload: JSON, to destination: OnionRequestAPI.Destination) -> Promise<JSON> {
-        let (promise, seal) = Promise<JSON>.pending()
+    internal static func sendDirectRequest(
+        _ method: HTTP.Verb,
+        endpoint: String,
+        headers: [String: String] = [:],
+        body: Data?,
+        destination: OnionRequestAPIDestination
+    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+        let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
-            let maybeRequestInfo: (method: HTTP.Verb, address: String, body: Data?)? = {
+            let maybeFinalUrlString: String? = {
                 switch destination {
                     case .server(let host, _, _, let scheme, _):
-                        guard
-                            let endpoint: String = payload["endpoint"] as? String,
-                            let body: String = payload["body"] as? String,
-                            let payloadData: Data = body.data(using: .utf8)
-                        else { return nil }
-                        
-                        return (
-                            (HTTP.Verb.from(payload["method"] as? String) ?? .get),
-                            "\(scheme ?? "https")://\(host)/legacy/\(endpoint)",
-                            (body == "null" ? nil : payloadData)
-                        )
+                        return "\(scheme ?? "https")://\(host)/legacy/\(endpoint)"
                         
                     case .snode(let snode):
-                        guard
-                            let payloadData: Data = try? JSONSerialization.data(
-                                withJSONObject: payload,
-                                options: [ .fragmentsAllowed ]
-                            )
-                        else { return nil }
-                        
-                        return (
-                            .post,
-                            "\(snode.address):\(snode.port)/storage_rpc/v1",
-                            payloadData
-                        )
+                        return "\(snode.address):\(snode.port)/\(endpoint)"
                 }
             }()
             
-            // Ensure we have the address info
-            guard let requestInfo: (method: HTTP.Verb, address: String, body: Data?) = maybeRequestInfo else {
-                seal.reject(OnionRequestAPI.Error.invalidURL)
+            // Ensure we have the final URL
+            guard let finalUrlString: String = maybeFinalUrlString else {
+                seal.reject(OnionRequestAPIError.invalidURL)
                 return
             }
             
-            let customHeaders: [String: String] = ((payload["headers"] as? [String: String]) ?? [:])
             /// Note: `Host` is a protected header so we can't custom set it
 //                        customHeaders["Host"] = "chat.kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki"//host
             
             HTTP
                 .execute(
-                    requestInfo.method,
-                    requestInfo.address,
-                    headers: customHeaders,
-                    body: requestInfo.body
+                    method,
+                    finalUrlString,
+                    headers: headers,
+                    body: body
                 )
-                .done2 { json in
-                    if let statusCode = json["status_code"] as? Int {
-                        if statusCode == 406 { // Clock out of sync
-                            SNLog("The user's clock is out of sync with the service node network.")
-                            return seal.reject(SnodeAPI.Error.clockOutOfSync)
-                        }
-                        
-                        if statusCode == 401 { // Signature verification failed
-                            SNLog("Failed to verify the signature.")
-                            return seal.reject(SnodeAPI.Error.signatureVerificationFailed)
-                        }
-                        
-                        guard 200...299 ~= statusCode else {
-                            return seal.reject(OnionRequestAPI.Error.httpRequestFailedAtDestination(statusCode: UInt(statusCode), json: json, destination: destination))
-                        }
-                    }
-                    
-                    if let timestamp = json["t"] as? Int64 {
-                        let offset = timestamp - Int64(NSDate.millisecondTimestamp())
-                        SnodeAPI.clockOffset = offset
-                    }
-                      
-                    seal.fulfill(json)
-                }
+                .done2 { data in seal.fulfill((OnionRequestAPI.ResponseInfo(code: 0, headers: [:]), data)) }
                 .catch2 { error in seal.reject(error) }
         }
         

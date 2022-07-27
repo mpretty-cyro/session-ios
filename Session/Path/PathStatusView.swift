@@ -34,9 +34,6 @@ final class PathStatusView: UIView {
         
         switch networkLayer {
             case .onionRequest:
-                if OnionRequestAPI.paths.isEmpty {
-                    OnionRequestAPI.paths = Storage.shared.getOnionRequestPaths()
-                }
                 let color = (!OnionRequestAPI.paths.isEmpty ? Colors.accent : Colors.pathsBuilding)
                 layerLabel.text = "O"
                 setColor(to: color, isAnimated: false)

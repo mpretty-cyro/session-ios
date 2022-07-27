@@ -4,7 +4,18 @@ import Foundation
 import PromiseKit
 import SessionUtilitiesKit
 
-public enum RequestAPI {
+public protocol RequestAPIType {
+    static func sendRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
+    static func sendRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
+}
+
+public extension RequestAPIType {
+    static func sendRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+        sendRequest(request, to: server, using: .v4, with: x25519PublicKey)
+    }
+}
+
+public enum RequestAPI: RequestAPIType {
     public enum NetworkLayer: String, Codable, CaseIterable {
         case onionRequest
         case lokinet
@@ -21,93 +32,151 @@ public enum RequestAPI {
         }
     }
     
-    public static func sendRequest(to snode: Snode, invoking method: Snode.Method, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<JSON> {
-        let payload: JSON = [
-            "method": method.rawValue,
-            "params": parameters
-        ]
+    public static func sendRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
+        let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
+        
+        guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
+            return Promise(error: HTTP.Error.invalidJSON)
+        }
         
         return sendRequest(
-            with: payload,
-            to: OnionRequestAPI.Destination.snode(snode)
+            .post,
+            headers: [:],
+            endpoint: "storage_rpc/v1",
+            body: payload,
+            to: OnionRequestAPIDestination.snode(snode)
         )
-        .recover2 { error -> Promise<JSON> in
+        .map { _, maybeData in
+            guard let data: Data = maybeData else { throw HTTP.Error.invalidResponse }
+
+            return data
+        }
+        .recover2 { error -> Promise<Data> in
             let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
             
             guard
                 layer == .onionRequest,
-                case OnionRequestAPI.Error.httpRequestFailedAtDestination(let statusCode, let json, _) = error
+                case OnionRequestAPIError.httpRequestFailedAtDestination(let statusCode, let data, _) = error
             else { throw error }
             
-            throw SnodeAPI.handleError(withStatusCode: statusCode, json: json, forSnode: snode, associatedWith: publicKey) ?? error
+            throw SnodeAPI.handleError(withStatusCode: statusCode, data: data, forSnode: snode, associatedWith: publicKey) ?? error
         }
     }
     
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendRequest(_ request: NSURLRequest, to server: String, target: String = "/loki/v3/lsrpc", using x25519PublicKey: String) -> Promise<JSON> {
-        var rawHeaders = request.allHTTPHeaderFields ?? [:]
-        rawHeaders.removeValue(forKey: "User-Agent")
-        var headers: JSON = rawHeaders.mapValues { value in
-            switch value.lowercased() {
-                case "true": return true
-                case "false": return false
-                default: return value
-            }
-        }
+    public static func sendRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
-            return Promise(error: OnionRequestAPI.Error.invalidURL)
+            return Promise(error: OnionRequestAPIError.invalidURL)
         }
         
         var endpoint = url.path.removingPrefix("/")
         if let query = url.query { endpoint += "?\(query)" }
         let scheme = url.scheme
         let port = given(url.port) { UInt16($0) }
-        let parametersAsString: String
-        
-        if let tsRequest = request as? TSRequest {
-            headers["Content-Type"] = "application/json"
-            let tsRequestParameters = tsRequest.parameters
-            if !tsRequestParameters.isEmpty {
-                guard let parameters = try? JSONSerialization.data(withJSONObject: tsRequestParameters, options: [ .fragmentsAllowed ]) else {
-                    return Promise(error: HTTP.Error.invalidJSON)
+        let headers: [String: Any] = (request.allHTTPHeaderFields ?? [:])
+            .removingValue(forKey: "User-Agent")
+            .mapValues { value in
+                switch value.lowercased() {
+                    case "true": return true
+                    case "false": return false
+                    default: return value
                 }
-                parametersAsString = String(bytes: parameters, encoding: .utf8) ?? "null"
             }
-            else {
-                parametersAsString = "null"
-            }
-        }
-        else {
-            headers["Content-Type"] = request.allHTTPHeaderFields!["Content-Type"]
-            if let parametersAsInputStream = request.httpBodyStream, let parameters = try? Data(from: parametersAsInputStream) {
-                parametersAsString = "{ \"fileUpload\" : \"\(String(data: parameters.base64EncodedData(), encoding: .utf8) ?? "null")\" }"
-            } else {
-                parametersAsString = "null"
-            }
-        }
-        let payload: JSON = [
-            "body" : parametersAsString,
-            "endpoint" : endpoint,
-            "method" : request.httpMethod!,
-            "headers" : headers
-        ]
-        let destination = OnionRequestAPI.Destination.server(host: host, target: target, x25519PublicKey: x25519PublicKey, scheme: scheme, port: port)
-        let promise = sendRequest(with: payload, to: destination)
-        promise.catch2 { error in
-            SNLog("Couldn't reach server: \(url) due to error: \(error).")
-        }
-        return promise
-    }
-    
-    public static func sendRequest(with payload: JSON, to destination: OnionRequestAPI.Destination) -> Promise<JSON> {
+        
         let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        let destination = OnionRequestAPIDestination.server(
+            host: host,
+            target: version.rawValue,
+            x25519PublicKey: x25519PublicKey,
+            scheme: scheme,
+            port: port
+        )
+        let body: Data?
         
         switch layer {
-            case .onionRequest: return OnionRequestAPI.sendOnionRequest(with: payload, to: destination)
-            case .lokinet: return LokinetRequestAPI.sendLokinetRequest(with: payload, to: destination)
-            case .nativeLokinet: return NativeLokinetRequestAPI.sendNativeLokinetRequest(with: payload, to: destination)
-            case .direct: return DirectRequestAPI.sendDirectRequest(with: payload, to: destination)
+            case .onionRequest:
+                guard let payload: Data = OnionRequestAPI.generatePayload(for: request, with: version) else {
+                    return Promise(error: OnionRequestAPIError.invalidRequestInfo)
+                }
+                
+                body = payload
+                break
+            
+            default: body = request.httpBody
         }
+        
+        return sendRequest(
+            (HTTP.Verb.from(request.httpMethod) ?? .get),   // The default (if nil) is 'GET'
+            headers: headers,
+            endpoint: endpoint,
+            body: body,
+            to: destination,
+            version: version
+        )
+    }
+    
+    private static func sendRequest(
+        _ method: HTTP.Verb,
+        headers: [String: Any],
+        endpoint: String,
+        body: Data?,
+        to destination: OnionRequestAPIDestination,
+        version: OnionRequestAPIVersion = .v4
+    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+        let promise: Promise<(OnionRequestResponseInfoType, Data?)> = {
+            let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+
+            switch layer {
+                case .onionRequest:
+                    guard let payload: Data = body else {
+                        return Promise(error: OnionRequestAPIError.invalidRequestInfo)
+                    }
+                    
+                    return OnionRequestAPI.sendOnionRequest(with: payload, to: destination, version: version)
+                    
+                case .lokinet:
+                    return LokinetRequestAPI
+                        .sendLokinetRequest(
+                            method,
+                            endpoint: endpoint,
+                            body: body,
+                            destination: destination
+                        )
+                    
+                case .nativeLokinet:
+                    return NativeLokinetRequestAPI
+                        .sendNativeLokinetRequest(
+                            method,
+                            endpoint: endpoint,
+                            body: body,
+                            destination: destination
+                        )
+                    
+                case .direct:
+                    return DirectRequestAPI
+                        .sendDirectRequest(
+                            method,
+                            endpoint: endpoint,
+                            body: body,
+                            destination: destination
+                        )
+            }
+        }()
+        
+        // Handle `clockOffset` setting
+        return promise
+            .map2 { response in
+                guard
+                    let data: Data = response.1,
+                    let json: JSON = try? JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON,
+                    let timestamp: Int64 = json["t"] as? Int64
+                else { return response }
+                    
+                let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
+                SnodeAPI.clockOffset = offset
+                
+                return response
+            }
     }
 }
 

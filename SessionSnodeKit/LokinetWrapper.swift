@@ -75,7 +75,7 @@ public enum LokinetWrapper {
     }
     
     public static func getDestinationFor(host: String, port: UInt16) throws -> String {
-        guard LokinetWrapper.isReady else { throw OnionRequestAPI.Error.insufficientSnodes }
+        guard LokinetWrapper.isReady else { throw OnionRequestAPIError.insufficientSnodes }
         
         /// **Note:** Need to ensure we remove any leading 'http/https' and any trailing forward slash from the .loki and .snode address
         let remote: String = [
@@ -97,7 +97,7 @@ public enum LokinetWrapper {
             LokinetWrapper.context
         )
         
-        guard result.error == 0 else { throw OnionRequestAPI.Error.insufficientSnodes }
+        guard result.error == 0 else { throw OnionRequestAPIError.insufficientSnodes }
         
         /// **Note:** The `result.local_address` length is hard-coded to 256 but will include buffer data so we will
         /// need to remove it
@@ -111,17 +111,13 @@ public enum LokinetWrapper {
     }
     
     public static func base32SnodePublicKey(publicKey: String) -> String? {
-        var publicKeyCStr: [CChar] = publicKey.bytes.map { CChar(bitPattern: $0) }
-        
-        guard let base32KeyCStr: UnsafeMutablePointer<CChar> = lokinet_hex_to_base32z(&publicKeyCStr) else {
-            return nil
+        return publicKey.withCString { cStr -> String? in
+            return lokinet_hex_to_base32z(cStr).map {
+                $0.withMemoryRebound(to: UInt8.self, capacity: MemoryLayout.size(ofValue: $0)) {
+                    String(cString: $0)
+                }
+            }
         }
-        
-        let base32Key: String = base32KeyCStr.withMemoryRebound(to: UInt8.self, capacity: MemoryLayout.size(ofValue: base32KeyCStr)) {
-            String(cString: $0)
-        }
-        
-        return base32Key
     }
 }
 

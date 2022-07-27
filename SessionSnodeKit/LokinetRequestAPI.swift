@@ -10,16 +10,22 @@ public enum LokinetRequestAPI {
     internal static let sogsLivePort: UInt16 = 80
     internal static let sogsDevPort: UInt16 = 88
     
-    internal static func sendLokinetRequest(with payload: JSON, to destination: OnionRequestAPI.Destination) -> Promise<JSON> {
+    internal static func sendLokinetRequest(
+        _ method: HTTP.Verb,
+        endpoint: String,
+        headers: [String: String] = [:],
+        body: Data?,
+        destination: OnionRequestAPIDestination
+    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         guard LokinetWrapper.isReady else {
             // Use this error to indicate not setup for now
-            return Promise(error: OnionRequestAPI.Error.insufficientSnodes)
+            return Promise(error: OnionRequestAPIError.insufficientSnodes)
         }
         
-        let (promise, seal) = Promise<JSON>.pending()
+        let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
-            let maybeRequestInfo: (method: HTTP.Verb, address: String, body: Data?)? = {
+            let maybeFinalUrlString: String? = {
                 switch destination {
                     case .server(let host, _, _, _, _):
                         let maybeAddressInfo: (address: String, port: UInt16)? = {
@@ -39,9 +45,6 @@ public enum LokinetRequestAPI {
                         }
                         
                         guard
-                            let endpoint: String = payload["endpoint"] as? String,
-                            let body: String = payload["body"] as? String,
-                            let payloadData: Data = body.data(using: .utf8),
                             let targetAddress: String = try? LokinetWrapper.getDestinationFor(
                                 host: addressInfo.address,
                                 port: addressInfo.port
@@ -50,22 +53,14 @@ public enum LokinetRequestAPI {
                         
                         /// Note: Lokinet encrypts the packets sent over it so no need to send requests over HTTPS (which would end
                         /// up being slower with no real benefit)
-                        return (
-                            (HTTP.Verb.from(payload["method"] as? String) ?? .get),
-                            "http://\(targetAddress)/legacy/\(endpoint)",
-                            (body == "null" ? nil : payloadData)
-                        )
+                        return "http://\(targetAddress)/legacy/\(endpoint)"
                         
                     case .snode(let snode):
-                        guard let targetLokiAddress = LokinetWrapper.base32SnodePublicKey(publicKey: snode.publicKeySet.ed25519Key) else {
+                        guard let targetLokiAddress = LokinetWrapper.base32SnodePublicKey(publicKey: snode.ed25519PublicKey) else {
                             return nil
                         }
                         
                         guard
-                            let payloadData: Data = try? JSONSerialization.data(
-                                withJSONObject: payload,
-                                options: [ .fragmentsAllowed ]
-                            ),
                             let targetAddress: String = try? LokinetWrapper.getDestinationFor(
                                 host: "https://\(targetLokiAddress).snode",
                                 port: snode.port
@@ -73,21 +68,16 @@ public enum LokinetRequestAPI {
                         else { return nil }
                         
                         /// Note: The service nodes require requests to run over HTTPS
-                        return (
-                            .post,
-                            "https://\(targetAddress)/storage_rpc/v1",
-                            payloadData
-                        )
+                        return "https://\(targetAddress)/\(endpoint)"
                 }
             }()
             
-            // Ensure we have the address info
-            guard let requestInfo: (method: HTTP.Verb, address: String, body: Data?) = maybeRequestInfo else {
-                seal.reject(OnionRequestAPI.Error.invalidURL)
+            // Ensure we have the final URL
+            guard let finalUrlString: String = maybeFinalUrlString else {
+                seal.reject(OnionRequestAPIError.invalidURL)
                 return
             }
             
-            let customHeaders: [String: String] = ((payload["headers"] as? [String: String]) ?? [:])
             /// Note: `Host` is a protected header so we can't custom set it
 //                        customHeaders["Host"] = "chat.kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki"//host
                     
@@ -129,38 +119,17 @@ public enum LokinetRequestAPI {
             
             HTTP
                 .execute(
-                    requestInfo.method,
-                    requestInfo.address,
-                    headers: customHeaders,
-                    body: requestInfo.body,
+                    method,
+                    finalUrlString,
+                    headers: headers,
+                    body: body,
                     // FIXME: Why do we need an increased timeout for Lokinet? (smaller values seem to result in timeouts even though we get responses much quicker...)
                     timeout: 60
                 )
-                .done2 { json in
+                .done2 { data in
                     let end = CACurrentMediaTime()
                     SNLog("[Lokinet] \(isSnode ? "Snode" : "Server") request completed \(end - start)s")
-                    if let statusCode = json["status_code"] as? Int {
-                        if statusCode == 406 { // Clock out of sync
-                            SNLog("The user's clock is out of sync with the service node network.")
-                            return seal.reject(SnodeAPI.Error.clockOutOfSync)
-                        }
-                        
-                        if statusCode == 401 { // Signature verification failed
-                            SNLog("Failed to verify the signature.")
-                            return seal.reject(SnodeAPI.Error.signatureVerificationFailed)
-                        }
-                        
-                        guard 200...299 ~= statusCode else {
-                            return seal.reject(OnionRequestAPI.Error.httpRequestFailedAtDestination(statusCode: UInt(statusCode), json: json, destination: destination))
-                        }
-                    }
-                    
-                    if let timestamp = json["t"] as? Int64 {
-                        let offset = timestamp - Int64(NSDate.millisecondTimestamp())
-                        SnodeAPI.clockOffset = offset
-                    }
-                    
-                    seal.fulfill(json)
+                    seal.fulfill((OnionRequestAPI.ResponseInfo(code: 0, headers: [:]), data))
                 }
                 .catch2 { error in
                     let end = CACurrentMediaTime()
