@@ -130,8 +130,6 @@ PODS:
     - YapDatabase/SQLCipher/Core
   - YapDatabase/SQLCipher/Extensions/View (3.1.1):
     - YapDatabase/SQLCipher/Core
-  - YYImage (1.0.4):
-    - YYImage/Core (= 1.0.4)
   - YYImage/Core (1.0.4)
   - YYImage/libwebp (1.0.4):
     - libwebp
@@ -160,7 +158,6 @@ DEPENDENCIES:
   - SwiftProtobuf (~> 1.5.0)
   - WebRTC-lib
   - YapDatabase/SQLCipher (from `https://github.com/oxen-io/session-ios-yap-database.git`, branch `signal-release`)
-  - YYImage (from `https://github.com/signalapp/YYImage`)
   - YYImage/libwebp (from `https://github.com/signalapp/YYImage`)
   - ZXingObjC
 
@@ -245,6 +242,6 @@ SPEC CHECKSUMS:
   YYImage: f1ddd15ac032a58b78bbed1e012b50302d318331
   ZXingObjC: fdbb269f25dd2032da343e06f10224d62f537bdb
 
-PODFILE CHECKSUM: c3e8be2f9a8360d6a1c9a245000b4b7982f182e3
+PODFILE CHECKSUM: 58bb6b979ac78298ff0a2c2e540ec0fefcf42c58
 
 COCOAPODS: 1.11.3
