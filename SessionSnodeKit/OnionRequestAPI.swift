@@ -7,12 +7,12 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public protocol OnionRequestAPIType {
-    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
-    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
+    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> RequestContainer<Data>
+    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)>
 }
 
 public extension OnionRequestAPIType {
-    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         sendOnionRequest(request, to: server, using: .v4, with: x25519PublicKey)
     }
 }
@@ -369,11 +369,11 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     // MARK: - Public API
     
     /// Sends an onion request to `snode`. Builds new paths as needed.
-    public static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
+    public static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> RequestContainer<Data> {
         let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
         
         guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return RequestContainer(promise: Promise(error: HTTP.Error.invalidJSON))
         }
         
         /// **Note:** Currently the service nodes only support V3 Onion Requests
@@ -393,16 +393,16 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     }
 
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
-            return Promise(error: OnionRequestAPIError.invalidURL)
+            return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidURL))
         }
         
         let scheme: String? = url.scheme
         let port: UInt16? = url.port.map { UInt16($0) }
         
         guard let payload: Data = generatePayload(for: request, with: version) else {
-            return Promise(error: OnionRequestAPIError.invalidRequestInfo)
+            return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))
         }
         
         let destination = OnionRequestAPIDestination.server(
@@ -412,15 +412,16 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             scheme: scheme,
             port: port
         )
-        let promise = sendOnionRequest(with: payload, to: destination, version: version)
-        promise.catch2 { error in
+        let container = sendOnionRequest(with: payload, to: destination, version: version)
+        container.promise.catch2 { error in
             SNLog("Couldn't reach server: \(url) due to error: \(error).")
         }
-        return promise
+        return container
     }
 
-    internal static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    internal static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
+        let container = RequestContainer(promise: promise)
         var guardSnode: Snode?
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
@@ -444,7 +445,9 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                     }
                     let destinationSymmetricKey = intermediate.destinationSymmetricKey
                     
-                    HTTP.execute(.post, url, body: body)
+                    let (promise, task) = HTTP.execute2(.post, url, body: body)
+                    container.task = task
+                    promise
                         .done2 { responseData in
                             handleResponse(
                                 responseData: responseData,
@@ -540,7 +543,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             }
         }
         
-        return promise
+        return container
     }
     
     // MARK: - Version Handling

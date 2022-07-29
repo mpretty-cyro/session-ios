@@ -32,6 +32,8 @@ public enum RequestAPI: RequestAPIType {
         }
     }
     
+    fileprivate static let currentRequests: Atomic<[RequestContainer<(OnionRequestResponseInfoType, Data?)>]> = Atomic([])
+    
     public static func sendRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
         let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
         
@@ -123,13 +125,13 @@ public enum RequestAPI: RequestAPIType {
         to destination: OnionRequestAPIDestination,
         version: OnionRequestAPIVersion = .v4
     ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
-        let promise: Promise<(OnionRequestResponseInfoType, Data?)> = {
+        let container: RequestContainer<(OnionRequestResponseInfoType, Data?)> = {
             let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
 
             switch layer {
                 case .onionRequest:
                     guard let payload: Data = body else {
-                        return Promise(error: OnionRequestAPIError.invalidRequestInfo)
+                        return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))
                     }
                     
                     return OnionRequestAPI.sendOnionRequest(with: payload, to: destination, version: version)
@@ -163,8 +165,13 @@ public enum RequestAPI: RequestAPIType {
             }
         }()
         
+        // Add the request from the cache
+        RequestAPI.currentRequests.mutate { requests in
+            requests = requests.appending(container)
+        }
+        
         // Handle `clockOffset` setting
-        return promise
+        return container.promise
             .map2 { response in
                 guard
                     let data: Data = response.1,
@@ -176,6 +183,12 @@ public enum RequestAPI: RequestAPIType {
                 SnodeAPI.clockOffset = offset
                 
                 return response
+            }
+            .ensure {
+                // Remove the request from the cache
+                RequestAPI.currentRequests.mutate { requests in
+                    requests = requests.filter { $0.uuid != container.uuid }
+                }
             }
     }
 }
@@ -197,5 +210,32 @@ public class objc_NetworkLayer: NSObject {
     @objc public static func setLayerTo(_ value: String) {
         UserDefaults.standard[.networkLayer] = (RequestAPI.NetworkLayer(rawValue: value) ?? .onionRequest).rawValue
         NotificationCenter.default.post(name: .networkLayerChanged, object: nil, userInfo: nil)
+        
+        GetSnodePoolJob.run()
+        
+        // Cancel and remove all current requests
+        RequestAPI.currentRequests.mutate { requests in
+            requests.forEach { $0.task?.cancel() }
+            requests = []
+        }
+    }
+}
+
+public class RequestContainer<T> {
+    public let uuid: UUID = UUID()
+    public let promise: Promise<T>
+    public var task: URLSessionDataTask?
+    
+    init(promise: Promise<T>, task: URLSessionDataTask? = nil) {
+        self.promise = promise
+        self.task = task
+    }
+    
+    public func map<U>(_ transform: @escaping(T) throws -> U) -> RequestContainer<U> {
+        return RequestContainer<U>(promise: promise.map(transform), task: task)
+    }
+    
+    public func recover2<U: Thenable>(_ body: @escaping(Error) throws -> U) -> RequestContainer<T> where U.T == T {
+        return RequestContainer(promise: promise.recover2(body), task: task)
     }
 }

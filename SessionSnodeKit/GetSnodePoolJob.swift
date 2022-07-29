@@ -24,33 +24,33 @@ public enum GetSnodePoolJob: JobExecutor {
             return
         }
         
-        // Force Lokinet to start building (want to do this regardless of the
-        // network layer to get a proper status comparison between them)
-        LokinetWrapper.setupIfNeeded()
+        let layer: RequestAPI.NetworkLayer = (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        
+        switch layer {
+            case .onionRequest: break
+            case .lokinet:
+                // Force Lokinet to start building (want to do this regardless of the
+                // network layer to get a proper status comparison between them)
+                LokinetWrapper.setupIfNeeded()
+                
+            default:
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .directNetworkReady, object: nil)
+                }
+        }
         
         // If we already have cached Snodes then we still want to trigger the 'SnodeAPI.getSnodePool'
         // but we want to succeed this job immediately (since it's marked as blocking), this allows us
         // to block if we have no Snode pool and prevent other jobs from failing but avoids having to
         // wait if we already have a potentially valid snode pool
         guard !SnodeAPI.hasCachedSnodesInclusingExpired() else {
-            SnodeAPI.getSnodePool()
-                .done(on: queue) { _ in
-                    // Force the OnionRequest paths to start building (want to do this regardless of the
-                    // network layer to get a proper status comparison between them)
-                    OnionRequestAPI.getPath(excluding: nil).retainUntilComplete()
-                }
-                .retainUntilComplete()
+            SnodeAPI.getSnodePool().retainUntilComplete()
             success(job, false)
             return
         }
         
         SnodeAPI.getSnodePool()
-            .done(on: queue) { _ in
-                // Force the OnionRequest paths to start building (want to do this regardless of the
-                // network layer to get a proper status comparison between them)
-                OnionRequestAPI.getPath(excluding: nil).retainUntilComplete()
-                success(job, false)
-            }
+            .done(on: queue) { _ in success(job, false) }
             .catch(on: queue) { error in failure(job, error, false) }
             .retainUntilComplete()
     }

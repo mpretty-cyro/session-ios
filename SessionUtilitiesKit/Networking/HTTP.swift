@@ -97,6 +97,7 @@ public enum HTTP {
         case maxFileSizeExceeded
         case httpRequestFailed(statusCode: UInt, data: Data?)
         case timeout
+        case cancelled
         
         public var errorDescription: String? {
             switch self {
@@ -107,6 +108,7 @@ public enum HTTP {
                 case .maxFileSizeExceeded: return "Maximum file size exceeded."
                 case .httpRequestFailed(let statusCode, _): return "HTTP request failed with status code: \(statusCode)."
                 case .timeout: return "The request timed out."
+                case .cancelled: return "The request was cancelled."
             }
         }
     }
@@ -134,6 +136,12 @@ public enum HTTP {
     }
     
     public static func execute(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<Data> {
+        let (promise, _) = execute2(verb, url, headers: headers, body: body, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
+        
+        return promise
+    }
+    
+    public static func execute2(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> (Promise<Data>, URLSessionDataTask) {
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = verb.rawValue
         request.httpBody = body
@@ -158,6 +166,7 @@ public enum HTTP {
                 // Override the actual error so that we can correctly catch failed requests in sendOnionRequest(invoking:on:with:)
                 switch (error as? NSError)?.code {
                     case NSURLErrorTimedOut: return seal.reject(Error.timeout)
+                    case NSURLErrorCancelled: return seal.reject(Error.cancelled)
                     default: return seal.reject(Error.httpRequestFailed(statusCode: 0, data: nil))
                 }
                 
@@ -186,7 +195,7 @@ public enum HTTP {
             seal.fulfill(data)
         }
         task.resume()
-        return promise
+        return (promise, task)
     }
     
     // FIXME: Either use or remove the web socket logic

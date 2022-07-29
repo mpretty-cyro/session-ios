@@ -11,8 +11,9 @@ public enum DirectRequestAPI {
         headers: [String: String] = [:],
         body: Data?,
         destination: OnionRequestAPIDestination
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
+        let container = RequestContainer(promise: promise)
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
             let maybeFinalUrlString: String? = {
@@ -34,17 +35,20 @@ public enum DirectRequestAPI {
             /// Note: `Host` is a protected header so we can't custom set it
 //                        customHeaders["Host"] = "chat.kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki"//host
             
-            HTTP
-                .execute(
+            let (promise, task) = HTTP
+                .execute2(
                     method,
                     finalUrlString,
                     headers: headers,
                     body: body
                 )
+            
+            container.task = task
+            promise
                 .done2 { data in seal.fulfill((OnionRequestAPI.ResponseInfo(code: 0, headers: [:]), data)) }
                 .catch2 { error in seal.reject(error) }
         }
         
-        return promise
+        return container
     }
 }

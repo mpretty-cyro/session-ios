@@ -16,13 +16,14 @@ public enum LokinetRequestAPI {
         headers: [String: String] = [:],
         body: Data?,
         destination: OnionRequestAPIDestination
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         guard LokinetWrapper.isReady else {
             // Use this error to indicate not setup for now
-            return Promise(error: OnionRequestAPIError.insufficientSnodes)
+            return RequestContainer(promise: Promise(error: OnionRequestAPIError.insufficientSnodes))
         }
         
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
+        let container = RequestContainer(promise: promise)
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
             let maybeFinalUrlString: String? = {
@@ -117,8 +118,8 @@ public enum LokinetRequestAPI {
                 }
             }()
             
-            HTTP
-                .execute(
+            let (promise, task) = HTTP
+                .execute2(
                     method,
                     finalUrlString,
                     headers: headers,
@@ -126,6 +127,9 @@ public enum LokinetRequestAPI {
                     // FIXME: Why do we need an increased timeout for Lokinet? (smaller values seem to result in timeouts even though we get responses much quicker...)
                     timeout: 60
                 )
+            
+            container.task = task
+            promise
                 .done2 { data in
                     let end = CACurrentMediaTime()
                     SNLog("[Lokinet] \(isSnode ? "Snode" : "Server") request completed \(end - start)s")
@@ -133,11 +137,18 @@ public enum LokinetRequestAPI {
                 }
                 .catch2 { error in
                     let end = CACurrentMediaTime()
-                    SNLog("[Lokinet] \(isSnode ? "Snode" : "Server") request failed \(end - start)s")
+                    let errorType: String = {
+                        switch error as? HTTP.Error {
+                            case .timeout: return "timed out"
+                            case .cancelled: return "was cancelled"
+                            default: return "failed"
+                        }
+                    }()
+                    SNLog("[Lokinet] \(isSnode ? "Snode" : "Server") request \(errorType) \(end - start)s")
                     seal.reject(error)
                 }
         }
         
-        return promise
+        return container
     }
 }

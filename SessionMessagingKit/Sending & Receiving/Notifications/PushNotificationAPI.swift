@@ -65,7 +65,7 @@ public final class PushNotificationAPI : NSObject {
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-            OnionRequestAPI.sendOnionRequest(request, to: server, using: .v2, with: serverPublicKey)
+            RequestAPI.sendRequest(request, to: server, using: .v2, with: serverPublicKey)
                 .map2 { _, response in
                     guard let response: UpdateRegistrationResponse = try? response?.decoded(as: UpdateRegistrationResponse.self) else {
                         return SNLog("Couldn't unregister from push notifications.")
@@ -127,7 +127,7 @@ public final class PushNotificationAPI : NSObject {
         
         promises.append(
             attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-                OnionRequestAPI.sendOnionRequest(request, to: server, using: .v2, with: serverPublicKey)
+                RequestAPI.sendRequest(request, to: server, using: .v2, with: serverPublicKey)
                     .map2 { _, response -> Void in
                         guard let response: UpdateRegistrationResponse = try? response?.decoded(as: UpdateRegistrationResponse.self) else {
                             return SNLog("Couldn't register device token.")
@@ -193,7 +193,7 @@ public final class PushNotificationAPI : NSObject {
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-            OnionRequestAPI.sendOnionRequest(request, to: server, using: .v2, with: serverPublicKey)
+            RequestAPI.sendRequest(request, to: server, using: .v2, with: serverPublicKey)
                 .map2 { _, response in
                     guard let response: UpdateRegistrationResponse = try? response?.decoded(as: UpdateRegistrationResponse.self) else {
                         return SNLog("Couldn't subscribe/unsubscribe for closed group: \(closedGroupPublicKey).")
@@ -236,7 +236,7 @@ public final class PushNotificationAPI : NSObject {
         
         let retryCount: UInt = (maxRetryCount ?? PushNotificationAPI.maxRetryCount)
         let promise: Promise<Void> = attempt(maxRetryCount: retryCount, recoveringOn: queue) {
-            OnionRequestAPI.sendOnionRequest(request, to: server, using: .v2, with: serverPublicKey)
+            RequestAPI.sendRequest(request, to: server, using: .v2, with: serverPublicKey)
                 .map { _ in }
         }
         
