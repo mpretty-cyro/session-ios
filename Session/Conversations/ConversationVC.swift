@@ -8,9 +8,8 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
-    private static let loadingHeaderHeight: CGFloat = 20
-    private static let messageRequestButtonHeight: CGFloat = 34
+final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
+    private static let loadingHeaderHeight: CGFloat = 40
     
     internal let viewModel: ConversationViewModel
     private var dataChangeObservable: DatabaseCancellable?
@@ -45,7 +44,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     
     // Mentions
     var currentMentionStartIndex: String.Index?
-    var mentions: [ConversationViewModel.MentionInfo] = []
+    var mentions: [MentionInfo] = []
     
     // Scrolling & paging
     var isUserScrolling = false
@@ -53,6 +52,10 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     var didFinishInitialLayout = false
     var scrollDistanceToBottomBeforeUpdate: CGFloat?
     var baselineKeyboardHeight: CGFloat = 0
+    
+    // Reaction
+    var currentReactionListSheet: ReactionListSheet?
+    var reactionExpandedMessageIds: Set<String> = []
 
     /// This flag is used to temporarily prevent the ConversationVC from becoming the first responder (primarily used with
     /// custom transitions from preventing them from being buggy
@@ -63,12 +66,9 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         // Need to return false during the swap between threads to prevent keyboard dismissal
         !isReplacingThread
     }
-
+    
     override var inputAccessoryView: UIView? {
-        guard
-            viewModel.threadData.threadVariant != .closedGroup ||
-            viewModel.threadData.currentUserIsClosedGroupMember == true
-        else { return nil }
+        guard viewModel.threadData.canWrite else { return nil }
         
         return (isShowingSearchUI ? searchController.resultsBar : snInputView)
     }
@@ -134,17 +134,21 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     lazy var tableView: InsetLockableTableView = {
         let result: InsetLockableTableView = InsetLockableTableView()
         result.separatorStyle = .none
-        result.backgroundColor = .clear
+        result.themeBackgroundColor = .clear
         result.showsVerticalScrollIndicator = false
         result.contentInsetAdjustmentBehavior = .never
         result.keyboardDismissMode = .interactive
         result.contentInset = UIEdgeInsets(
             top: 0,
             leading: 0,
-            bottom: Values.mediumSpacing,
+            bottom: (viewModel.threadData.canWrite ?
+                Values.mediumSpacing :
+                (Values.mediumSpacing + (UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? 0))
+            ),
             trailing: 0
         )
         result.registerHeaderFooterView(view: UITableViewHeaderFooterView.self)
+        result.register(view: DateHeaderCell.self)
         result.register(view: VisibleMessageCell.self)
         result.register(view: InfoMessageCell.self)
         result.register(view: TypingIndicatorCell.self)
@@ -162,11 +166,11 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
 
     lazy var unreadCountView: UIView = {
         let result: UIView = UIView()
-        result.backgroundColor = Colors.text.withAlphaComponent(Values.veryLowOpacity)
-        result.set(.width, greaterThanOrEqualTo: ConversationVC.unreadCountViewSize)
-        result.set(.height, to: ConversationVC.unreadCountViewSize)
+        result.themeBackgroundColor = .backgroundSecondary
         result.layer.masksToBounds = true
         result.layer.cornerRadius = (ConversationVC.unreadCountViewSize / 2)
+        result.set(.width, greaterThanOrEqualTo: ConversationVC.unreadCountViewSize)
+        result.set(.height, to: ConversationVC.unreadCountViewSize)
         
         return result
     }()
@@ -174,7 +178,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     lazy var unreadCountLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .boldSystemFont(ofSize: Values.verySmallFontSize)
-        result.textColor = Colors.text
+        result.themeTextColor = .textPrimary
         result.textAlignment = .center
         
         return result
@@ -183,7 +187,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     lazy var blockedBanner: InfoBanner = {
         let result: InfoBanner = InfoBanner(
             message: self.viewModel.blockedBannerMessage,
-            backgroundColor: Colors.destructive
+            backgroundColor: .danger
         )
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(unblock))
         result.addGestureRecognizer(tapGestureRecognizer)
@@ -209,11 +213,11 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     lazy var messageRequestView: UIView = {
         let result: UIView = UIView()
         result.translatesAutoresizingMaskIntoConstraints = false
+        result.themeBackgroundColor = .backgroundPrimary
         result.isHidden = (
             self.viewModel.threadData.threadIsMessageRequest == false ||
             self.viewModel.threadData.threadRequiresApproval == true
         )
-        result.setGradient(Gradients.defaultBackground)
 
         return result
     }()
@@ -222,8 +226,8 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         let result: UILabel = UILabel()
         result.translatesAutoresizingMaskIntoConstraints = false
         result.font = UIFont.systemFont(ofSize: 12)
-        result.text = NSLocalizedString("MESSAGE_REQUESTS_INFO", comment: "")
-        result.textColor = Colors.sessionMessageRequestsInfoText
+        result.text = "MESSAGE_REQUESTS_INFO".localized()
+        result.themeTextColor = .textSecondary
         result.textAlignment = .center
         result.numberOfLines = 2
 
@@ -231,51 +235,31 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     }()
 
     private lazy var messageRequestAcceptButton: UIButton = {
-        let result: UIButton = UIButton()
+        let result: SessionButton = SessionButton(style: .bordered, size: .medium)
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.clipsToBounds = true
-        result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 18)
-        result.setTitle(NSLocalizedString("TXT_DELETE_ACCEPT", comment: ""), for: .normal)
-        result.setTitleColor(Colors.sessionHeading, for: .normal)
-        result.setBackgroundImage(
-            Colors.sessionHeading
-                .withAlphaComponent(isDarkMode ? 0.2 : 0.06)
-                .toImage(isDarkMode: isDarkMode),
-            for: .highlighted
-        )
-        result.layer.cornerRadius = (ConversationVC.messageRequestButtonHeight / 2)
-        result.layer.borderColor = Colors.sessionHeading
-            .resolvedColor(
-                // Note: This is needed for '.cgColor' to support dark mode
-                with: UITraitCollection(userInterfaceStyle: isDarkMode ? .dark : .light)
-            ).cgColor
-        result.layer.borderWidth = 1
+        result.setTitle("TXT_DELETE_ACCEPT".localized(), for: .normal)
         result.addTarget(self, action: #selector(acceptMessageRequest), for: .touchUpInside)
 
         return result
     }()
 
     private lazy var messageRequestDeleteButton: UIButton = {
+        let result: SessionButton = SessionButton(style: .destructive, size: .medium)
+        result.translatesAutoresizingMaskIntoConstraints = false
+        result.setTitle("TXT_DECLINE_TITLE".localized(), for: .normal)
+        result.addTarget(self, action: #selector(deleteMessageRequest), for: .touchUpInside)
+
+        return result
+    }()
+    
+    private lazy var messageRequestBlockButton: UIButton = {
         let result: UIButton = UIButton()
         result.translatesAutoresizingMaskIntoConstraints = false
         result.clipsToBounds = true
-        result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 18)
-        result.setTitle(NSLocalizedString("TXT_DELETE_TITLE", comment: ""), for: .normal)
-        result.setTitleColor(Colors.destructive, for: .normal)
-        result.setBackgroundImage(
-            Colors.destructive
-                .withAlphaComponent(isDarkMode ? 0.2 : 0.06)
-                .toImage(isDarkMode: isDarkMode),
-            for: .highlighted
-        )
-        result.layer.cornerRadius = (ConversationVC.messageRequestButtonHeight / 2)
-        result.layer.borderColor = Colors.destructive
-            .resolvedColor(
-                // Note: This is needed for '.cgColor' to support dark mode
-                with: UITraitCollection(userInterfaceStyle: isDarkMode ? .dark : .light)
-            ).cgColor
-        result.layer.borderWidth = 1
-        result.addTarget(self, action: #selector(deleteMessageRequest), for: .touchUpInside)
+        result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 16)
+        result.setTitle("TXT_BLOCK_USER_TITLE".localized(), for: .normal)
+        result.setThemeTitleColor(.danger, for: .normal)
+        result.addTarget(self, action: #selector(block), for: .touchUpInside)
 
         return result
     }()
@@ -317,11 +301,6 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Gradient
-        setUpGradientBackground()
-        
-        // Nav bar
-        setUpNavBarStyle()
         navigationItem.titleView = titleView
         
         // Note: We need to update the nav bar buttons here (with invalid data) because if we don't the
@@ -339,6 +318,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         view.addSubview(scrollButton)
         view.addSubview(messageRequestView)
 
+        messageRequestView.addSubview(messageRequestBlockButton)
         messageRequestView.addSubview(messageRequestDescriptionLabel)
         messageRequestView.addSubview(messageRequestAcceptButton)
         messageRequestView.addSubview(messageRequestDeleteButton)
@@ -351,21 +331,22 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         self.scrollButtonBottomConstraint?.isActive = false // Note: Need to disable this to avoid a conflict with the other bottom constraint
         self.scrollButtonMessageRequestsBottomConstraint = scrollButton.pin(.bottom, to: .top, of: messageRequestView, withInset: -16)
         
-        messageRequestDescriptionLabel.pin(.top, to: .top, of: messageRequestView, withInset: 10)
+        messageRequestBlockButton.pin(.top, to: .top, of: messageRequestView, withInset: 10)
+        messageRequestBlockButton.center(.horizontal, in: messageRequestView)
+        
+        messageRequestDescriptionLabel.pin(.top, to: .bottom, of: messageRequestBlockButton, withInset: 5)
         messageRequestDescriptionLabel.pin(.left, to: .left, of: messageRequestView, withInset: 40)
         messageRequestDescriptionLabel.pin(.right, to: .right, of: messageRequestView, withInset: -40)
 
         messageRequestAcceptButton.pin(.top, to: .bottom, of: messageRequestDescriptionLabel, withInset: 20)
         messageRequestAcceptButton.pin(.left, to: .left, of: messageRequestView, withInset: 20)
         messageRequestAcceptButton.pin(.bottom, to: .bottom, of: messageRequestView)
-        messageRequestAcceptButton.set(.height, to: ConversationVC.messageRequestButtonHeight)
         
         messageRequestDeleteButton.pin(.top, to: .bottom, of: messageRequestDescriptionLabel, withInset: 20)
         messageRequestDeleteButton.pin(.left, to: .right, of: messageRequestAcceptButton, withInset: UIDevice.current.isIPad ? Values.iPadButtonSpacing : 20)
         messageRequestDeleteButton.pin(.right, to: .right, of: messageRequestView, withInset: -20)
         messageRequestDeleteButton.pin(.bottom, to: .bottom, of: messageRequestView)
         messageRequestDeleteButton.set(.width, to: .width, of: messageRequestAcceptButton)
-        messageRequestDeleteButton.set(.height, to: ConversationVC.messageRequestButtonHeight)
 
         // Unread count view
         view.addSubview(unreadCountView)
@@ -399,6 +380,12 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             self,
             selector: #selector(handleKeyboardWillHideNotification(_:)),
             name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sendScreenshotNotification),
+            name: UIApplication.userDidTakeScreenshotNotification,
             object: nil
         )
     }
@@ -452,6 +439,15 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     @objc func applicationDidBecomeActive(_ notification: Notification) {
         startObservingChanges(didReturnFromBackground: true)
         recoverInputView()
+        
+        if !isShowingSearchUI {
+            if !self.isFirstResponder {
+                self.becomeFirstResponder()
+            }
+            else {
+                self.reloadInputViews()
+            }
+        }
     }
     
     @objc func applicationDidResignActive(_ notification: Notification) {
@@ -611,11 +607,8 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             snInputView.text = draft
         }
         
-        // Now we have done all the needed diffs, update the viewModel with the latest data and mark
-        // all messages as read (we do it in here as the 'threadData' actually contains the last
-        // 'interactionId' for the thread)
+        // Now we have done all the needed diffs update the viewModel with the latest data
         self.viewModel.updateThreadData(updatedThreadData)
-        self.viewModel.markAllAsRead()
         
         /// **Note:** This needs to happen **after** we have update the viewModel's thread data
         if initialLoad || viewModel.threadData.currentUserIsClosedGroupMember != updatedThreadData.currentUserIsClosedGroupMember {
@@ -629,17 +622,26 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     }
     
     private func handleInteractionUpdates(_ updatedData: [ConversationViewModel.SectionModel], initialLoad: Bool = false) {
-        // Ensure the first load or a load when returning from a child screen runs without animations (if
-        // we don't do this the cells will animate in from a frame of CGRect.zero or have a buggy transition)
+        // Ensure the first load or a load when returning from a child screen runs without
+        // animations (if we don't do this the cells will animate in from a frame of
+        // CGRect.zero or have a buggy transition)
         guard self.hasLoadedInitialInteractionData else {
-            self.hasLoadedInitialInteractionData = true
-            self.viewModel.updateInteractionData(updatedData)
-            
-            UIView.performWithoutAnimation {
-                self.tableView.reloadData()
-                self.performInitialScrollIfNeeded()
+            // Need to dispatch async to prevent this from causing glitches in the push animation
+            DispatchQueue.main.async {
+                self.hasLoadedInitialInteractionData = true
+                self.viewModel.updateInteractionData(updatedData)
+                
+                UIView.performWithoutAnimation {
+                    self.tableView.reloadData()
+                    self.performInitialScrollIfNeeded()
+                }
             }
             return
+        }
+        
+        // Update the ReactionListSheet (if one exists)
+        if let messageUpdates: [MessageViewModel] = updatedData.first(where: { $0.model == .messages })?.elements {
+            self.currentReactionListSheet?.handleInteractionUpdates(messageUpdates)
         }
         
         // Store the 'sentMessageBeforeUpdate' state locally
@@ -684,10 +686,22 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             source: viewModel.interactionData,
             target: updatedData
         )
-        let isInsert: Bool = (changeset.map({ $0.elementInserted.count }).reduce(0, +) > 0)
+        let numItemsInserted: Int = changeset.map { $0.elementInserted.count }.reduce(0, +)
+        let isInsert: Bool = (numItemsInserted > 0)
         let wasLoadingMore: Bool = self.isLoadingMore
         let wasOffsetCloseToBottom: Bool = self.isCloseToBottom
         let numItemsInUpdatedData: [Int] = updatedData.map { $0.elements.count }
+        let didSwapAllContent: Bool = (updatedData
+            .first(where: { $0.model == .messages })?
+            .elements
+            .contains(where: {
+                $0.id == self.viewModel.interactionData
+                .first(where: { $0.model == .messages })?
+                .elements
+                .first?
+                .id
+            }))
+            .defaulting(to: false)
         let itemChangeInfo: ItemChangeInfo? = {
             guard
                 isInsert,
@@ -695,10 +709,23 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                 let newSectionIndex: Int = updatedData.firstIndex(where: { $0.model == .messages }),
                 let newFirstItemIndex: Int = updatedData[newSectionIndex].elements
                     .firstIndex(where: { item -> Bool in
-                        item.id == self.viewModel.interactionData[oldSectionIndex].elements.first?.id
+                        // Since the first item is probably a `DateHeaderCell` (which would likely
+                        // be removed when inserting items above it) we check if the id matches
+                        // either the first or second item
+                        let messages: [MessageViewModel] = self.viewModel
+                            .interactionData[oldSectionIndex]
+                            .elements
+                        
+                        return (
+                            item.id == messages[safe: 0]?.id ||
+                            item.id == messages[safe: 1]?.id
+                        )
                     }),
                 let firstVisibleIndexPath: IndexPath = self.tableView.indexPathsForVisibleRows?
-                    .filter({ $0.section == oldSectionIndex })
+                    .filter({
+                        $0.section == oldSectionIndex &&
+                        self.viewModel.interactionData[$0.section].elements[$0.row].cellType != .dateHeader
+                    })
                     .sorted()
                     .first,
                 let newVisibleIndex: Int = updatedData[newSectionIndex].elements
@@ -712,7 +739,9 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             return ItemChangeInfo(
                 isInsertAtTop: (
                     newSectionIndex > oldSectionIndex ||
-                    newFirstItemIndex > 0
+                    // Note: Using `1` here instead of `0` as the first item will generally
+                    // be a `DateHeaderCell` instead of a message
+                    newFirstItemIndex > 1
                 ),
                 firstIndexIsVisible: (firstVisibleIndexPath.row == 0),
                 visibleIndexPath: IndexPath(row: newVisibleIndex, section: newSectionIndex),
@@ -720,7 +749,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             )
         }()
         
-        guard !isInsert || wasLoadingMore || itemChangeInfo?.isInsertAtTop == true else {
+        guard !isInsert || itemChangeInfo?.isInsertAtTop == true else {
             self.viewModel.updateInteractionData(updatedData)
             self.tableView.reloadData()
             
@@ -729,22 +758,45 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             if let focusedInteractionId: Int64 = self.focusedInteractionId {
                 // If we had a focusedInteractionId then scroll to it (and hide the search
                 // result bar loading indicator)
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) { [weak self] in
+                let delay: DispatchTime = (didSwapAllContent ?
+                    .now() :
+                    (.now() + .milliseconds(100))
+                )
+                
+                DispatchQueue.main.asyncAfter(deadline: delay) { [weak self] in
                     self?.searchController.resultsBar.stopLoading()
                     self?.scrollToInteractionIfNeeded(
                         with: focusedInteractionId,
                         isAnimated: true,
                         highlight: (self?.shouldHighlightNextScrollToInteraction == true)
                     )
+                    
+                    if wasLoadingMore {
+                        // Complete page loading
+                        self?.isLoadingMore = false
+                        self?.autoLoadNextPageIfNeeded()
+                    }
                 }
             }
-            else if wasOffsetCloseToBottom {
-                // Scroll to the bottom if an interaction was just inserted and we either
-                // just sent a message or are close enough to the bottom (wait a tiny fraction
-                // to avoid buggy animation behaviour)
+            else if wasOffsetCloseToBottom && !wasLoadingMore && numItemsInserted < 5 {
+                /// Scroll to the bottom if an interaction was just inserted and we either just sent a message or are close enough to the
+                /// bottom (wait a tiny fraction to avoid buggy animation behaviour)
+                ///
+                /// **Note:** We won't automatically scroll to the bottom if 5 or more messages were inserted (to avoid endlessly
+                /// auto-scrolling to the bottom when fetching new pages of data within open groups
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) { [weak self] in
                     self?.scrollToBottom(isAnimated: true)
                 }
+            }
+            else if wasLoadingMore {
+                // Complete page loading
+                self.isLoadingMore = false
+                self.autoLoadNextPageIfNeeded()
+            }
+            else {
+                // Need to update the scroll button alpha in case new messages were added but we didn't scroll
+                self.scrollButton.alpha = self.getScrollButtonOpacity()
+                self.unreadCountView.alpha = self.scrollButton.alpha
             }
             return
         }
@@ -755,8 +807,9 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         ///
         /// Unfortunately the UITableView also does some weird things when updating (where it won't have updated it's internal data until
         /// after it performs the next layout); the below code checks a condition on layout and if it passes it calls a closure
-        if let itemChangeInfo: ItemChangeInfo = itemChangeInfo, (itemChangeInfo.isInsertAtTop || wasLoadingMore) {
-            let oldCellHeight: CGFloat = self.tableView.rectForRow(at: itemChangeInfo.oldVisibleIndexPath).height
+        if let itemChangeInfo: ItemChangeInfo = itemChangeInfo, itemChangeInfo.isInsertAtTop {
+            let oldCellRect: CGRect = self.tableView.rectForRow(at: itemChangeInfo.oldVisibleIndexPath)
+            let oldCellTopOffset: CGFloat = (self.tableView.frame.minY - self.tableView.convert(oldCellRect, to: self.tableView.superview).minY)
             
             // The the user triggered the 'scrollToTop' animation (by tapping in the nav bar) then we
             // need to stop the animation before attempting to lock the offset (otherwise things break)
@@ -772,25 +825,17 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                     numRowsInSections == numItemsInUpdatedData
                 },
                 then: { [weak self] in
+                    // Only recalculate the contentOffset when loading new data if the amount of data
+                    // loaded was smaller than 2 pages (this will prevent calculating the frames of
+                    // a large number of cells when getting search results which are very far away
+                    // only to instantly start scrolling making the calculation redundant)
                     UIView.performWithoutAnimation {
-                        let calculatedRowHeights: CGFloat = (0..<itemChangeInfo.visibleIndexPath.row)
-                            .reduce(into: 0) { result, next in
-                                result += (self?.tableView
-                                    .rectForRow(
-                                        at: IndexPath(
-                                            row: next,
-                                            section: itemChangeInfo.visibleIndexPath.section
-                                        )
-                                    )
-                                    .height)
-                                    .defaulting(to: 0)
-                            }
-                        let newTargetHeight: CGFloat? = self?.tableView
-                            .rectForRow(at: itemChangeInfo.visibleIndexPath)
-                            .height
-                        let heightDiff: CGFloat = (oldCellHeight - (newTargetHeight ?? oldCellHeight))
-
-                        self?.tableView.contentOffset.y += (calculatedRowHeights - heightDiff)
+                        self?.tableView.scrollToRow(
+                            at: itemChangeInfo.visibleIndexPath,
+                            at: .top,
+                            animated: false
+                        )
+                        self?.tableView.contentOffset.y += oldCellTopOffset
                     }
                     
                     if let focusedInteractionId: Int64 = self?.focusedInteractionId {
@@ -805,20 +850,44 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                             )
                         }
                     }
-
+                    
                     // Complete page loading
                     self?.isLoadingMore = false
                     self?.autoLoadNextPageIfNeeded()
                 }
             )
         }
+        else if wasLoadingMore {
+            if let focusedInteractionId: Int64 = self.focusedInteractionId {
+                DispatchQueue.main.async { [weak self] in
+                    // If we had a focusedInteractionId then scroll to it (and hide the search
+                    // result bar loading indicator)
+                    self?.searchController.resultsBar.stopLoading()
+                    self?.scrollToInteractionIfNeeded(
+                        with: focusedInteractionId,
+                        isAnimated: true,
+                        highlight: (self?.shouldHighlightNextScrollToInteraction == true)
+                    )
+                    
+                    // Complete page loading
+                    self?.isLoadingMore = false
+                    self?.autoLoadNextPageIfNeeded()
+                }
+            }
+            else {
+                // Complete page loading
+                self.isLoadingMore = false
+                self.autoLoadNextPageIfNeeded()
+            }
+        }
         
+        // Update the messages
         self.tableView.reload(
             using: changeset,
             deleteSectionsAnimation: .none,
             insertSectionsAnimation: .none,
             reloadSectionsAnimation: .none,
-            deleteRowsAnimation: .bottom,
+            deleteRowsAnimation: .fade,
             insertRowsAnimation: .none,
             reloadRowsAnimation: .none,
             interrupt: { itemChangeInfo?.isInsertAtTop == true || $0.changeCount > ConversationViewModel.pageSize }
@@ -826,6 +895,8 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             self?.viewModel.updateInteractionData(updatedData)
         }
     }
+    
+    // MARK: Updating
     
     private func performInitialScrollIfNeeded() {
         guard !hasPerformedInitialScroll && hasLoadedInitialThreadData && hasLoadedInitialInteractionData else {
@@ -837,13 +908,13 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         // the screen will scroll to the bottom instead of the first unread message
         if let focusedInteractionId: Int64 = self.viewModel.focusedInteractionId {
             self.scrollToInteractionIfNeeded(with: focusedInteractionId, isAnimated: false, highlight: true)
-            self.unreadCountView.alpha = self.scrollButton.alpha
         }
         else {
             self.scrollToBottom(isAnimated: false)
         }
 
         self.scrollButton.alpha = self.getScrollButtonOpacity()
+        self.unreadCountView.alpha = self.scrollButton.alpha
         self.hasPerformedInitialScroll = true
         
         // Now that the data has loaded we need to check if either of the "load more" sections are
@@ -999,7 +1070,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                 self.view.layoutIfNeeded()
             }
         }
-
+        
         let keyboardTop = (UIScreen.main.bounds.height - keyboardRect.minY)
         let messageRequestsOffset: CGFloat = (messageRequestView.isHidden ? 0 : messageRequestView.bounds.height + 16)
         let oldContentInset: UIEdgeInsets = tableView.contentInset
@@ -1018,6 +1089,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
 
             let scrollButtonOpacity: CGFloat = (self?.getScrollButtonOpacity() ?? 0)
             self?.scrollButton.alpha = scrollButtonOpacity
+            self?.unreadCountView.alpha = scrollButtonOpacity
 
             self?.view.setNeedsLayout()
             self?.view.layoutIfNeeded()
@@ -1123,15 +1195,26 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                     with: cellViewModel,
                     mediaCache: mediaCache,
                     playbackInfo: viewModel.playbackInfo(for: cellViewModel) { updatedInfo, error in
-                        DispatchQueue.main.async {
+                        DispatchQueue.main.async { [weak self] in
                             guard error == nil else {
-                                OWSAlerts.showErrorAlert(message: "INVALID_AUDIO_FILE_ALERT_ERROR_MESSAGE".localized())
+                                let modal: ConfirmationModal = ConfirmationModal(
+                                    targetView: self?.view,
+                                    info: ConfirmationModal.Info(
+                                        title: CommonStrings.errorAlertTitle,
+                                        explanation: "INVALID_AUDIO_FILE_ALERT_ERROR_MESSAGE".localized(),
+                                        cancelTitle: "BUTTON_OK".localized(),
+                                        cancelStyle: .alert_text
+                                    )
+                                )
+                                self?.present(modal, animated: true)
                                 return
                             }
                             
                             cell.dynamicUpdate(with: cellViewModel, playbackInfo: updatedInfo)
                         }
                     },
+                    showExpandedReactions: viewModel.reactionExpandedInteractionIds
+                        .contains(cellViewModel.id),
                     lastSearchText: viewModel.lastSearchedText
                 )
                 cell.delegate = self
@@ -1148,7 +1231,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         switch section.model {
             case .loadOlder, .loadNewer:
                 let loadingIndicator: UIActivityIndicatorView = UIActivityIndicatorView(style: .medium)
-                loadingIndicator.tintColor = Colors.text
+                loadingIndicator.themeTintColor = .textPrimary
                 loadingIndicator.alpha = 0.5
                 loadingIndicator.startAnimating()
                 
@@ -1225,9 +1308,19 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             self.scrollToInteractionIfNeeded(
                 with: lastInteractionId,
                 position: .bottom,
+                isJumpingToLastInteraction: true,
                 isAnimated: true
             )
             return
+        }
+        
+        // Note: In this case we need to force a tableView layout to ensure updating the
+        // scroll position has the correct offset (otherwise there are some cases where
+        // the screen will jump up - eg. when sending a reply while the soft keyboard
+        // is visible)
+        UIView.performWithoutAnimation {
+            self.tableView.setNeedsLayout()
+            self.tableView.layoutIfNeeded()
         }
         
         let targetIndexPath: IndexPath = IndexPath(
@@ -1240,7 +1333,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             animated: isAnimated
         )
         
-        self.handleInitialOffsetBounceBug(targetIndexPath: targetIndexPath, at: .bottom)
+        self.viewModel.markAsRead(beforeInclusive: nil)
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -1252,8 +1345,41 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        scrollButton.alpha = getScrollButtonOpacity()
-        unreadCountView.alpha = scrollButton.alpha
+        self.scrollButton.alpha = self.getScrollButtonOpacity()
+        self.unreadCountView.alpha = self.scrollButton.alpha
+        
+        // We want to mark messages as read while we scroll, so grab the newest message and mark
+        // everything older as read
+        //
+        // Note: For the 'tableVisualBottom' we remove the 'Values.mediumSpacing' as that is the distance
+        // the table content appears above the input view
+        let tableVisualBottom: CGFloat = (tableView.frame.maxY - (tableView.contentInset.bottom - Values.mediumSpacing))
+        
+        if
+            let visibleIndexPaths: [IndexPath] = self.tableView.indexPathsForVisibleRows,
+            let messagesSection: Int = visibleIndexPaths
+                .first(where: { self.viewModel.interactionData[$0.section].model == .messages })?
+                .section,
+            let newestCellViewModel: MessageViewModel = visibleIndexPaths
+                .sorted()
+                .filter({ $0.section == messagesSection })
+                .compactMap({ indexPath -> (frame: CGRect, cellViewModel: MessageViewModel)? in
+                    guard let frame: CGRect = tableView.cellForRow(at: indexPath)?.frame else {
+                        return nil
+                    }
+                    
+                    return (
+                        view.convert(frame, from: tableView),
+                        self.viewModel.interactionData[indexPath.section].elements[indexPath.row]
+                    )
+                })
+                // Exclude messages that are partially off the bottom of the screen
+                .filter({ $0.frame.maxY <= tableVisualBottom })
+                .last?
+                .cellViewModel
+        {
+            self.viewModel.markAsRead(beforeInclusive: newestCellViewModel.id)
+        }
     }
     
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
@@ -1283,24 +1409,24 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         let contentOffsetY = tableView.contentOffset.y
         let x = (lastPageTop - ConversationVC.bottomInset - contentOffsetY).clamp(0, .greatestFiniteMagnitude)
         let a = 1 / (ConversationVC.scrollButtonFullVisibilityThreshold - ConversationVC.scrollButtonNoVisibilityThreshold)
-        return a * x
+        return max(0, min(1, a * x))
     }
 
     // MARK: - Search
     
-    func conversationSettingsDidRequestConversationSearch(_ conversationSettingsViewController: OWSConversationSettingsViewController) {
-        showSearchUI()
-        
-        guard presentedViewController != nil else {
-            self.navigationController?.popToViewController(self, animated: true, completion: nil)
-            return
+    func popAllConversationSettingsViews(completion completionBlock: (() -> Void)? = nil) {
+        if presentedViewController != nil {
+            dismiss(animated: true) { [weak self] in
+                guard let strongSelf: UIViewController = self else { return }
+                
+                self?.navigationController?.popToViewController(strongSelf, animated: true, completion: completionBlock)
+            }
         }
-        
-        dismiss(animated: true) {
-            self.navigationController?.popToViewController(self, animated: true, completion: nil)
+        else {
+            navigationController?.popToViewController(self, animated: true, completion: completionBlock)
         }
     }
-
+    
     func showSearchUI() {
         isShowingSearchUI = true
         
@@ -1321,15 +1447,16 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         // See more https://developer.apple.com/documentation/uikit/uisearchbar/1624283-showscancelbutton?language=objc
         if UIDevice.current.isIPad {
             let ipadCancelButton = UIButton()
-            ipadCancelButton.setTitle("Cancel", for: .normal)
+            ipadCancelButton.setTitle("cancel".localized(), for: .normal)
             ipadCancelButton.addTarget(self, action: #selector(hideSearchUI), for: .touchUpInside)
-            ipadCancelButton.setTitleColor(Colors.text, for: .normal)
+            ipadCancelButton.setThemeTitleColor(.textPrimary, for: .normal)
             searchBarContainer.addSubview(ipadCancelButton)
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
             ipadCancelButton.autoVCenterInSuperview()
             searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
-        } else {
+        }
+        else {
             searchBar.autoPinEdgesToSuperviewMargins()
         }
         
@@ -1363,8 +1490,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         // So here we stub the next responder on the navBar so that when the searchBar resigns
         // first responder, the ConversationVC will be in it's responder chain - keeeping the
         // ResultsBar on the bottom of the screen after dismissing the keyboard.
-        let navBar = navigationController!.navigationBar as! OWSNavigationBar
-        navBar.stubbedNextResponder = self
+        searchController.uiSearchController.stubbableSearchBar.stubbedNextResponder = self
     }
 
     @objc func hideSearchUI() {
@@ -1372,8 +1498,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         navigationItem.titleView = titleView
         updateNavBarButtons(threadData: self.viewModel.threadData, initialVariant: viewModel.initialThreadVariant)
         
-        let navBar: OWSNavigationBar? = navigationController?.navigationBar as? OWSNavigationBar
-        navBar?.stubbedNextResponder = nil
+        searchController.uiSearchController.stubbableSearchBar.stubbedNextResponder = nil
         becomeFirstResponder()
         reloadInputViews()
     }
@@ -1381,7 +1506,7 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     func didDismissSearchController(_ searchController: UISearchController) {
         hideSearchUI()
     }
-
+    
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Int64]?, searchText: String?) {
         viewModel.lastSearchedText = searchText
         tableView.reloadRows(at: tableView.indexPathsForVisibleRows ?? [], with: UITableView.RowAnimation.none)
@@ -1394,12 +1519,14 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
     func scrollToInteractionIfNeeded(
         with interactionId: Int64,
         position: UITableView.ScrollPosition = .middle,
+        isJumpingToLastInteraction: Bool = false,
         isAnimated: Bool = true,
         highlight: Bool = false
     ) {
         // Store the info incase we need to load more data (call will be re-triggered)
         self.focusedInteractionId = interactionId
         self.shouldHighlightNextScrollToInteraction = highlight
+        self.viewModel.markAsRead(beforeInclusive: interactionId)
         
         // Ensure the target interaction has been loaded
         guard
@@ -1417,10 +1544,18 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
             self.searchController.resultsBar.startLoading()
             
             DispatchQueue.global(qos: .default).async { [weak self] in
-                self?.viewModel.pagedDataObserver?.load(.untilInclusive(
-                    id: interactionId,
-                    padding: 5
-                ))
+                if isJumpingToLastInteraction {
+                    self?.viewModel.pagedDataObserver?.load(.jumpTo(
+                        id: interactionId,
+                        paddingForInclusive: 5
+                    ))
+                }
+                else {
+                    self?.viewModel.pagedDataObserver?.load(.untilInclusive(
+                        id: interactionId,
+                        padding: 5
+                    ))
+                }
             }
             return
         }
@@ -1437,7 +1572,6 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                 at: position,
                 animated: (self.didFinishInitialLayout && isAnimated)
             )
-            self.handleInitialOffsetBounceBug(targetIndexPath: targetIndexPath, at: position)
             
             // If we haven't finished the initial layout then we want to delay the highlight slightly
             // so it doesn't look buggy with the push transition
@@ -1464,7 +1598,6 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
         }
         
         self.tableView.scrollToRow(at: targetIndexPath, at: position, animated: true)
-        self.handleInitialOffsetBounceBug(targetIndexPath: targetIndexPath, at: position)
     }
     
     func highlightCellIfNeeded(interactionId: Int64) {
@@ -1478,39 +1611,6 @@ final class ConversationVC: BaseVC, OWSConversationSettingsViewDelegate, Convers
                 .first(where: { ($0 as? VisibleMessageCell)?.viewModel?.id == interactionId })
                 .asType(VisibleMessageCell.self)?
                 .highlight()
-        }
-    }
-    
-    private func handleInitialOffsetBounceBug(targetIndexPath: IndexPath, at position: UITableView.ScrollPosition) {
-        /// Note: This code is a hack to prevent a weird 'bounce' behaviour that occurs when triggering the initial scroll due
-        /// to the UITableView properly calculating it's cell sizes (it seems to layout ~3 times each with slightly different sizes)
-        if !self.hasPerformedInitialScroll {
-            let initialUpdateTime: CFTimeInterval = CACurrentMediaTime()
-            var lastSize: CGSize = .zero
-            
-            self.tableView.afterNextLayoutSubviews(
-                when: { [weak self] numSections, numRowInSections, updatedContentSize in
-                    // If too much time has passed or the section/row count doesn't match then
-                    // just stop the callback
-                    guard
-                        (CACurrentMediaTime() - initialUpdateTime) < 2 &&
-                        lastSize != updatedContentSize &&
-                        numSections > targetIndexPath.section &&
-                        numRowInSections[targetIndexPath.section] > targetIndexPath.row
-                    else { return true }
-                    
-                    lastSize = updatedContentSize
-                    
-                    self?.tableView.scrollToRow(
-                        at: targetIndexPath,
-                        at: position,
-                        animated: false
-                    )
-                        
-                    return false
-                },
-                then: {}
-            )
         }
     }
 }

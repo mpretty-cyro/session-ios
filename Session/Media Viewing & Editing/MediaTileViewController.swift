@@ -17,11 +17,13 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     static let footerBarHeight: CGFloat = 40
     static let loadMoreHeaderHeight: CGFloat = 100
     
-    private let viewModel: MediaGalleryViewModel
+    public let viewModel: MediaGalleryViewModel
     private var hasLoadedInitialData: Bool = false
     private var didFinishInitialLayout: Bool = false
     private var isAutoLoadingNextPage: Bool = false
     private var currentTargetOffset: CGPoint?
+    
+    public weak var delegate: MediaTileViewControllerDelegate?
     
     var isInBatchSelectMode = false {
         didSet {
@@ -69,7 +71,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     lazy var collectionView: UICollectionView = {
         let result: UICollectionView = UICollectionView(frame: .zero, collectionViewLayout: mediaTileViewLayout)
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.backgroundColor = Colors.navigationBarBackground
+        result.themeBackgroundColor = .newConversation_background
         result.delegate = self
         result.dataSource = self
         result.register(view: PhotoGridViewCell.self)
@@ -93,8 +95,8 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             animated: false
         )
 
-        result.barTintColor = Colors.navigationBarBackground
-        result.tintColor = Colors.text
+        result.themeBarTintColor = .backgroundPrimary
+        result.themeTintColor = .textPrimary
 
         return result
     }()
@@ -105,19 +107,21 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             target: self,
             action: #selector(didPressDelete)
         )
-        result.tintColor = Colors.text
+        result.themeTintColor = .textPrimary
 
         return result
     }()
 
     // MARK: - Lifecycle
-
+    
     override public func viewDidLoad() {
         super.viewDidLoad()
+        
+        view.themeBackgroundColor = .newConversation_background
 
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = OWSViewController.createOWSBackButton(withTarget: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
             self.navigationItem.leftBarButtonItem = backButton
         }
         
@@ -199,8 +203,35 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return }
         
         Logger.debug("scrolling to focused item at indexPath: \(focusedIndexPath)")
+        
+        // Note: For some reason 'scrollToItem' doesn't always work properly so we need to manually
+        // calculate what the offset should be to do the initial scroll
         self.view.layoutIfNeeded()
-        self.collectionView.scrollToItem(at: focusedIndexPath, at: .centeredVertically, animated: false)
+        
+        let availableHeight: CGFloat = {
+            // Note: This height will be set before we have properly performed a layout and fitted
+            // this screen within it's parent UIPagedViewController so we need to try to calculate
+            // the "actual" height of the collection view
+            var finalHeight: CGFloat = self.collectionView.frame.height
+            
+            if let navController: UINavigationController = self.parent?.navigationController {
+                finalHeight -= navController.navigationBar.frame.height
+                finalHeight -= (UIApplication.shared.keyWindow?.windowScene?.statusBarManager?.statusBarFrame.height ?? 0)
+            }
+            
+            if let tabBar: TabBar = self.parent?.parent?.view.subviews.first as? TabBar {
+                finalHeight -= tabBar.frame.height
+            }
+            
+            return finalHeight
+        }()
+        let focusedRect: CGRect = (self.collectionView.layoutAttributesForItem(at: focusedIndexPath)?.frame)
+            .defaulting(to: .zero)
+        self.collectionView.contentOffset = CGPoint(
+            x: 0,
+            y: (focusedRect.origin.y - (availableHeight / 2) + (focusedRect.height / 2))
+        )
+        self.collectionView.collectionViewLayout.invalidateLayout()
         
         // Now that the data has loaded we need to check if either of the "load more" sections are
         // visible and trigger them if so
@@ -269,6 +300,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         guard hasLoadedInitialData else {
             self.hasLoadedInitialData = true
             self.viewModel.updateGalleryData(updatedGalleryData)
+            self.updateSelectButton(updatedData: updatedGalleryData, inBatchSelectMode: isInBatchSelectMode)
             
             UIView.performWithoutAnimation {
                 self.collectionView.reloadData()
@@ -492,12 +524,6 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             // [ConversationSettingsView]
             // [ConversationView]
             //
-            guard
-                let viewControllers: [UIViewController] = self.navigationController?.viewControllers,
-                viewControllers.count > 1,
-                viewControllers[viewControllers.count - 2] is OWSConversationSettingsViewController
-            else { return }
-            
             let detailViewController: UIViewController? = MediaGalleryViewModel.createDetailViewController(
                 for: self.viewModel.threadId,
                 threadVariant: self.viewModel.threadVariant,
@@ -508,7 +534,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             
             guard let detailViewController: UIViewController = detailViewController else { return }
             
-            self.present(detailViewController, animated: true)
+            delegate?.presentdetailViewController(detailViewController, animated: true)
             return
         }
         
@@ -590,26 +616,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     }
 
     func updateSelectButton(updatedData: [MediaGalleryViewModel.SectionModel], inBatchSelectMode: Bool) {
-        guard !updatedData.isEmpty else {
-            self.navigationItem.rightBarButtonItem = nil
-            return
-        }
-        
-        if inBatchSelectMode {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-                barButtonSystemItem: .cancel,
-                target: self,
-                action: #selector(didCancelSelect)
-            )
-        }
-        else {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-                title: "BUTTON_SELECT".localized(),
-                style: .plain,
-                target: self,
-                action: #selector(didTapSelect)
-            )
-        }
+        delegate?.updateSelectButton(updatedData: updatedData, inBatchSelectMode: inBatchSelectMode)
     }
 
     @objc func didTapSelect(_ sender: Any) {
@@ -624,13 +631,6 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             // Ensure toolbar doesn't cover bottom row.
             self?.collectionView.contentInset.bottom += MediaTileViewController.footerBarHeight
         }, completion: nil)
-
-        // disabled until at least one item is selected
-        self.deleteButton.isEnabled = false
-
-        // Don't allow the user to leave mid-selection, so they realized they have
-        // to cancel (lose) their selection if they leave.
-        self.navigationItem.hidesBackButton = true
     }
 
     @objc func didCancelSelect(_ sender: Any) {
@@ -649,8 +649,6 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             // Undo "Ensure toolbar doesn't cover bottom row."
             self?.collectionView.contentInset.bottom -= MediaTileViewController.footerBarHeight
         }, completion: nil)
-
-        self.navigationItem.hidesBackButton = false
 
         // Deselect any selected
         collectionView.indexPathsForSelectedItems?.forEach { collectionView.deselectItem(at: $0, animated: false)}
@@ -710,9 +708,10 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
         let actionSheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         actionSheet.addAction(deleteAction)
-        actionSheet.addAction(OWSAlerts.cancelAction)
+        actionSheet.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel))
 
-        presentAlert(actionSheet)
+        Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
+        self.present(actionSheet, animated: true)
     }
 }
 
@@ -767,25 +766,21 @@ private class MediaGallerySectionHeader: UICollectionReusableView {
 
     override init(frame: CGRect) {
         label = UILabel()
-        label.textColor = Colors.text
-
-        let blurEffect = UIBlurEffect(style: .dark)
-        let blurEffectView = UIVisualEffectView(effect: blurEffect)
-
-        blurEffectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        label.themeTextColor = .textPrimary
 
         super.init(frame: frame)
 
-        self.backgroundColor = isLightMode ? Colors.cellBackground : UIColor.ows_black.withAlphaComponent(OWSNavigationBar.backgroundBlurMutingFactor)
+        self.themeBackgroundColor = .clear
+        
+        let backgroundView: UIView = UIView()
+        backgroundView.themeBackgroundColor = .newConversation_background
+        addSubview(backgroundView)
+        backgroundView.pin(to: self)
 
-        self.addSubview(blurEffectView)
         self.addSubview(label)
-
-        blurEffectView.autoPinEdgesToSuperviewEdges()
-        blurEffectView.isHidden = isLightMode
-        label.autoPinEdge(toSuperviewMargin: .trailing)
-        label.autoPinEdge(toSuperviewMargin: .leading)
-        label.autoVCenterInSuperview()
+        label.pin(.leading, to: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, to: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.center(.vertical, in: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")
@@ -815,7 +810,7 @@ private class MediaGalleryStaticHeader: UICollectionViewCell {
 
         addSubview(label)
 
-        label.textColor = Colors.text
+        label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
         label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
@@ -863,7 +858,12 @@ class GalleryGridCellItem: PhotoGridItem {
 
 extension MediaTileViewController: UIViewControllerTransitioningDelegate {
     public func animationController(forPresented presented: UIViewController, presenting: UIViewController, source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        guard self == presented || self.navigationController == presented else { return nil }
+        guard
+            self == presented ||
+            self.navigationController == presented ||
+            self.parent == presented ||
+            self.parent?.navigationController == presented
+        else { return nil }
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return nil }
 
         return MediaDismissAnimationController(
@@ -872,7 +872,12 @@ extension MediaTileViewController: UIViewControllerTransitioningDelegate {
     }
 
     public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        guard self == dismissed || self.navigationController == dismissed else { return nil }
+        guard
+            self == dismissed ||
+            self.navigationController == dismissed ||
+            self.parent == dismissed ||
+            self.parent?.navigationController == dismissed
+        else { return nil }
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return nil }
 
         return MediaZoomAnimationController(
@@ -922,4 +927,11 @@ extension MediaTileViewController: MediaPresentationContextProvider {
     func snapshotOverlayView(in coordinateSpace: UICoordinateSpace) -> (UIView, CGRect)? {
         return self.navigationController?.navigationBar.generateSnapshot(in: coordinateSpace)
     }
+}
+
+// MARK: - MediaTileViewControllerDelegate
+
+public protocol MediaTileViewControllerDelegate: AnyObject {
+    func presentdetailViewController(_ detailViewController: UIViewController, animated: Bool)
+    func updateSelectButton(updatedData: [MediaGalleryViewModel.SectionModel], inBatchSelectMode: Bool)
 }

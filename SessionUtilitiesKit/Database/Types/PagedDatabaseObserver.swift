@@ -110,9 +110,38 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         // changes only include table and column info at this stage
         guard allObservedTableNames.contains(event.tableName) else { return }
         
+        // When generating the tracked change we need to check if the change was
+        // a deletion to a related table (if so then once the change is performed
+        // there won't be a way to associated the deleted related record to the
+        // original so we need to retrieve the association in here)
+        let trackedChange: PagedData.TrackedChange = {
+            guard
+                event.tableName != pagedTableName,
+                event.kind == .delete,
+                let observedChange: PagedData.ObservedChanges = observedTableChangeTypes[event.tableName],
+                let joinToPagedType: SQL = observedChange.joinToPagedType
+            else { return PagedData.TrackedChange(event: event) }
+            
+            // Retrieve the pagedRowId for the related value that is
+            // getting deleted
+            let pagedRowIds: [Int64] = Storage.shared
+                .read { db in
+                    PagedData.pagedRowIdsForRelatedRowIds(
+                        db,
+                        tableName: event.tableName,
+                        pagedTableName: pagedTableName,
+                        relatedRowIds: [event.rowID],
+                        joinToPagedType: joinToPagedType
+                    )
+                }
+                .defaulting(to: [])
+            
+            return PagedData.TrackedChange(event: event, pagedRowIdsForRelatedDeletion: pagedRowIds)
+        }()
+        
         // The 'event' object only exists during this method so we need to copy the info
         // from it, otherwise it will cease to exist after this metod call finishes
-        changesInCommit.mutate { $0.insert(PagedData.TrackedChange(event: event)) }
+        changesInCommit.mutate { $0.insert(trackedChange) }
     }
     
     // Note: We will process all updates which come through this method even if
@@ -163,7 +192,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             associatedDataInfo.forEach { hasChanges, associatedData in
                 guard cacheHasChanges || hasChanges else { return }
                 
-                finalUpdatedDataCache = associatedData.attachAssociatedData(to: finalUpdatedDataCache)
+                finalUpdatedDataCache = associatedData.updateAssociatedData(to: finalUpdatedDataCache)
             }
             
             // Update the cache, pageInfo and the change callback
@@ -180,13 +209,17 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             .filter { $0.tableName == pagedTableName }
         let relatedChanges: [String: [PagedData.TrackedChange]] = committedChanges
             .filter { $0.tableName != pagedTableName }
+            .filter { $0.kind != .delete }
             .reduce(into: [:]) { result, next in
                 guard observedTableChangeTypes[next.tableName] != nil else { return }
                 
                 result[next.tableName] = (result[next.tableName] ?? []).appending(next)
             }
+        let relatedDeletions: [PagedData.TrackedChange] = committedChanges
+            .filter { $0.tableName != pagedTableName }
+            .filter { $0.kind == .delete }
         
-        guard !directChanges.isEmpty || !relatedChanges.isEmpty else {
+        guard !directChanges.isEmpty || !relatedChanges.isEmpty || !relatedDeletions.isEmpty else {
             updateDataAndCallbackIfNeeded(self.dataCache.wrappedValue, self.pageInfo.wrappedValue, false)
             return
         }
@@ -219,7 +252,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         let changesToQuery: [PagedData.TrackedChange] = directChanges
             .filter { $0.kind != .delete }
         
-        guard !changesToQuery.isEmpty || !relatedChanges.isEmpty else {
+        guard !changesToQuery.isEmpty || !relatedChanges.isEmpty || !relatedDeletions.isEmpty else {
             updateDataAndCallbackIfNeeded(updatedDataCache, updatedPageInfo, !deletionChanges.isEmpty)
             return
         }
@@ -248,15 +281,20 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 .asSet()
         }()
         
-        guard !changesToQuery.isEmpty || !pagedRowIdsForRelatedChanges.isEmpty else {
+        guard !changesToQuery.isEmpty || !pagedRowIdsForRelatedChanges.isEmpty || !relatedDeletions.isEmpty else {
             updateDataAndCallbackIfNeeded(updatedDataCache, updatedPageInfo, !deletionChanges.isEmpty)
             return
         }
         
         // Fetch the indexes of the rowIds so we can determine whether they should be added to the screen
+        let directRowIds: Set<Int64> = changesToQuery.map { $0.rowId }.asSet()
+        let pagedRowIdsForRelatedDeletions: Set<Int64> = relatedDeletions
+            .compactMap { $0.pagedRowIdsForRelatedDeletion }
+            .flatMap { $0 }
+            .asSet()
         let itemIndexes: [PagedData.RowIndexInfo] = PagedData.indexes(
             db,
-            rowIds: changesToQuery.map { $0.rowId },
+            rowIds: Array(directRowIds),
             tableName: pagedTableName,
             requiredJoinSQL: joinSQL,
             orderSQL: orderSQL,
@@ -265,6 +303,14 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         let relatedChangeIndexes: [PagedData.RowIndexInfo] = PagedData.indexes(
             db,
             rowIds: Array(pagedRowIdsForRelatedChanges),
+            tableName: pagedTableName,
+            requiredJoinSQL: joinSQL,
+            orderSQL: orderSQL,
+            filterSQL: filterSQL
+        )
+        let relatedDeletionIndexes: [PagedData.RowIndexInfo] = PagedData.indexes(
+            db,
+            rowIds: Array(pagedRowIdsForRelatedDeletions),
             tableName: pagedTableName,
             requiredJoinSQL: joinSQL,
             orderSQL: orderSQL,
@@ -306,7 +352,39 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         }
         let validChangeRowIds: [Int64] = determineValidChanges(for: itemIndexes)
         let validRelatedChangeRowIds: [Int64] = determineValidChanges(for: relatedChangeIndexes)
+        let validRelatedDeletionRowIds: [Int64] = determineValidChanges(for: relatedDeletionIndexes)
         let countBefore: Int = itemIndexes.filter { $0.rowIndex < updatedPageInfo.pageOffset }.count
+        
+        // If the number of indexes doesn't match the number of rowIds then it means something changed
+        // resulting in an item being filtered out
+        func performRemovalsIfNeeded(for rowIds: Set<Int64>, indexes: [PagedData.RowIndexInfo]) {
+            let uniqueIndexes: Set<Int64> = indexes.map { $0.rowId }.asSet()
+            
+            // If they have the same count then nothin was filtered out so do nothing
+            guard rowIds.count != uniqueIndexes.count else { return }
+            
+            // Otherwise something was probably removed so try to remove it from the cache
+            let rowIdsRemoved: Set<Int64> = rowIds.subtracting(uniqueIndexes)
+            let preDeletionCount: Int = updatedDataCache.count
+            updatedDataCache = updatedDataCache.deleting(rowIds: Array(rowIdsRemoved))
+
+            // Lastly make sure there were actually changes before updating the page info
+            guard updatedDataCache.count != preDeletionCount else { return }
+            
+            let dataSizeDiff: Int = (updatedDataCache.count - preDeletionCount)
+
+            updatedPageInfo = PagedData.PageInfo(
+                pageSize: updatedPageInfo.pageSize,
+                pageOffset: updatedPageInfo.pageOffset,
+                currentCount: (updatedPageInfo.currentCount + dataSizeDiff),
+                totalCount: (updatedPageInfo.totalCount + dataSizeDiff)
+            )
+        }
+        
+        // Actually perform any required removals
+        performRemovalsIfNeeded(for: directRowIds, indexes: itemIndexes)
+        performRemovalsIfNeeded(for: pagedRowIdsForRelatedChanges, indexes: relatedChangeIndexes)
+        performRemovalsIfNeeded(for: pagedRowIdsForRelatedDeletions, indexes: relatedDeletionIndexes)
         
         // Update the offset and totalCount even if the rows are outside of the current page (need to
         // in order to ensure the 'load more' sections are accurate)
@@ -325,13 +403,13 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
 
         // If there are no valid row ids then stop here (trigger updates though since the page info
         // has changes)
-        guard !validChangeRowIds.isEmpty || !validRelatedChangeRowIds.isEmpty else {
+        guard !validChangeRowIds.isEmpty || !validRelatedChangeRowIds.isEmpty || !validRelatedDeletionRowIds.isEmpty else {
             updateDataAndCallbackIfNeeded(updatedDataCache, updatedPageInfo, true)
             return
         }
-
+        
         // Fetch the inserted/updated rows
-        let targetRowIds: [Int64] = Array((validChangeRowIds + validRelatedChangeRowIds).asSet())
+        let targetRowIds: [Int64] = Array((validChangeRowIds + validRelatedChangeRowIds + validRelatedDeletionRowIds).asSet())
         let updatedItems: [T] = (try? dataQuery(targetRowIds)
             .fetchAll(db))
             .defaulting(to: [])
@@ -379,7 +457,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         let orderSQL: SQL = self.orderSQL
         let dataQuery: ([Int64]) -> AdaptedFetchRequest<SQLRequest<T>> = self.dataQuery
         
-        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo)? = Storage.shared.read { [weak self] db in
+        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo, failureCallback: (() -> ())?)? = Storage.shared.read { [weak self] db in
+            typealias QueryInfo = (limit: Int, offset: Int, updatedCacheOffset: Int)
             let totalCount: Int = PagedData.totalCount(
                 db,
                 tableName: pagedTableName,
@@ -387,7 +466,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 filterSQL: filterSQL
             )
             
-            let queryInfo: (limit: Int, offset: Int, updatedCacheOffset: Int)? = {
+            let (queryInfo, callback): (QueryInfo?, (() -> ())?) = {
                 switch target {
                     case .initialPageAround(let targetId):
                         // If we want to focus on a specific item then we need to find it's index in
@@ -404,7 +483,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                         
                         // If we couldn't find the targetId then just load the first page
                         guard let targetIndex: Int = maybeIndex else {
-                            return (currentPageInfo.pageSize, 0, 0)
+                            return ((currentPageInfo.pageSize, 0, 0), nil)
                         }
                         
                         let updatedOffset: Int = {
@@ -421,22 +500,28 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                             return (targetIndex - halfPageSize)
                         }()
 
-                        return (currentPageInfo.pageSize, updatedOffset, updatedOffset)
+                        return ((currentPageInfo.pageSize, updatedOffset, updatedOffset), nil)
                         
                     case .pageBefore:
                         let updatedOffset: Int = max(0, (currentPageInfo.pageOffset - currentPageInfo.pageSize))
                         
                         return (
-                            currentPageInfo.pageSize,
-                            updatedOffset,
-                            updatedOffset
+                            (
+                                currentPageInfo.pageSize,
+                                updatedOffset,
+                                updatedOffset
+                            ),
+                            nil
                         )
                         
                     case .pageAfter:
                         return (
-                            currentPageInfo.pageSize,
-                            (currentPageInfo.pageOffset + currentPageInfo.currentCount),
-                            currentPageInfo.pageOffset
+                            (
+                                currentPageInfo.pageSize,
+                                (currentPageInfo.pageOffset + currentPageInfo.currentCount),
+                                currentPageInfo.pageOffset
+                            ),
+                            nil
                         )
                     
                     case .untilInclusive(let targetId, let padding):
@@ -447,6 +532,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                             for: targetId,
                             tableName: pagedTableName,
                             idColumn: idColumnName,
+                            requiredJoinSQL: joinSQL,
                             orderSQL: orderSQL,
                             filterSQL: filterSQL
                         )
@@ -459,16 +545,19 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                                 targetIndex < currentPageInfo.pageOffset ||
                                 targetIndex >= cacheCurrentEndIndex
                             )
-                        else { return nil }
+                        else { return (nil, nil) }
                         
                         // If the target is before the cached data then load before
                         if targetIndex < currentPageInfo.pageOffset {
                             let finalIndex: Int = max(0, (targetIndex - abs(padding)))
                             
                             return (
-                                (currentPageInfo.pageOffset - finalIndex),
-                                finalIndex,
-                                finalIndex
+                                (
+                                    (currentPageInfo.pageOffset - finalIndex),
+                                    finalIndex,
+                                    finalIndex
+                                ),
+                                nil
                             )
                         }
                         
@@ -477,23 +566,82 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                         let finalIndex: Int = min(totalCount, (targetIndex + 1 + abs(padding)))
                         
                         return (
-                            (finalIndex - cacheCurrentEndIndex),
-                            cacheCurrentEndIndex,
-                            currentPageInfo.pageOffset
+                            (
+                                (finalIndex - cacheCurrentEndIndex),
+                                cacheCurrentEndIndex,
+                                currentPageInfo.pageOffset
+                            ),
+                            nil
                         )
+                        
+                    case .jumpTo(let targetId, let paddingForInclusive):
+                        // If we want to focus on a specific item then we need to find it's index in
+                        // the queried data
+                        let maybeIndex: Int? = PagedData.index(
+                            db,
+                            for: targetId,
+                            tableName: pagedTableName,
+                            idColumn: idColumnName,
+                            requiredJoinSQL: joinSQL,
+                            orderSQL: orderSQL,
+                            filterSQL: filterSQL
+                        )
+                        let cacheCurrentEndIndex: Int = (currentPageInfo.pageOffset + currentPageInfo.currentCount)
+                        
+                        // If we couldn't find the targetId or it's already in the cache then do nothing
+                        guard
+                            let targetIndex: Int = maybeIndex.map({ max(0, min(totalCount, $0)) }),
+                            (
+                                targetIndex < currentPageInfo.pageOffset ||
+                                targetIndex >= cacheCurrentEndIndex
+                            )
+                        else { return (nil, nil) }
+                        
+                        // If the target id is within a single page of the current cached data
+                        // then trigger the `untilInclusive` behaviour instead
+                        guard
+                            abs(targetIndex - cacheCurrentEndIndex) > currentPageInfo.pageSize ||
+                            abs(targetIndex - currentPageInfo.pageOffset) > currentPageInfo.pageSize
+                        else {
+                            let callback: () -> () = {
+                                self?.load(.untilInclusive(id: targetId, padding: paddingForInclusive))
+                            }
+                            return (nil, callback)
+                        }
+                        
+                        // If the targetId is further than 1 pageSize away then discard the current
+                        // cached data and trigger a fresh `initialPageAround`
+                        let callback: () -> () = {
+                            self?.dataCache.mutate { $0 = DataCache() }
+                            self?.associatedRecords.forEach { $0.clearCache(db) }
+                            self?.pageInfo.mutate {
+                                $0 = PagedData.PageInfo(
+                                    pageSize: currentPageInfo.pageSize,
+                                    pageOffset: 0,
+                                    currentCount: 0,
+                                    totalCount: 0
+                                )
+                            }
+                            self?.load(.initialPageAround(id: targetId))
+                        }
+                        
+                        return (nil, callback)
                         
                     case .reloadCurrent:
                         return (
-                            currentPageInfo.currentCount,
-                            currentPageInfo.pageOffset,
-                            currentPageInfo.pageOffset
+                            (
+                                currentPageInfo.currentCount,
+                                currentPageInfo.pageOffset,
+                                currentPageInfo.pageOffset
+                            ),
+                            nil
                         )
                 }
             }()
             
             // If there is no queryOffset then we already have the data we need so
             // early-out (may as well update the 'totalCount' since it may be relevant)
-            guard let queryInfo: (limit: Int, offset: Int, updatedCacheOffset: Int) = queryInfo else {
+            guard let queryInfo: QueryInfo = queryInfo else {
                 return (
                     nil,
                     PagedData.PageInfo(
@@ -501,7 +649,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                         pageOffset: currentPageInfo.pageOffset,
                         currentCount: currentPageInfo.currentCount,
                         totalCount: totalCount
-                    )
+                    ),
+                    callback
                 )
             }
             
@@ -516,8 +665,14 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 limit: queryInfo.limit,
                 offset: queryInfo.offset
             )
-            let newData: [T] = try dataQuery(pageRowIds)
-                .fetchAll(db)
+            let newData: [T]
+            
+            do { newData = try dataQuery(pageRowIds).fetchAll(db) }
+            catch {
+                SNLog("PagedDatabaseObserver threw exception: \(error)")
+                throw error
+            }
+            
             let updatedLimitInfo: PagedData.PageInfo = PagedData.PageInfo(
                 pageSize: currentPageInfo.pageSize,
                 pageOffset: queryInfo.updatedCacheOffset,
@@ -540,7 +695,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 )
             }
 
-            return (newData, updatedLimitInfo)
+            return (newData, updatedLimitInfo, nil)
         }
         
         // Unwrap the updated data
@@ -554,6 +709,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 self.pageInfo.mutate { $0 = updatedPageInfo }
             }
             self.isLoadingMoreData.mutate { $0 = false }
+            loadedPage?.failureCallback?()
             return
         }
         
@@ -561,7 +717,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         var associatedLoadedData: DataCache<T> = DataCache(items: loadedPageData)
         
         self.associatedRecords.forEach { record in
-            associatedLoadedData = record.attachAssociatedData(to: associatedLoadedData)
+            associatedLoadedData = record.updateAssociatedData(to: associatedLoadedData)
         }
         
         // Update the cache and pageInfo
@@ -651,7 +807,8 @@ public protocol ErasedAssociatedRecord {
         pageInfo: PagedData.PageInfo
     ) -> Bool
     @discardableResult func updateCache(_ db: Database, rowIds: [Int64], hasOtherChanges: Bool) -> Bool
-    func attachAssociatedData<O>(to unassociatedCache: DataCache<O>) -> DataCache<O>
+    func clearCache(_ db: Database)
+    func updateAssociatedData<O>(to unassociatedCache: DataCache<O>) -> DataCache<O>
 }
 
 // MARK: - DataCache
@@ -704,6 +861,8 @@ public struct DataCache<T: FetchableRecordWithRowId & Identifiable> {
     }
     
     public func upserting(items: [T]) -> DataCache<T> {
+        guard !items.isEmpty else { return self }
+        
         var updatedData: [Int64: T] = self.data
         var updatedLookup: [AnyHashable: Int64] = self.lookup
         
@@ -733,6 +892,7 @@ public enum PagedData {
             case pageBefore
             case pageAfter
             case untilInclusive(id: SQLExpression, padding: Int)
+            case jumpTo(id: SQLExpression, paddingForInclusive: Int)
             case reloadCurrent
         }
         
@@ -755,6 +915,13 @@ public enum PagedData {
             /// the padding would mean more data should be loaded)
             case untilInclusive(id: ID, padding: Int)
             
+            /// This will jump to the specified id, loading a page around it and clearing out any
+            /// data that was previously cached
+            ///
+            /// **Note:** If the id is within 1 pageSize of the currently cached data then this
+            /// will behave as per the `untilInclusive(id:padding:)` type
+            case jumpTo(id: ID, paddingForInclusive: Int)
+            
             fileprivate var internalTarget: InternalTarget {
                 switch self {
                     case .initialPageAround(let id): return .initialPageAround(id: id.sqlExpression)
@@ -762,6 +929,9 @@ public enum PagedData {
                     case .pageAfter: return .pageAfter
                     case .untilInclusive(let id, let padding):
                         return .untilInclusive(id: id.sqlExpression, padding: padding)
+                    
+                    case .jumpTo(let id, let paddingForInclusive):
+                        return .jumpTo(id: id.sqlExpression, paddingForInclusive: paddingForInclusive)
                 }
             }
         }
@@ -820,11 +990,13 @@ public enum PagedData {
         let tableName: String
         let kind: DatabaseEvent.Kind
         let rowId: Int64
+        let pagedRowIdsForRelatedDeletion: [Int64]?
         
-        init(event: DatabaseEvent) {
+        init(event: DatabaseEvent, pagedRowIdsForRelatedDeletion: [Int64]? = nil) {
             self.tableName = event.tableName
             self.kind = event.kind
             self.rowId = event.rowID
+            self.pagedRowIdsForRelatedDeletion = pagedRowIdsForRelatedDeletion
         }
     }
     
@@ -1144,7 +1316,11 @@ public class AssociatedRecord<T, PagedType>: ErasedAssociatedRecord where T: Fet
         return true
     }
     
-    public func attachAssociatedData<O>(to unassociatedCache: DataCache<O>) -> DataCache<O> {
+    public func clearCache(_ db: Database) {
+        dataCache.mutate { $0 = DataCache() }
+    }
+    
+    public func updateAssociatedData<O>(to unassociatedCache: DataCache<O>) -> DataCache<O> {
         guard let typedCache: DataCache<PagedType> = unassociatedCache as? DataCache<PagedType> else {
             return unassociatedCache
         }

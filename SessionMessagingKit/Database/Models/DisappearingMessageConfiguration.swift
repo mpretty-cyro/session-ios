@@ -4,7 +4,7 @@ import Foundation
 import GRDB
 import SessionUtilitiesKit
 
-public struct DisappearingMessagesConfiguration: Codable, Identifiable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
+public struct DisappearingMessagesConfiguration: Codable, Identifiable, Equatable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
     public static var databaseTableName: String { "disappearingMessagesConfiguration" }
     internal static let threadForeignKey = ForeignKey([Columns.threadId], to: [SessionThread.Columns.id])
     private static let thread = belongsTo(SessionThread.self, using: threadForeignKey)
@@ -69,7 +69,7 @@ public extension DisappearingMessagesConfiguration {
                 
                 return String(
                     format: "YOU_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                    NSString.formatDurationSeconds(UInt32(floor(durationSeconds)), useShortFormat: false)
+                    floor(durationSeconds).formatted(format: .long)
                 )
             }
             
@@ -79,14 +79,14 @@ public extension DisappearingMessagesConfiguration {
             
             return String(
                 format: "OTHER_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                NSString.formatDurationSeconds(UInt32(floor(durationSeconds)), useShortFormat: false),
-                senderName
+                senderName,
+                floor(durationSeconds).formatted(format: .long)
             )
         }
     }
     
     var durationString: String {
-        NSString.formatDurationSeconds(UInt32(durationSeconds), useShortFormat: false)
+        floor(durationSeconds).formatted(format: .long)
     }
     
     func messageInfoString(with senderName: String?) -> String? {
@@ -176,7 +176,7 @@ public class SMKDisappearingMessagesConfiguration: NSObject {
                 DisappearingMessagesConfiguration.validDurationsSeconds[0]
         )
         
-        return NSString.formatDurationSeconds(UInt32(durationSeconds), useShortFormat: false)
+        return floor(durationSeconds).formatted(format: .long)
     }
     
     @objc(update:isEnabled:durationIndex:)
@@ -192,14 +192,14 @@ public class SMKDisappearingMessagesConfiguration: NSObject {
                 return
             }
             
-            let config: DisappearingMessagesConfiguration = (try DisappearingMessagesConfiguration
-                .fetchOne(db, id: threadId)?
+            let config: DisappearingMessagesConfiguration = try DisappearingMessagesConfiguration
+                .fetchOne(db, id: threadId)
+                .defaulting(to: DisappearingMessagesConfiguration.defaultWith(threadId))
                 .with(
                     isEnabled: isEnabled,
                     durationSeconds: durationSeconds
                 )
-                .saved(db))
-                .defaulting(to: DisappearingMessagesConfiguration.defaultWith(threadId))
+                .saved(db)
             
             let interaction: Interaction = try Interaction(
                 threadId: threadId,
@@ -208,13 +208,13 @@ public class SMKDisappearingMessagesConfiguration: NSObject {
                 body: config.messageInfoString(with: nil),
                 timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
             )
-            .saved(db)
+            .inserted(db)
             
             try MessageSender.send(
                 db,
                 message: ExpirationTimerUpdate(
                     syncTarget: nil,
-                    duration: UInt32(floor(durationSeconds))
+                    duration: UInt32(floor(isEnabled ? durationSeconds : 0))
                 ),
                 interactionId: interaction.id,
                 in: thread

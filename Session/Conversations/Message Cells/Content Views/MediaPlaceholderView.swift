@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionMessagingKit
+import SessionUIKit
 
 final class MediaPlaceholderView: UIView {
     private static let iconSize: CGFloat = 24
@@ -9,7 +10,7 @@ final class MediaPlaceholderView: UIView {
     
     // MARK: - Lifecycle
     
-    init(cellViewModel: MessageViewModel, textColor: UIColor) {
+    init(cellViewModel: MessageViewModel, textColor: ThemeValue) {
         super.init(frame: CGRect.zero)
         
         setUpViewHierarchy(cellViewModel: cellViewModel, textColor: textColor)
@@ -25,7 +26,7 @@ final class MediaPlaceholderView: UIView {
     
     private func setUpViewHierarchy(
         cellViewModel: MessageViewModel,
-        textColor: UIColor
+        textColor: ThemeValue
     ) {
         let (iconName, attachmentDescription): (String, String) = {
             guard
@@ -44,25 +45,25 @@ final class MediaPlaceholderView: UIView {
         // Image view
         let imageView = UIImageView(
             image: UIImage(named: iconName)?
-                .withRenderingMode(.alwaysTemplate)
                 .resizedImage(
                     to: CGSize(
                         width: MediaPlaceholderView.iconSize,
                         height: MediaPlaceholderView.iconSize
                     )
-                )
+                )?
+                .withRenderingMode(.alwaysTemplate)
         )
-        imageView.tintColor = textColor
+        imageView.themeTintColor = textColor
         imageView.contentMode = .center
         imageView.set(.width, to: MediaPlaceholderView.iconImageViewSize)
         imageView.set(.height, to: MediaPlaceholderView.iconImageViewSize)
         
         // Body label
         let titleLabel = UILabel()
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.text = "Tap to download \(attachmentDescription)"
-        titleLabel.textColor = textColor
         titleLabel.font = .systemFont(ofSize: Values.mediumFontSize)
+        titleLabel.text = "Tap to download \(attachmentDescription)"
+        titleLabel.themeTextColor = textColor
+        titleLabel.lineBreakMode = .byTruncatingTail
         
         // Stack view
         let stackView = UIStackView(arrangedSubviews: [ imageView, titleLabel ])

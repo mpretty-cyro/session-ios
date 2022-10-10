@@ -74,6 +74,15 @@ public enum LokinetWrapper {
         }
     }
     
+    public static func stop() {
+        guard LokinetWrapper.isReady else { return }
+        guard LokinetWrapper.context != nil else { return }
+        
+        lokinet_context_stop(LokinetWrapper.context)
+        LokinetWrapper.context = nil
+        LokinetWrapper.isReady = false
+    }
+    
     public static func getDestinationFor(host: String, port: UInt16) throws -> String {
         guard LokinetWrapper.isReady else { throw OnionRequestAPIError.insufficientSnodes }
         

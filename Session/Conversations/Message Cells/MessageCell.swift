@@ -10,8 +10,9 @@ public enum SwipeState {
 }
 
 public class MessageCell: UITableViewCell {
-    weak var delegate: MessageCellDelegate?
     var viewModel: MessageViewModel?
+    weak var delegate: MessageCellDelegate?
+    open var contextSnapshotView: UIView? { return nil }
 
     // MARK: - Lifecycle
     
@@ -30,10 +31,10 @@ public class MessageCell: UITableViewCell {
     }
 
     func setUpViewHierarchy() {
-        backgroundColor = .clear
+        themeBackgroundColor = .clear
         
         let selectedBackgroundView = UIView()
-        selectedBackgroundView.backgroundColor = .clear
+        selectedBackgroundView.themeBackgroundColor = .clear
         self.selectedBackgroundView = selectedBackgroundView
     }
 
@@ -43,7 +44,13 @@ public class MessageCell: UITableViewCell {
 
     // MARK: - Updating
     
-    func update(with cellViewModel: MessageViewModel, mediaCache: NSCache<NSString, AnyObject>, playbackInfo: ConversationViewModel.PlaybackInfo?, lastSearchText: String?) {
+    func update(
+        with cellViewModel: MessageViewModel,
+        mediaCache: NSCache<NSString, AnyObject>,
+        playbackInfo: ConversationViewModel.PlaybackInfo?,
+        showExpandedReactions: Bool,
+        lastSearchText: String?
+    ) {
         preconditionFailure("Must be overridden by subclasses.")
     }
     
@@ -57,6 +64,7 @@ public class MessageCell: UITableViewCell {
     
     static func cellType(for viewModel: MessageViewModel) -> MessageCell.Type {
         guard viewModel.cellType != .typingIndicator else { return TypingIndicatorCell.self }
+        guard viewModel.cellType != .dateHeader else { return DateHeaderCell.self }
         
         switch viewModel.variant {
             case .standardOutgoing, .standardIncoming, .standardIncomingDeleted:
@@ -75,13 +83,14 @@ public class MessageCell: UITableViewCell {
 
 // MARK: - MessageCellDelegate
 
-protocol MessageCellDelegate: AnyObject {
+protocol MessageCellDelegate: ReactionDelegate {
     func handleItemLongPressed(_ cellViewModel: MessageViewModel)
     func handleItemTapped(_ cellViewModel: MessageViewModel, gestureRecognizer: UITapGestureRecognizer)
     func handleItemDoubleTapped(_ cellViewModel: MessageViewModel)
     func handleItemSwiped(_ cellViewModel: MessageViewModel, state: SwipeState)
     func openUrl(_ urlString: String)
     func handleReplyButtonTapped(for cellViewModel: MessageViewModel)
-    func showUserDetails(for profile: Profile)
     func startThread(with sessionId: String, openGroupServer: String?, openGroupPublicKey: String?)
+    func showReactionList(_ cellViewModel: MessageViewModel, selectedReaction: EmojiWithSkinTones?)
+    func needsLayout(for cellViewModel: MessageViewModel, expandingReactions: Bool)
 }

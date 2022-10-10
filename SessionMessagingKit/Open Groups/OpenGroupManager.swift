@@ -19,6 +19,8 @@ public protocol OGMCacheType {
     var hasPerformedInitialPoll: [String: Bool] { get set }
     var timeSinceLastPoll: [String: TimeInterval] { get set }
     
+    var pendingChanges: [OpenGroupAPI.PendingChange] { get set }
+    
     func getTimeSinceLastOpen(using dependencies: Dependencies) -> TimeInterval
 }
 
@@ -53,6 +55,8 @@ public final class OpenGroupManager: NSObject {
             _timeSinceLastOpen = dependencies.date.timeIntervalSince(lastOpen)
             return dependencies.date.timeIntervalSince(lastOpen)
         }
+        
+        public var pendingChanges: [OpenGroupAPI.PendingChange] = []
     }
     
     // MARK: - Variables
@@ -348,7 +352,7 @@ public final class OpenGroupManager: NSObject {
         capabilities.capabilities.forEach { capability in
             _ = try? Capability(
                 openGroupServer: server.lowercased(),
-                variant: Capability.Variant(from: capability.rawValue),
+                variant: capability,
                 isMissing: false
             )
             .saved(db)
@@ -356,7 +360,7 @@ public final class OpenGroupManager: NSObject {
         capabilities.missing?.forEach { capability in
             _ = try? Capability(
                 openGroupServer: server.lowercased(),
-                variant: Capability.Variant(from: capability.rawValue),
+                variant: capability,
                 isMissing: true
             )
             .saved(db)
@@ -380,6 +384,8 @@ public final class OpenGroupManager: NSObject {
         
         // Only update the database columns which have changed (this is to prevent the UI from triggering
         // updates due to changing database columns to the existing value)
+        let permissions = OpenGroup.Permissions(roomInfo: pollInfo)
+
         try OpenGroup
             .filter(id: openGroup.id)
             .updateAll(
@@ -408,6 +414,10 @@ public final class OpenGroupManager: NSObject {
                     (openGroup.infoUpdates != pollInfo.details?.infoUpdates ?
                         (pollInfo.details?.infoUpdates).map { OpenGroup.Columns.infoUpdates.set(to: $0) } :
                         nil
+                    ),
+                    (openGroup.permissions != permissions ?
+                        OpenGroup.Columns.permissions.set(to: permissions) :
+                        nil
                     )
                 ].compactMap { $0 }
             )
@@ -422,17 +432,41 @@ public final class OpenGroupManager: NSObject {
                 _ = try GroupMember(
                     groupId: threadId,
                     profileId: adminId,
-                    role: .admin
+                    role: .admin,
+                    isHidden: false
                 ).saved(db)
             }
+            
+            try roomDetails.hiddenAdmins
+                .defaulting(to: [])
+                .forEach { adminId in
+                    _ = try GroupMember(
+                        groupId: threadId,
+                        profileId: adminId,
+                        role: .admin,
+                        isHidden: true
+                    ).saved(db)
+                }
             
             try roomDetails.moderators.forEach { moderatorId in
                 _ = try GroupMember(
                     groupId: threadId,
                     profileId: moderatorId,
-                    role: .moderator
+                    role: .moderator,
+                    isHidden: false
                 ).saved(db)
             }
+            
+            try roomDetails.hiddenModerators
+                .defaulting(to: [])
+                .forEach { moderatorId in
+                    _ = try GroupMember(
+                        groupId: threadId,
+                        profileId: moderatorId,
+                        role: .moderator,
+                        isHidden: true
+                    ).saved(db)
+                }
         }
         
         db.afterNextTransactionCommit { db in
@@ -488,7 +522,6 @@ public final class OpenGroupManager: NSObject {
         messages: [OpenGroupAPI.Message],
         for roomToken: String,
         on server: String,
-        isBackgroundPoll: Bool,
         dependencies: OGMDependencies = OGMDependencies()
     ) {
         // Sorting the messages by server ID before importing them fixes an issue where messages
@@ -498,61 +531,103 @@ public final class OpenGroupManager: NSObject {
             return
         }
         
+        let seqNo: Int64? = messages.map { $0.seqNo }.max()
         let sortedMessages: [OpenGroupAPI.Message] = messages
+            .filter { $0.deleted != true }
             .sorted { lhs, rhs in lhs.id < rhs.id }
-        let seqNo: Int64? = sortedMessages.map { $0.seqNo }.max()
-        var messageServerIdsToRemove: [UInt64] = []
+        var messageServerIdsToRemove: [Int64] = messages
+            .filter { $0.deleted == true }
+            .map { $0.id }
         
-        // Update the 'openGroupSequenceNumber' value (Note: SOGS V4 uses the 'seqNo' instead of the 'serverId')
         if let seqNo: Int64 = seqNo {
+            // Update the 'openGroupSequenceNumber' value (Note: SOGS V4 uses the 'seqNo' instead of the 'serverId')
             _ = try? OpenGroup
                 .filter(id: openGroup.id)
                 .updateAll(db, OpenGroup.Columns.sequenceNumber.set(to: seqNo))
+            
+            // Update pendingChange cache
+            dependencies.mutableCache.mutate {
+                $0.pendingChanges = $0.pendingChanges
+                    .filter { $0.seqNo == nil || $0.seqNo! > seqNo }
+            }
         }
         
         // Process the messages
         sortedMessages.forEach { message in
-            guard
-                let base64EncodedString: String = message.base64EncodedData,
-                let data = Data(base64Encoded: base64EncodedString)
-            else {
-                // A message with no data has been deleted so add it to the list to remove
-                messageServerIdsToRemove.append(UInt64(message.id))
+            if message.base64EncodedData == nil && message.reactions == nil {
+                messageServerIdsToRemove.append(Int64(message.id))
                 return
             }
             
-            do {
-                let processedMessage: ProcessedMessage? = try Message.processReceivedOpenGroupMessage(
-                    db,
-                    openGroupId: openGroup.id,
-                    openGroupServerPublicKey: openGroup.publicKey,
-                    message: message,
-                    data: data,
-                    dependencies: dependencies
-                )
-                
-                if let messageInfo: MessageReceiveJob.Details.MessageInfo = processedMessage?.messageInfo {
-                    try MessageReceiver.handle(
+            // Handle messages
+            if let base64EncodedString: String = message.base64EncodedData,
+               let data = Data(base64Encoded: base64EncodedString)
+            {
+                do {
+                    let processedMessage: ProcessedMessage? = try Message.processReceivedOpenGroupMessage(
                         db,
-                        message: messageInfo.message,
-                        associatedWithProto: try SNProtoContent.parseData(messageInfo.serializedProtoData),
                         openGroupId: openGroup.id,
-                        isBackgroundPoll: isBackgroundPoll,
+                        openGroupServerPublicKey: openGroup.publicKey,
+                        message: message,
+                        data: data,
                         dependencies: dependencies
                     )
+                    
+                    if let messageInfo: MessageReceiveJob.Details.MessageInfo = processedMessage?.messageInfo {
+                        try MessageReceiver.handle(
+                            db,
+                            message: messageInfo.message,
+                            associatedWithProto: try SNProtoContent.parseData(messageInfo.serializedProtoData),
+                            openGroupId: openGroup.id,
+                            dependencies: dependencies
+                        )
+                    }
+                }
+                catch {
+                    switch error {
+                        // Ignore duplicate & selfSend message errors (and don't bother logging
+                        // them as there will be a lot since we each service node duplicates messages)
+                        case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
+                            MessageReceiverError.duplicateMessage,
+                            MessageReceiverError.duplicateControlMessage,
+                            MessageReceiverError.selfSend:
+                            break
+                        
+                        default: SNLog("Couldn't receive open group message due to error: \(error).")
+                    }
                 }
             }
-            catch {
-                switch error {
-                    // Ignore duplicate & selfSend message errors (and don't bother logging
-                    // them as there will be a lot since we each service node duplicates messages)
-                    case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
-                        MessageReceiverError.duplicateMessage,
-                        MessageReceiverError.duplicateControlMessage,
-                        MessageReceiverError.selfSend:
-                        break
+            
+            // Handle reactions
+            if message.reactions != nil {
+                do {
+                    let reactions: [Reaction] = Message.processRawReceivedReactions(
+                        db,
+                        openGroupId: openGroup.id,
+                        message: message,
+                        associatedPendingChanges: dependencies.cache.pendingChanges
+                            .filter {
+                                guard $0.server == server && $0.room == roomToken && $0.changeType == .reaction else {
+                                    return false
+                                }
+                                
+                                if case .reaction(let messageId, _, _) = $0.metadata {
+                                    return messageId == message.id
+                                }
+                                return false
+                            },
+                        dependencies: dependencies
+                    )
                     
-                    default: SNLog("Couldn't receive open group message due to error: \(error).")
+                    try MessageReceiver.handleOpenGroupReactions(
+                        db,
+                        threadId: openGroup.threadId,
+                        openGroupMessageServerId: message.id,
+                        openGroupReactions: reactions
+                    )
+                }
+                catch {
+                    SNLog("Couldn't handle open group reactions due to error: \(error).")
                 }
             }
         }
@@ -561,6 +636,7 @@ public final class OpenGroupManager: NSObject {
         guard !messageServerIdsToRemove.isEmpty else { return }
         
         _ = try? Interaction
+            .filter(Interaction.Columns.threadId == openGroup.threadId)
             .filter(messageServerIdsToRemove.contains(Interaction.Columns.openGroupServerMessageId))
             .deleteAll(db)
     }
@@ -570,7 +646,6 @@ public final class OpenGroupManager: NSObject {
         messages: [OpenGroupAPI.DirectMessage],
         fromOutbox: Bool,
         on server: String,
-        isBackgroundPoll: Bool,
         dependencies: OGMDependencies = OGMDependencies()
     ) {
         // Don't need to do anything if we have no messages (it's a valid case)
@@ -667,7 +742,6 @@ public final class OpenGroupManager: NSObject {
                         message: messageInfo.message,
                         associatedWithProto: try SNProtoContent.parseData(messageInfo.serializedProtoData),
                         openGroupId: nil,   // Intentionally nil as they are technically not open group messages
-                        isBackgroundPoll: isBackgroundPoll,
                         dependencies: dependencies
                     )
                 }
@@ -690,6 +764,78 @@ public final class OpenGroupManager: NSObject {
     }
     
     // MARK: - Convenience
+    
+    public static func addPendingReaction(
+        emoji: String,
+        id: Int64,
+        in roomToken: String,
+        on server: String,
+        type: OpenGroupAPI.PendingChange.ReactAction,
+        using dependencies: OGMDependencies = OGMDependencies()
+    ) -> OpenGroupAPI.PendingChange {
+        let pendingChange = OpenGroupAPI.PendingChange(
+            server: server,
+            room: roomToken,
+            changeType: .reaction,
+            metadata: .reaction(
+                messageId: id,
+                emoji: emoji,
+                action: type
+            )
+        )
+        
+        dependencies.mutableCache.mutate {
+            $0.pendingChanges.append(pendingChange)
+        }
+        
+        return pendingChange
+    }
+    
+    public static func updatePendingChange(
+        _ pendingChange: OpenGroupAPI.PendingChange,
+        seqNo: Int64?,
+        using dependencies: OGMDependencies = OGMDependencies()
+    ) {
+        dependencies.mutableCache.mutate {
+            if let index = $0.pendingChanges.firstIndex(of: pendingChange) {
+                $0.pendingChanges[index].seqNo = seqNo
+            }
+        }
+    }
+    
+    public static func removePendingChange(
+        _ pendingChange: OpenGroupAPI.PendingChange,
+        using dependencies: OGMDependencies = OGMDependencies()
+    ) {
+        dependencies.mutableCache.mutate {
+            if let index = $0.pendingChanges.firstIndex(of: pendingChange) {
+                $0.pendingChanges.remove(at: index)
+            }
+        }
+    }
+    
+    /// This method specifies if the given capability is supported on a specified Open Group
+    public static func isOpenGroupSupport(
+        _ capability: Capability.Variant,
+        on server: String?,
+        using dependencies: OGMDependencies = OGMDependencies()
+    ) -> Bool {
+        guard let server: String = server else { return false }
+        
+        return dependencies.storage
+            .read { db in
+                let capabilities: [Capability.Variant] = (try? Capability
+                    .select(.variant)
+                    .filter(Capability.Columns.openGroupServer == server)
+                    .filter(Capability.Columns.isMissing == false)
+                    .asRequest(of: Capability.Variant.self)
+                    .fetchAll(db))
+                    .defaulting(to: [])
+
+                return capabilities.contains(capability)
+            }
+            .defaulting(to: false)
+    }
     
     /// This method specifies if the given publicKey is a moderator or an admin within a specified Open Group
     public static func isUserModeratorOrAdmin(
@@ -970,10 +1116,10 @@ public final class OpenGroupManager: NSObject {
 
 extension OpenGroupManager {
     public class OGMDependencies: SMKDependencies {
-        internal var _mutableCache: Atomic<OGMCacheType>?
+        internal var _mutableCache: Atomic<Atomic<OGMCacheType>?>
         public var mutableCache: Atomic<OGMCacheType> {
             get { Dependencies.getValueSettingIfNull(&_mutableCache) { OpenGroupManager.shared.mutableCache } }
-            set { _mutableCache = newValue }
+            set { _mutableCache.mutate { $0 = newValue } }
         }
         
         public var cache: OGMCacheType { return mutableCache.wrappedValue }
@@ -983,6 +1129,7 @@ extension OpenGroupManager {
             requestApi: RequestAPIType.Type? = nil,
             generalCache: Atomic<GeneralCacheType>? = nil,
             storage: Storage? = nil,
+            scheduler: ValueObservationScheduler? = nil,
             sodium: SodiumType? = nil,
             box: BoxType? = nil,
             genericHash: GenericHashType? = nil,
@@ -994,12 +1141,13 @@ extension OpenGroupManager {
             standardUserDefaults: UserDefaultsType? = nil,
             date: Date? = nil
         ) {
-            _mutableCache = cache
+            _mutableCache = Atomic(cache)
             
             super.init(
                 requestApi: requestApi,
                 generalCache: generalCache,
                 storage: storage,
+                scheduler: scheduler,
                 sodium: sodium,
                 box: box,
                 genericHash: genericHash,

@@ -65,7 +65,8 @@ public final class PushNotificationAPI : NSObject {
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-            RequestAPI.sendRequest(request, to: server, with: serverPublicKey)
+            Storage.shared
+                .read { db in RequestAPI.sendRequest(db, request: request, to: server, with: serverPublicKey) }
                 .map2 { _, data in
                     guard let response: PushServerResponse = try? data?.decoded(as: PushServerResponse.self) else {
                         return SNLog("Couldn't unregister from push notifications.")
@@ -127,7 +128,8 @@ public final class PushNotificationAPI : NSObject {
         
         promises.append(
             attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-                RequestAPI.sendRequest(request, to: server, with: serverPublicKey)
+                Storage.shared
+                    .read { db in RequestAPI.sendRequest(db, request: request, to: server, with: serverPublicKey) }
                     .map2 { _, data -> Void in
                         guard let response: PushServerResponse = try? data?.decoded(as: PushServerResponse.self) else {
                             return SNLog("Couldn't register device token.")
@@ -193,7 +195,8 @@ public final class PushNotificationAPI : NSObject {
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
-            RequestAPI.sendRequest(request, to: server, with: serverPublicKey)
+            Storage.shared
+                .read { db in RequestAPI.sendRequest(db, request: request, to: server, with: serverPublicKey) }
                 .map2 { _, data in
                     guard let response: PushServerResponse = try? data?.decoded(as: PushServerResponse.self) else {
                         return SNLog("Couldn't subscribe/unsubscribe for closed group: \(closedGroupPublicKey).")
@@ -236,7 +239,8 @@ public final class PushNotificationAPI : NSObject {
         
         let retryCount: UInt = (maxRetryCount ?? PushNotificationAPI.maxRetryCount)
         let promise: Promise<Void> = attempt(maxRetryCount: retryCount, recoveringOn: queue) {
-            RequestAPI.sendRequest(request, to: server, with: serverPublicKey)
+            Storage.shared
+                .read { db in RequestAPI.sendRequest(db, request: request, to: server, with: serverPublicKey) }
                 .map2 { _, data in
                     guard let response: PushServerResponse = try? data?.decoded(as: PushServerResponse.self) else {
                         return SNLog("Couldn't send push notification.")

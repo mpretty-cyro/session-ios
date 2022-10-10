@@ -5,6 +5,11 @@ import GRDB
 import SignalCoreKit
 import SessionUtilitiesKit
 
+public extension Setting.EnumKey {
+    /// Controls what network layer is used for sending API requests (See `RequestAPI.NetworkLayer` for the options)
+    static let debugNetworkLayer: Setting.EnumKey = "debugNetworkLayer"
+}
+
 public enum GetSnodePoolJob: JobExecutor {
     public static let maxFailureCount: Int = -1
     public static let requiresThreadId: Bool = false
@@ -24,7 +29,8 @@ public enum GetSnodePoolJob: JobExecutor {
             return
         }
         
-        let layer: RequestAPI.NetworkLayer = (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        let layer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .onionRequest)
         
         switch layer {
             case .onionRequest: break

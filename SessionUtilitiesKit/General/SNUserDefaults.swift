@@ -58,7 +58,6 @@ public enum SNUserDefaults {
     
     public enum String : Swift.String {
         case deviceToken
-        case networkLayer
     }
 }
 

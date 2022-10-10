@@ -77,7 +77,8 @@ public final class FileServerAPI: NSObject {
             return Promise(error: error)
         }
         
-        return RequestAPI.sendRequest(urlRequest, to: request.server, with: serverPublicKey)
+        return Storage.shared
+            .read { db in RequestAPI.sendRequest(db, request: urlRequest, to: request.server, with: serverPublicKey) }
             .map2 { _, response in
                 guard let response: Data = response else { throw HTTP.Error.parsingFailed }
                 

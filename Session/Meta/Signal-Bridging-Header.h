@@ -7,22 +7,12 @@
 #import <SessionUIKit/SessionUIKit.h>
 
 // Separate iOS Frameworks from other imports.
-#import "AvatarViewHelper.h"
 #import "AVAudioSession+OWS.h"
-#import "NotificationSettingsViewController.h"
 #import "OWSAudioPlayer.h"
 #import "OWSBezierPathView.h"
-#import "OWSConversationSettingsViewController.h"
 #import "OWSMessageTimerView.h"
-#import "OWSNavigationController.h"
-#import "OWSProgressView.h"
-#import "OWSScreenLockUI.h"
 #import "OWSWindowManager.h"
-#import "PrivacySettingsTableViewController.h"
-#import "NetworkLayerViewController.h"
-#import "OWSQRCodeScanningViewController.h"
 #import "MainAppContext.h"
-#import "UIViewController+Permissions.h"
 #import <PureLayout/PureLayout.h>
 #import <Reachability/Reachability.h>
 #import <SignalCoreKit/Cryptography.h>
@@ -36,16 +26,13 @@
 #import <SignalUtilitiesKit/OWSViewController.h>
 #import <SignalUtilitiesKit/UIColor+OWS.h>
 #import <SignalUtilitiesKit/UIFont+OWS.h>
-#import <SignalUtilitiesKit/UIUtil.h>
 #import <SessionUtilitiesKit/UIView+OWS.h>
-#import <SignalUtilitiesKit/UIViewController+OWS.h>
 #import <SignalUtilitiesKit/AppVersion.h>
 #import <SessionUtilitiesKit/DataSource.h>
 #import <SessionUtilitiesKit/MIMETypeUtil.h>
 #import <SessionUtilitiesKit/NSData+Image.h>
 #import <SessionUtilitiesKit/NSNotificationCenter+OWS.h>
 #import <SessionUtilitiesKit/NSString+SSK.h>
-#import <SessionMessagingKit/OWSBackgroundTask.h>
 #import <SignalUtilitiesKit/OWSDispatch.h>
 #import <SignalUtilitiesKit/OWSError.h>
 #import <SessionUtilitiesKit/OWSFileSystem.h>

@@ -26,6 +26,13 @@ abstract_target 'GlobalDependencies' do
     pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
     pod 'ZXingObjC'
     pod 'DifferenceKit'
+    
+    target 'SessionTests' do
+      inherit! :complete
+      
+      pod 'Quick'
+      pod 'Nimble'
+    end
   end
   
   # Dependencies to be included only in all extensions/frameworks
@@ -34,7 +41,10 @@ abstract_target 'GlobalDependencies' do
     pod 'SignalCoreKit', git: 'https://github.com/oxen-io/session-ios-core-kit', branch: 'session-version'
     
     target 'SessionNotificationServiceExtension'
-    target 'SessionSnodeKit'
+    
+    target 'SessionSnodeKit' do
+      pod 'DifferenceKit'
+    end
     
     # Dependencies that are shared across a number of extensions/frameworks but not all
     abstract_target 'ExtendedDependencies' do
@@ -66,6 +76,9 @@ abstract_target 'GlobalDependencies' do
           
           pod 'Quick'
           pod 'Nimble'
+          
+          # Need to include this for the tests because otherwise it won't actually build
+          pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
         end
       end
       
@@ -82,10 +95,12 @@ abstract_target 'GlobalDependencies' do
       end
     end
   end
+  
+  target 'SessionUIKit' do
+    pod 'GRDB.swift/SQLCipher'
+    pod 'DifferenceKit'
+  end
 end
-
-# No dependencies for these
-target 'SessionUIKit'
 
 # Actions to perform post-install
 post_install do |installer|

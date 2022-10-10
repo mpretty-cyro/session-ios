@@ -1,12 +1,55 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+
 import UIKit
 import SessionUIKit
 import SessionSnodeKit
 
 final class PathStatusView: UIView {
+    enum Size {
+        case small
+        case large
+        
+        var pointSize: CGFloat {
+            switch self {
+                case .small: return 8
+                case .large: return 16
+            }
+        }
+        
+        func offset(for interfaceStyle: UIUserInterfaceStyle) -> CGFloat {
+            switch self {
+                case .small: return (interfaceStyle == .light ? 6 : 8)
+                case .large: return (interfaceStyle == .light ? 6 : 8)
+            }
+        }
+    }
     
-    static let size = CGFloat(10)
+    enum Status {
+        case unknown
+        case connecting
+        case connected
+        case error
+        
+        var textThemeColor: ThemeValue {
+            switch self {
+                case .unknown: return .white
+                case .connecting: return .white
+                case .connected: return .black
+                case .error: return .white
+            }
+        }
+        
+        var themeColor: ThemeValue {
+            switch self {
+                case .unknown: return .path_unknown
+                case .connecting: return .path_connecting
+                case .connected: return .path_connected
+                case .error: return .path_error
+            }
+        }
+    }
     
-    private let networkLayer: RequestAPI.NetworkLayer
+    // MARK: - UI
     
     private lazy var layerLabel: UILabel = {
         let result: UILabel = UILabel()
@@ -16,7 +59,13 @@ final class PathStatusView: UIView {
         return result
     }()
     
-    init(networkLayer: RequestAPI.NetworkLayer) {
+    // MARK: - Initialization
+    
+    public let size: Size
+    private let networkLayer: RequestAPI.NetworkLayer
+    
+    init(size: Size = .small, networkLayer: RequestAPI.NetworkLayer) {
+        self.size = size
         self.networkLayer = networkLayer
         
         super.init(frame: .zero)
@@ -26,41 +75,50 @@ final class PathStatusView: UIView {
     }
     
     required init?(coder: NSCoder) {
-        fatalError("use init(layer:) instead")
+        fatalError("use init(size:) instead")
     }
     
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    // MARK: - Layout
+    
     private func setUpViewHierarchy(networkLayer: RequestAPI.NetworkLayer) {
-        layer.cornerRadius = (PathStatusView.size / 2)
+        layer.cornerRadius = (self.size.pointSize / 2)
         layer.masksToBounds = false
+        self.set(.width, to: self.size.pointSize)
+        self.set(.height, to: self.size.pointSize)
         
         addSubview(layerLabel)
         layerLabel.pin(to: self, withInset: 2)
         
-        let currentLayer: RequestAPI.NetworkLayer = (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        let currentLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .onionRequest)
         
         switch networkLayer {
             case .onionRequest:
-                let color = (!OnionRequestAPI.paths.isEmpty ? Colors.accent : Colors.pathsBuilding)
                 layerLabel.text = "O"
-                setColor(to: color, isAnimated: false)
+                setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
                 
             case .lokinet:
-                let color = (LokinetWrapper.isReady ? Colors.accent : Colors.pathsBuilding)
                 layerLabel.text = "L"
-                setColor(to: color, isAnimated: false)
+                setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
                 
             case .nativeLokinet: break
                 
             case .direct:
                 layerLabel.text = "D"
-                setColor(to: Colors.accent, isAnimated: false)
+                setStatus(to: .connected)
         }
         
         // For the settings view we want to change the path colour to gray if it's not currently active
         if networkLayer != currentLayer {
-            setColor(to: .lightGray, isAnimated: false)
+            setStatus(to: .unknown)
         }
     }
+    
+    // MARK: - Functions
 
     private func registerObservers(networkLayer: RequestAPI.NetworkLayer) {
         NotificationCenter.default.addObserver(self, selector: #selector(handleNetworkLayerChangedNotification), name: .networkLayerChanged, object: nil)
@@ -71,97 +129,103 @@ final class PathStatusView: UIView {
         NotificationCenter.default.addObserver(self, selector: #selector(handleDirectNetworkReadyNotification), name: .directNetworkReady, object: nil)
     }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    private func setColor(to color: UIColor, isAnimated: Bool) {
-        backgroundColor = color
-        let size = PathStatusView.size
-        let glowConfiguration = UIView.CircularGlowConfiguration(size: size, color: color, isAnimated: isAnimated, radius: isLightMode ? 6 : 8)
-        setCircularGlow(with: glowConfiguration)
+    private func setStatus(to status: Status) {
+        layerLabel.themeTextColor = status.textThemeColor
+        themeBackgroundColor = status.themeColor
+        layer.themeShadowColor = status.themeColor
+        layer.shadowOffset = CGSize(width: 0, height: 0.8)
+        layer.shadowPath = UIBezierPath(
+            ovalIn: CGRect(
+                origin: CGPoint.zero,
+                size: CGSize(width: self.size.pointSize, height: self.size.pointSize)
+            )
+        ).cgPath
+        
+        ThemeManager.onThemeChange(observer: self) { [weak self] theme, _ in
+            self?.layer.shadowOpacity = (theme.interfaceStyle == .light ? 0.4 : 1)
+            self?.layer.shadowRadius = (self?.size.offset(for: theme.interfaceStyle) ?? 0)
+        }
     }
     
+    // MARK: - Notification Handling
+    
     @objc private func handleNetworkLayerChangedNotification() {
-        let newLayer: RequestAPI.NetworkLayer = (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        let newLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .onionRequest)
         
         switch (networkLayer, newLayer) {
             case (.onionRequest, .onionRequest):
-                let color = (!OnionRequestAPI.paths.isEmpty ? Colors.accent : Colors.pathsBuilding)
-                setColor(to: color, isAnimated: false)
+                setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
                 
             case (.lokinet, .lokinet):
-                let color = (LokinetWrapper.isReady ? Colors.accent : Colors.pathsBuilding)
-                setColor(to: color, isAnimated: false)
+                setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
                 
             case (.nativeLokinet, .nativeLokinet): fallthrough
             case (.direct, .direct):
-                setColor(to: Colors.accent, isAnimated: false)
+                setStatus(to: .connected)
                 
             default:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
 
     @objc private func handleBuildingPathsNotification() {
         switch networkLayer {
             case .onionRequest:
-                setColor(to: Colors.pathsBuilding, isAnimated: true)
+                setStatus(to: .connecting)
                 
             case .lokinet: fallthrough
             case .nativeLokinet: fallthrough
             case .direct:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
 
     @objc private func handlePathsBuiltNotification() {
         switch networkLayer {
             case .onionRequest:
-                setColor(to: Colors.accent, isAnimated: true)
+                setStatus(to: .connected)
                 
             case .lokinet: fallthrough
             case .nativeLokinet: fallthrough
             case .direct:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
     
     @objc private func handleBuildingPathsLokiNotification() {
         switch networkLayer {
             case .lokinet:
-                setColor(to: Colors.pathsBuilding, isAnimated: true)
+                setStatus(to: .connecting)
                 
             case .onionRequest: fallthrough
             case .nativeLokinet: fallthrough
             case .direct:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
 
     @objc private func handlePathsBuiltLokiNotification() {
         switch networkLayer {
             case .lokinet:
-                setColor(to: Colors.accent, isAnimated: true)
+                setStatus(to: .connected)
                 
             case .onionRequest: fallthrough
             case .nativeLokinet: fallthrough
             case .direct:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
     
     @objc private func handleDirectNetworkReadyNotification() {
-        setColor(to: Colors.accent, isAnimated: true)
-        
         switch networkLayer {
             case .nativeLokinet: fallthrough
             case .direct:
-                setColor(to: Colors.accent, isAnimated: true)
+                setStatus(to: .connected)
                 
-            case .onionRequest:  fallthrough
+            case .onionRequest: fallthrough
             case .lokinet:
-                setColor(to: .lightGray, isAnimated: true)
+                setStatus(to: .unknown)
         }
     }
 }

@@ -25,6 +25,9 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         self.contentHandler = contentHandler
         self.request = request
         
+        // Resume database
+        NotificationCenter.default.post(name: Database.resumeNotification, object: self)
+        
         guard let notificationContent = request.content.mutableCopy() as? UNMutableNotificationContent else {
             return self.completeSilenty()
         }
@@ -83,8 +86,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                                 db,
                                 message: visibleMessage,
                                 associatedWithProto: processedMessage.proto,
-                                openGroupId: (isOpenGroup ? processedMessage.threadId : nil),
-                                isBackgroundPoll: false
+                                openGroupId: (isOpenGroup ? processedMessage.threadId : nil)
                             )
                             
                             // Remove the notifications if there is an outgoing messages from a linked device
@@ -238,6 +240,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     
     private func completeSilenty() {
         SNLog("Complete silenty")
+        
+        // Suspend the database
+        NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+        
         self.contentHandler!(.init())
     }
     
@@ -299,11 +305,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         SNLog("Add remote notification request")
     }
 
-    private func handleSuccess(for content: UNMutableNotificationContent) {
-        contentHandler!(content)
-    }
-
     private func handleFailure(for content: UNMutableNotificationContent) {
+        // Suspend the database
+        NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+        
         content.body = "You've got a new message"
         content.title = "Session"
         let userInfo: [String:Any] = [ NotificationServiceExtension.isFromRemoteKey : true ]
@@ -329,7 +334,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
             .defaulting(to: [])
             .map { server in
                 OpenGroupAPI.Poller(for: server)
-                    .poll(isBackgroundPoll: true, isPostCapabilitiesRetry: false)
+                    .poll(calledFromBackgroundPoller: true, isPostCapabilitiesRetry: false)
                     .timeout(
                         seconds: 20,
                         timeoutError: NotificationServiceError.timeout

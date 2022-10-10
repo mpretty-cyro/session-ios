@@ -8,8 +8,8 @@ public class MediaAlbumView: UIStackView {
     public let itemViews: [MediaView]
     public var moreItemsView: MediaView?
 
-    private static let kSpacingPts: CGFloat = 2
-    private static let kMaxItems = 5
+    private static let kSpacingPts: CGFloat = 4
+    private static let kMaxItems = 3
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init(coder aDecoder: NSCoder) {
@@ -35,13 +35,18 @@ public class MediaAlbumView: UIStackView {
 
         super.init(frame: .zero)
 
-        // UIStackView's backgroundColor property has no effect.
-        addBackgroundView(withBackgroundColor: Colors.navigationBarBackground)
-
         createContents(maxMessageWidth: maxMessageWidth)
     }
 
     private func createContents(maxMessageWidth: CGFloat) {
+        let backgroundView: UIView = UIView()
+        backgroundView.themeBackgroundColor = .backgroundPrimary
+        addSubview(backgroundView)
+        
+        backgroundView.setContentHuggingLow()
+        backgroundView.setCompressionResistanceLow()
+        backgroundView.pin(to: backgroundView)
+        
         switch itemViews.count {
             case 0: return owsFailDebug("No item views.")
                 
@@ -65,8 +70,8 @@ public class MediaAlbumView: UIStackView {
                 self.axis = .horizontal
                 self.distribution = .fillEqually
                 self.spacing = MediaAlbumView.kSpacingPts
-                
-            case 3:
+            
+            default:
                 //   x
                 // X x
                 // Big on left, 2 small on right.
@@ -90,64 +95,9 @@ public class MediaAlbumView: UIStackView {
                 )
                 self.axis = .horizontal
                 self.spacing = MediaAlbumView.kSpacingPts
-                
-            case 4:
-                // X X
-                // X X
-                // Square
-                let imageSize = (maxMessageWidth - MediaAlbumView.kSpacingPts) / 2
-
-                let topViews = Array(itemViews[0..<2])
-                addArrangedSubview(
-                    newRow(
-                        rowViews: topViews,
-                        axis: .horizontal,
-                        viewSize: imageSize
-                    )
-                )
-
-                let bottomViews = Array(itemViews[2..<4])
-                addArrangedSubview(
-                    newRow(
-                        rowViews: bottomViews,
-                        axis: .horizontal,
-                        viewSize: imageSize
-                    )
-                )
-
-                self.axis = .vertical
-                self.spacing = MediaAlbumView.kSpacingPts
-                
-            default:
-                // X X
-                // xxx
-                // 2 big on top, 3 small on bottom.
-                let bigImageSize = (maxMessageWidth - MediaAlbumView.kSpacingPts) / 2
-                let smallImageSize = (maxMessageWidth - MediaAlbumView.kSpacingPts * 2) / 3
-
-                let topViews = Array(itemViews[0..<2])
-                addArrangedSubview(
-                    newRow(
-                        rowViews: topViews,
-                        axis: .horizontal,
-                        viewSize: bigImageSize
-                    )
-                )
-
-                let bottomViews = Array(itemViews[2..<5])
-                addArrangedSubview(
-                    newRow(
-                        rowViews: bottomViews,
-                        axis: .horizontal,
-                        viewSize: smallImageSize
-                    )
-                )
-
-                self.axis = .vertical
-                self.spacing = MediaAlbumView.kSpacingPts
 
                 if items.count > MediaAlbumView.kMaxItems {
-                    guard let lastView = bottomViews.last else {
+                    guard let lastView = rightViews.last else {
                         owsFailDebug("Missing lastView")
                         return
                     }
@@ -155,7 +105,7 @@ public class MediaAlbumView: UIStackView {
                     moreItemsView = lastView
 
                     let tintView = UIView()
-                    tintView.backgroundColor = UIColor(white: 0, alpha: 0.4)
+                    tintView.themeBackgroundColor = .messageBubble_overlay
                     lastView.addSubview(tintView)
                     tintView.autoPinEdgesToSuperviewEdges()
 
@@ -166,11 +116,10 @@ public class MediaAlbumView: UIStackView {
                         format: "MEDIA_GALLERY_MORE_ITEMS_FORMAT".localized(),
                         moreCountText
                     )
-                    let moreLabel = UILabel()
+                    let moreLabel: UILabel = UILabel()
+                    moreLabel.font = .systemFont(ofSize: 24)
                     moreLabel.text = moreText
-                    moreLabel.textColor = UIColor.ows_white
-                    // We don't want to use dynamic text here.
-                    moreLabel.font = UIFont.systemFont(ofSize: 24)
+                    moreLabel.themeTextColor = .white
                     lastView.addSubview(moreLabel)
                     moreLabel.autoCenterInSuperview()
                 }
@@ -263,13 +212,8 @@ public class MediaAlbumView: UIStackView {
         let itemCount = itemsToDisplay(forItems: items).count
         
         switch itemCount {
-            case 0, 1, 4:
+            case 0, 1:
                 // X
-                //
-                // or
-                //
-                // XX
-                // XX
                 // Square
                 return CGSize(width: maxMessageWidth, height: maxMessageWidth)
                 
@@ -279,21 +223,13 @@ public class MediaAlbumView: UIStackView {
                 let imageSize = (maxMessageWidth - kSpacingPts) / 2
                 return CGSize(width: maxMessageWidth, height: imageSize)
                 
-            case 3:
+            default:
                 //   x
                 // X x
                 // Big on left, 2 small on right.
                 let smallImageSize = (maxMessageWidth - kSpacingPts * 2) / 3
                 let bigImageSize = smallImageSize * 2 + kSpacingPts
                 return CGSize(width: maxMessageWidth, height: bigImageSize)
-                
-            default:
-                // X X
-                // xxx
-                // 2 big on top, 3 small on bottom.
-                let bigImageSize = (maxMessageWidth - kSpacingPts) / 2
-                let smallImageSize = (maxMessageWidth - kSpacingPts * 2) / 3
-                return CGSize(width: maxMessageWidth, height: bigImageSize + smallImageSize + kSpacingPts)
         }
     }
 

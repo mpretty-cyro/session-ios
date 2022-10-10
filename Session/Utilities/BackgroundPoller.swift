@@ -9,6 +9,7 @@ import SessionUtilitiesKit
 
 public final class BackgroundPoller {
     private static var promises: [Promise<Void>] = []
+    public static var isValid: Bool = false
 
     public static func poll(completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         promises = []
@@ -32,33 +33,26 @@ public final class BackgroundPoller {
                         let poller: OpenGroupAPI.Poller = OpenGroupAPI.Poller(for: server)
                         poller.stop()
                         
-                        return poller.poll(isBackgroundPoll: true, isPostCapabilitiesRetry: false)
+                        return poller.poll(
+                            calledFromBackgroundPoller: true,
+                            isBackgroundPollerValid: { BackgroundPoller.isValid },
+                            isPostCapabilitiesRetry: false
+                        )
                     }
             )
         
-        // Background tasks will automatically be terminated after 30 seconds (which results in a crash
-        // and a prompt to appear for the user) we want to avoid this so we start a timer which expires
-        // after 25 seconds allowing us to cancel all pending promises
-        let cancelTimer: Timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 25, repeats: false) { timer in
-            timer.invalidate()
-            
-            guard promises.contains(where: { !$0.isResolved }) else { return }
-            
-            SNLog("Background poll failed due to manual timeout")
-            completionHandler(.failed)
-        }
-        
         when(resolved: promises)
             .done { _ in
-                cancelTimer.invalidate()
+                // If we have already invalidated the timer then do nothing (we essentially timed out)
+                guard BackgroundPoller.isValid else { return }
+                
                 completionHandler(.newData)
             }
             .catch { error in
                 // If we have already invalidated the timer then do nothing (we essentially timed out)
-                guard cancelTimer.isValid else { return }
+                guard BackgroundPoller.isValid else { return }
                 
                 SNLog("Background poll failed due to error: \(error)")
-                cancelTimer.invalidate()
                 completionHandler(.failed)
             }
     }
@@ -88,7 +82,8 @@ public final class BackgroundPoller {
                     groupPublicKey,
                     on: DispatchQueue.main,
                     maxRetryCount: 0,
-                    isBackgroundPoll: true
+                    calledFromBackgroundPoller: true,
+                    isBackgroundPollValid: { BackgroundPoller.isValid }
                 )
             }
     }
@@ -100,45 +95,46 @@ public final class BackgroundPoller {
                 
                 return SnodeAPI.getMessages(from: snode, associatedWith: publicKey)
                     .then(on: DispatchQueue.main) { messages -> Promise<Void> in
-                        guard !messages.isEmpty else { return Promise.value(()) }
+                        guard !messages.isEmpty, BackgroundPoller.isValid else { return Promise.value(()) }
                         
                         var jobsToRun: [Job] = []
                         
                         Storage.shared.write { db in
-                            var threadMessages: [String: [MessageReceiveJob.Details.MessageInfo]] = [:]
-                            
-                            messages.forEach { message in
-                                do {
-                                    let processedMessage: ProcessedMessage? = try Message.processRawReceivedMessage(db, rawMessage: message)
-                                    let key: String = (processedMessage?.threadId ?? Message.nonThreadMessageId)
-                                    
-                                    threadMessages[key] = (threadMessages[key] ?? [])
-                                        .appending(processedMessage?.messageInfo)
-                                }
-                                catch {
-                                    switch error {
-                                        // Ignore duplicate & selfSend message errors (and don't bother logging
-                                        // them as there will be a lot since we each service node duplicates messages)
-                                        case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
-                                            MessageReceiverError.duplicateMessage,
-                                            MessageReceiverError.duplicateControlMessage,
-                                            MessageReceiverError.selfSend:
-                                            break
+                            messages
+                                .compactMap { message -> ProcessedMessage? in
+                                    do {
+                                        return try Message.processRawReceivedMessage(db, rawMessage: message)
+                                    }
+                                    catch {
+                                        switch error {
+                                            // Ignore duplicate & selfSend message errors (and don't bother
+                                            // logging them as there will be a lot since we each service node
+                                            // duplicates messages)
+                                            case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
+                                                MessageReceiverError.duplicateMessage,
+                                                MessageReceiverError.duplicateControlMessage,
+                                                MessageReceiverError.selfSend:
+                                                break
+                                            
+                                            // In the background ignore 'SQLITE_ABORT' (it generally means
+                                            // the BackgroundPoller has timed out
+                                            case DatabaseError.SQLITE_ABORT: break
+                                            
+                                            default: SNLog("Failed to deserialize envelope due to error: \(error).")
+                                        }
                                         
-                                        default: SNLog("Failed to deserialize envelope due to error: \(error).")
+                                        return nil
                                     }
                                 }
-                            }
-                            
-                            threadMessages
+                                .grouped { threadId, _, _ in (threadId ?? Message.nonThreadMessageId) }
                                 .forEach { threadId, threadMessages in
                                     let maybeJob: Job? = Job(
                                         variant: .messageReceive,
                                         behaviour: .runOnce,
                                         threadId: threadId,
                                         details: MessageReceiveJob.Details(
-                                            messages: threadMessages,
-                                            isBackgroundPoll: true
+                                            messages: threadMessages.map { $0.messageInfo },
+                                            calledFromBackgroundPoller: true
                                         )
                                     )
                                     

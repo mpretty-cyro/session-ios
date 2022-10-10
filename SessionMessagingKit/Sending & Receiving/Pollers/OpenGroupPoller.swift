@@ -8,6 +8,8 @@ import SessionUtilitiesKit
 
 extension OpenGroupAPI {
     public final class Poller {
+        typealias PollResponse = [OpenGroupAPI.Endpoint: (info: OnionRequestResponseInfoType, data: Codable?)]
+        
         private let server: String
         private var timer: Timer? = nil
         private var hasStarted = false
@@ -65,12 +67,13 @@ extension OpenGroupAPI {
         
         @discardableResult
         public func poll(using dependencies: OpenGroupManager.OGMDependencies = OpenGroupManager.OGMDependencies()) -> Promise<Void> {
-            return poll(isBackgroundPoll: false, isPostCapabilitiesRetry: false, using: dependencies)
+            return poll(calledFromBackgroundPoller: false, isPostCapabilitiesRetry: false, using: dependencies)
         }
 
         @discardableResult
         public func poll(
-            isBackgroundPoll: Bool,
+            calledFromBackgroundPoller: Bool,
+            isBackgroundPollerValid: @escaping (() -> Bool) = { true },
             isPostCapabilitiesRetry: Bool,
             using dependencies: OpenGroupManager.OGMDependencies = OpenGroupManager.OGMDependencies()
         ) -> Promise<Void> {
@@ -83,8 +86,14 @@ extension OpenGroupAPI {
             
             Threading.pollerQueue.async {
                 dependencies.storage
-                    .read { db in
-                        OpenGroupAPI
+                    .read { db -> Promise<(Int64, PollResponse)> in
+                        let failureCount: Int64 = (try? OpenGroup
+                            .select(max(OpenGroup.Columns.pollFailureCount))
+                            .asRequest(of: Int64.self)
+                            .fetchOne(db))
+                            .defaulting(to: 0)
+                        
+                        return OpenGroupAPI
                             .poll(
                                 db,
                                 server: server,
@@ -95,10 +104,23 @@ extension OpenGroupAPI {
                                 ),
                                 using: dependencies
                             )
+                            .map(on: OpenGroupAPI.workQueue) { (failureCount, $0) }
                     }
-                    .done(on: OpenGroupAPI.workQueue) { [weak self] response in
+                    .done(on: OpenGroupAPI.workQueue) { [weak self] failureCount, response in
+                        guard !calledFromBackgroundPoller || isBackgroundPollerValid() else {
+                            // If this was a background poll and the background poll is no longer valid
+                            // then just stop
+                            self?.isPolling = false
+                            seal.fulfill(())
+                            return
+                        }
+                        
                         self?.isPolling = false
-                        self?.handlePollResponse(response, isBackgroundPoll: isBackgroundPoll, using: dependencies)
+                        self?.handlePollResponse(
+                            response,
+                            failureCount: failureCount,
+                            using: dependencies
+                        )
                         
                         dependencies.mutableCache.mutate { cache in
                             cache.hasPerformedInitialPoll[server] = true
@@ -106,22 +128,24 @@ extension OpenGroupAPI {
                             UserDefaults.standard[.lastOpen] = Date()
                         }
                         
-                        // Reset the failure count
-                        Storage.shared.writeAsync { db in
-                            try OpenGroup
-                                .filter(OpenGroup.Columns.server == server)
-                                .updateAll(db, OpenGroup.Columns.pollFailureCount.set(to: 0))
-                        }
-                        
                         SNLog("Open group polling finished for \(server).")
                         seal.fulfill(())
                     }
                     .catch(on: OpenGroupAPI.workQueue) { [weak self] error in
+                        guard !calledFromBackgroundPoller || isBackgroundPollerValid() else {
+                            // If this was a background poll and the background poll is no longer valid
+                            // then just stop
+                            self?.isPolling = false
+                            seal.fulfill(())
+                            return
+                        }
+                        
                         // If we are retrying then the error is being handled so no need to continue (this
                         // method will always resolve)
                         self?.updateCapabilitiesAndRetryIfNeeded(
                             server: server,
-                            isBackgroundPoll: isBackgroundPoll,
+                            calledFromBackgroundPoller: calledFromBackgroundPoller,
+                            isBackgroundPollerValid: isBackgroundPollerValid,
                             isPostCapabilitiesRetry: isPostCapabilitiesRetry,
                             error: error
                         )
@@ -141,7 +165,10 @@ extension OpenGroupAPI {
                                 Storage.shared.writeAsync { db in
                                     try OpenGroup
                                         .filter(OpenGroup.Columns.server == server)
-                                        .updateAll(db, OpenGroup.Columns.pollFailureCount.set(to: (pollFailureCount + 1)))
+                                        .updateAll(
+                                            db,
+                                            OpenGroup.Columns.pollFailureCount.set(to: (pollFailureCount + 1))
+                                        )
                                 }
                                 
                                 SNLog("Open group polling failed due to error: \(error). Setting failure count to \(pollFailureCount).")
@@ -159,7 +186,8 @@ extension OpenGroupAPI {
         
         private func updateCapabilitiesAndRetryIfNeeded(
             server: String,
-            isBackgroundPoll: Bool,
+            calledFromBackgroundPoller: Bool,
+            isBackgroundPollerValid: @escaping (() -> Bool) = { true },
             isPostCapabilitiesRetry: Bool,
             error: Error,
             using dependencies: OpenGroupManager.OGMDependencies = OpenGroupManager.OGMDependencies()
@@ -175,7 +203,7 @@ extension OpenGroupAPI {
                 case .httpRequestFailedAtDestination(let statusCode, let data, _) = error,
                 statusCode == 400,
                 let dataString: String = String(data: data, encoding: .utf8),
-                dataString.contains("Invalid authentication: this server requires the use of blinded idse")
+                dataString.contains("Invalid authentication: this server requires the use of blinded ids")
             else { return Promise.value(false) }
             
             let (promise, seal) = Promise<Bool>.pending()
@@ -206,7 +234,8 @@ extension OpenGroupAPI {
                     // Regardless of the outcome we can just resolve this
                     // immediately as it'll handle it's own response
                     return strongSelf.poll(
-                        isBackgroundPoll: isBackgroundPoll,
+                        calledFromBackgroundPoller: calledFromBackgroundPoller,
+                        isBackgroundPollerValid: isBackgroundPollerValid,
                         isPostCapabilitiesRetry: true,
                         using: dependencies
                     )
@@ -221,17 +250,164 @@ extension OpenGroupAPI {
             return promise
         }
         
-        private func handlePollResponse(_ response: [OpenGroupAPI.Endpoint: (info: OnionRequestResponseInfoType, data: Codable?)], isBackgroundPoll: Bool, using dependencies: OpenGroupManager.OGMDependencies = OpenGroupManager.OGMDependencies()) {
+        private func handlePollResponse(
+            _ response: PollResponse,
+            failureCount: Int64,
+            using dependencies: OpenGroupManager.OGMDependencies = OpenGroupManager.OGMDependencies()
+        ) {
             let server: String = self.server
-            
-            dependencies.storage.write { db in
-                try response.forEach { endpoint, endpointResponse in
+            let validResponses: PollResponse = response
+                .filter { endpoint, endpointResponse in
                     switch endpoint {
                         case .capabilities:
-                            guard let responseData: BatchSubResponse<Capabilities> = endpointResponse.data as? BatchSubResponse<Capabilities>, let responseBody: Capabilities = responseData.body else {
+                            guard (endpointResponse.data as? BatchSubResponse<Capabilities>)?.body != nil else {
                                 SNLog("Open group polling failed due to invalid capability data.")
-                                return
+                                return false
                             }
+                            
+                            return true
+                            
+                        case .roomPollInfo(let roomToken, _):
+                            guard (endpointResponse.data as? BatchSubResponse<RoomPollInfo>)?.body != nil else {
+                                switch (endpointResponse.data as? BatchSubResponse<RoomPollInfo>)?.code {
+                                    case 404: SNLog("Open group polling failed to retrieve info for unknown room '\(roomToken)'.")
+                                    default: SNLog("Open group polling failed due to invalid room info data.")
+                                }
+                                return false
+                            }
+                            
+                            return true
+                            
+                        case .roomMessagesRecent(let roomToken), .roomMessagesBefore(let roomToken, _), .roomMessagesSince(let roomToken, _):
+                            guard
+                                let responseData: BatchSubResponse<[Failable<Message>]> = endpointResponse.data as? BatchSubResponse<[Failable<Message>]>,
+                                let responseBody: [Failable<Message>] = responseData.body
+                            else {
+                                switch (endpointResponse.data as? BatchSubResponse<[Failable<Message>]>)?.code {
+                                    case 404: SNLog("Open group polling failed to retrieve messages for unknown room '\(roomToken)'.")
+                                    default: SNLog("Open group polling failed due to invalid messages data.")
+                                }
+                                return false
+                            }
+                            
+                            let successfulMessages: [Message] = responseBody.compactMap { $0.value }
+                            
+                            if successfulMessages.count != responseBody.count {
+                                let droppedCount: Int = (responseBody.count - successfulMessages.count)
+                                
+                                SNLog("Dropped \(droppedCount) invalid open group message\(droppedCount == 1 ? "" : "s").")
+                            }
+                            
+                            return !successfulMessages.isEmpty
+                            
+                        case .inbox, .inboxSince, .outbox, .outboxSince:
+                            guard
+                                let responseData: BatchSubResponse<[DirectMessage]?> = endpointResponse.data as? BatchSubResponse<[DirectMessage]?>,
+                                !responseData.failedToParseBody
+                            else {
+                                SNLog("Open group polling failed due to invalid inbox/outbox data.")
+                                return false
+                            }
+                            
+                            // Double optional because the server can return a `304` with an empty body
+                            let messages: [OpenGroupAPI.DirectMessage] = ((responseData.body ?? []) ?? [])
+                            
+                            return !messages.isEmpty
+                            
+                        default: return false // No custom handling needed
+                    }
+                }
+            
+            // If there are no remaining 'validResponses' and there hasn't been a failure then there is
+            // no need to do anything else
+            guard !validResponses.isEmpty || failureCount != 0 else { return }
+            
+            // Retrieve the current capability & group info to check if anything changed
+            let rooms: [String] = validResponses
+                .keys
+                .compactMap { endpoint -> String? in
+                    switch endpoint {
+                        case .roomPollInfo(let roomToken, _): return roomToken
+                        default: return nil
+                    }
+                }
+            let currentInfo: (capabilities: Capabilities, groups: [OpenGroup])? = dependencies.storage.read { db in
+                let allCapabilities: [Capability] = try Capability
+                    .filter(Capability.Columns.openGroupServer == server)
+                    .fetchAll(db)
+                let capabilities: Capabilities = Capabilities(
+                    capabilities: allCapabilities
+                        .filter { !$0.isMissing }
+                        .map { $0.variant },
+                    missing: {
+                        let missingCapabilities: [Capability.Variant] = allCapabilities
+                            .filter { $0.isMissing }
+                            .map { $0.variant }
+                        
+                        return (missingCapabilities.isEmpty ? nil : missingCapabilities)
+                    }()
+                )
+                let openGroupIds: [String] = rooms
+                    .map { OpenGroup.idFor(roomToken: $0, server: server) }
+                let groups: [OpenGroup] = try OpenGroup
+                    .filter(ids: openGroupIds)
+                    .fetchAll(db)
+                
+                return (capabilities, groups)
+            }
+            let changedResponses: PollResponse = validResponses
+                .filter { endpoint, endpointResponse in
+                    switch endpoint {
+                        case .capabilities:
+                            guard
+                                let responseData: BatchSubResponse<Capabilities> = endpointResponse.data as? BatchSubResponse<Capabilities>,
+                                let responseBody: Capabilities = responseData.body
+                            else { return false }
+                            
+                            return (responseBody != currentInfo?.capabilities)
+                            
+                        case .roomPollInfo(let roomToken, _):
+                            guard
+                                let responseData: BatchSubResponse<RoomPollInfo> = endpointResponse.data as? BatchSubResponse<RoomPollInfo>,
+                                let responseBody: RoomPollInfo = responseData.body
+                            else { return false }
+                            guard let existingOpenGroup: OpenGroup = currentInfo?.groups.first(where: { $0.roomToken == roomToken }) else {
+                                return true
+                            }
+                            
+                            // Note: This might need to be updated in the future when we start tracking
+                            // user permissions if changes to permissions don't trigger a change to
+                            // the 'infoUpdates'
+                            return (
+                                responseBody.activeUsers != existingOpenGroup.userCount || (
+                                    responseBody.details != nil &&
+                                    responseBody.details?.infoUpdates != existingOpenGroup.infoUpdates
+                                )
+                            )
+                        
+                        default: return true
+                    }
+                }
+            
+            // If there are no 'changedResponses' and there hasn't been a failure then there is
+            // no need to do anything else
+            guard !changedResponses.isEmpty || failureCount != 0 else { return }
+            
+            dependencies.storage.write { db in
+                // Reset the failure count
+                if failureCount > 0 {
+                    try OpenGroup
+                        .filter(OpenGroup.Columns.server == server)
+                        .updateAll(db, OpenGroup.Columns.pollFailureCount.set(to: 0))
+                }
+                
+                try changedResponses.forEach { endpoint, endpointResponse in
+                    switch endpoint {
+                        case .capabilities:
+                            guard
+                                let responseData: BatchSubResponse<Capabilities> = endpointResponse.data as? BatchSubResponse<Capabilities>,
+                                let responseBody: Capabilities = responseData.body
+                            else { return }
                             
                             OpenGroupManager.handleCapabilities(
                                 db,
@@ -240,13 +416,10 @@ extension OpenGroupAPI {
                             )
                             
                         case .roomPollInfo(let roomToken, _):
-                            guard let responseData: BatchSubResponse<RoomPollInfo> = endpointResponse.data as? BatchSubResponse<RoomPollInfo>, let responseBody: RoomPollInfo = responseData.body else {
-                                switch (endpointResponse.data as? BatchSubResponse<RoomPollInfo>)?.code {
-                                    case 404: SNLog("Open group polling failed to retrieve info for unknown room '\(roomToken)'.")
-                                    default: SNLog("Open group polling failed due to invalid room info data.")
-                                }
-                                return
-                            }
+                            guard
+                                let responseData: BatchSubResponse<RoomPollInfo> = endpointResponse.data as? BatchSubResponse<RoomPollInfo>,
+                                let responseBody: RoomPollInfo = responseData.body
+                            else { return }
                             
                             try OpenGroupManager.handlePollInfo(
                                 db,
@@ -258,35 +431,24 @@ extension OpenGroupAPI {
                             )
                             
                         case .roomMessagesRecent(let roomToken), .roomMessagesBefore(let roomToken, _), .roomMessagesSince(let roomToken, _):
-                            guard let responseData: BatchSubResponse<[Failable<Message>]> = endpointResponse.data as? BatchSubResponse<[Failable<Message>]>, let responseBody: [Failable<Message>] = responseData.body else {
-                                switch (endpointResponse.data as? BatchSubResponse<[Failable<Message>]>)?.code {
-                                    case 404: SNLog("Open group polling failed to retrieve messages for unknown room '\(roomToken)'.")
-                                    default: SNLog("Open group polling failed due to invalid messages data.")
-                                }
-                                return
-                            }
-                            let successfulMessages: [Message] = responseBody.compactMap { $0.value }
-                            
-                            if successfulMessages.count != responseBody.count {
-                                let droppedCount: Int = (responseBody.count - successfulMessages.count)
-                                
-                                SNLog("Dropped \(droppedCount) invalid open group message\(droppedCount == 1 ? "" : "s").")
-                            }
+                            guard
+                                let responseData: BatchSubResponse<[Failable<Message>]> = endpointResponse.data as? BatchSubResponse<[Failable<Message>]>,
+                                let responseBody: [Failable<Message>] = responseData.body
+                            else { return }
                             
                             OpenGroupManager.handleMessages(
                                 db,
-                                messages: successfulMessages,
+                                messages: responseBody.compactMap { $0.value },
                                 for: roomToken,
                                 on: server,
-                                isBackgroundPoll: isBackgroundPoll,
                                 dependencies: dependencies
                             )
                             
                         case .inbox, .inboxSince, .outbox, .outboxSince:
-                            guard let responseData: BatchSubResponse<[DirectMessage]?> = endpointResponse.data as? BatchSubResponse<[DirectMessage]?>, !responseData.failedToParseBody else {
-                                SNLog("Open group polling failed due to invalid inbox/outbox data.")
-                                return
-                            }
+                            guard
+                                let responseData: BatchSubResponse<[DirectMessage]?> = endpointResponse.data as? BatchSubResponse<[DirectMessage]?>,
+                                !responseData.failedToParseBody
+                            else { return }
                             
                             // Double optional because the server can return a `304` with an empty body
                             let messages: [OpenGroupAPI.DirectMessage] = ((responseData.body ?? []) ?? [])
@@ -302,7 +464,6 @@ extension OpenGroupAPI {
                                 messages: messages,
                                 fromOutbox: fromOutbox,
                                 on: server,
-                                isBackgroundPoll: isBackgroundPoll,
                                 dependencies: dependencies
                             )
                             

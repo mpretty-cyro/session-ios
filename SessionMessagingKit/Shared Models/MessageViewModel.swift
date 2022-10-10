@@ -3,10 +3,12 @@
 import Foundation
 import GRDB
 import DifferenceKit
+import SessionUIKit
 import SessionUtilitiesKit
 
 fileprivate typealias ViewModel = MessageViewModel
 fileprivate typealias AttachmentInteractionInfo = MessageViewModel.AttachmentInteractionInfo
+fileprivate typealias ReactionInfo = MessageViewModel.ReactionInfo
 fileprivate typealias TypingIndicatorInfo = MessageViewModel.TypingIndicatorInfo
 
 public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, Hashable, Identifiable, Differentiable {
@@ -33,6 +35,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     public static let cellTypeKey: SQL = SQL(stringLiteral: CodingKeys.cellType.stringValue)
     public static let authorNameKey: SQL = SQL(stringLiteral: CodingKeys.authorName.stringValue)
     public static let shouldShowProfileKey: SQL = SQL(stringLiteral: CodingKeys.shouldShowProfile.stringValue)
+    public static let shouldShowDateHeaderKey: SQL = SQL(stringLiteral: CodingKeys.shouldShowDateHeader.stringValue)
     public static let positionInClusterKey: SQL = SQL(stringLiteral: CodingKeys.positionInCluster.stringValue)
     public static let isOnlyMessageInClusterKey: SQL = SQL(stringLiteral: CodingKeys.isOnlyMessageInCluster.stringValue)
     public static let isLastKey: SQL = SQL(stringLiteral: CodingKeys.isLast.stringValue)
@@ -43,18 +46,13 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     public static let linkPreviewString: String = CodingKeys.linkPreview.stringValue
     public static let linkPreviewAttachmentString: String = CodingKeys.linkPreviewAttachment.stringValue
     
-    public enum Position: Int, Decodable, Equatable, Hashable, DatabaseValueConvertible {
-        case top
-        case middle
-        case bottom
-    }
-    
     public enum CellType: Int, Decodable, Equatable, Hashable, DatabaseValueConvertible {
         case textOnlyMessage
         case mediaMessage
         case audio
         case genericAttachment
         case typingIndicator
+        case dateHeader
     }
     
     public var differenceIdentifier: Int64 { id }
@@ -100,6 +98,9 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     /// This value includes the associated attachments
     public let attachments: [Attachment]?
     
+    /// This value includes the associated reactions
+    public let reactionInfo: [ReactionInfo]?
+    
     /// This value defines what type of cell should appear and is generated based on the interaction variant
     /// and associated attachment data
     public let cellType: CellType
@@ -115,8 +116,11 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     /// A flag indicating whether the profile view should be displayed
     public let shouldShowProfile: Bool
 
-    /// This value will be used to populate the date header, if it's null then the header will be hidden
-    public let dateForUI: Date?
+    /// A flag which controls whether the date header should be displayed
+    public let shouldShowDateHeader: Bool
+    
+    /// This value will be used to populate the Context Menu and date header (if present)
+    public var dateForUI: Date { Date(timeIntervalSince1970: (TimeInterval(self.timestampMs) / 1000)) }
     
     /// This value specifies whether the body contains only emoji characters
     public let containsOnlyEmoji: Bool?
@@ -141,7 +145,10 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
 
     // MARK: - Mutation
     
-    public func with(attachments: [Attachment]) -> MessageViewModel {
+    public func with(
+        attachments: Updatable<[Attachment]> = .existing,
+        reactionInfo: Updatable<[ReactionInfo]> = .existing
+    ) -> MessageViewModel {
         return MessageViewModel(
             threadId: self.threadId,
             threadVariant: self.threadVariant,
@@ -171,12 +178,13 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             linkPreview: self.linkPreview,
             linkPreviewAttachment: self.linkPreviewAttachment,
             currentUserPublicKey: self.currentUserPublicKey,
-            attachments: attachments,
+            attachments: (attachments ?? self.attachments),
+            reactionInfo: (reactionInfo ?? self.reactionInfo),
             cellType: self.cellType,
             authorName: self.authorName,
             senderName: self.senderName,
             shouldShowProfile: self.shouldShowProfile,
-            dateForUI: self.dateForUI,
+            shouldShowDateHeader: self.shouldShowDateHeader,
             containsOnlyEmoji: self.containsOnlyEmoji,
             glyphCount: self.glyphCount,
             previousVariant: self.previousVariant,
@@ -232,9 +240,10 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             name: self.authorNameInternal,
             nickname: nil  // Folded into 'authorName' within the Query
         )
-        let shouldShowDateOnThisModel: Bool = {
+        let shouldShowDateBeforeThisModel: Bool = {
             guard self.isTypingIndicator != true else { return false }
             guard self.variant != .infoCall else { return true }    // Always show on calls
+            guard !self.variant.isInfoMessage else { return false } // Never show on info messages
             guard let prevModel: ViewModel = prevModel else { return true }
             
             return MessageViewModel.shouldShowDateBreak(
@@ -242,7 +251,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
                 and: self.timestampMs
             )
         }()
-        let shouldShowDateOnNextModel: Bool = {
+        let shouldShowDateBeforeNextModel: Bool = {
             // Should be nothing after a typing indicator
             guard self.isTypingIndicator != true else { return false }
             guard let nextModel: ViewModel = nextModel else { return false }
@@ -255,7 +264,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         let (positionInCluster, isOnlyMessageInCluster): (Position, Bool) = {
             let isFirstInCluster: Bool = (
                 prevModel == nil ||
-                shouldShowDateOnThisModel || (
+                shouldShowDateBeforeThisModel || (
                     self.variant == .standardOutgoing &&
                     prevModel?.variant != .standardOutgoing
                 ) || (
@@ -271,7 +280,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             )
             let isLastInCluster: Bool = (
                 nextModel == nil ||
-                shouldShowDateOnNextModel || (
+                shouldShowDateBeforeNextModel || (
                     self.variant == .standardOutgoing &&
                     nextModel?.variant != .standardOutgoing
                 ) || (
@@ -349,6 +358,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             linkPreviewAttachment: self.linkPreviewAttachment,
             currentUserPublicKey: self.currentUserPublicKey,
             attachments: self.attachments,
+            reactionInfo: self.reactionInfo,
             cellType: cellType,
             authorName: authorDisplayName,
             senderName: {
@@ -363,7 +373,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
                 }
                     
                 // Only if there is a date header or the senders are different
-                guard shouldShowDateOnThisModel || self.authorId != prevModel?.authorId else {
+                guard shouldShowDateBeforeThisModel || self.authorId != prevModel?.authorId else {
                     return nil
                 }
                     
@@ -380,16 +390,13 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
                 (
                     self.authorId != nextModel?.authorId ||
                     (nextModel?.variant != .standardIncoming && nextModel?.variant != .standardIncomingDeleted) ||
-                    shouldShowDateOnNextModel
+                    shouldShowDateBeforeNextModel
                 ) &&
                 
                 // Need a profile to be able to show it
                 self.profile != nil
             ),
-            dateForUI: (shouldShowDateOnThisModel ?
-                Date(timeIntervalSince1970: (TimeInterval(self.timestampMs) / 1000)) :
-                nil
-            ),
+            shouldShowDateHeader: shouldShowDateBeforeThisModel,
             containsOnlyEmoji: self.body?.containsOnlyEmoji,
             glyphCount: self.body?.glyphCount,
             previousVariant: prevModel?.variant,
@@ -430,6 +437,37 @@ public extension MessageViewModel {
     }
 }
 
+// MARK: - ReactionInfo
+
+public extension MessageViewModel {
+    struct ReactionInfo: FetchableRecordWithRowId, Decodable, Identifiable, Equatable, Comparable, Hashable, Differentiable {
+        public static let rowIdKey: SQL = SQL(stringLiteral: CodingKeys.rowId.stringValue)
+        public static let reactionKey: SQL = SQL(stringLiteral: CodingKeys.reaction.stringValue)
+        public static let profileKey: SQL = SQL(stringLiteral: CodingKeys.profile.stringValue)
+        
+        public static let reactionString: String = CodingKeys.reaction.stringValue
+        public static let profileString: String = CodingKeys.profile.stringValue
+        
+        public let rowId: Int64
+        public let reaction: Reaction
+        public let profile: Profile?
+        
+        // MARK: - Identifiable
+        
+        public var differenceIdentifier: String { return id }
+        
+        public var id: String {
+            "\(reaction.emoji)-\(reaction.interactionId)-\(reaction.authorId)"
+        }
+        
+        // MARK: - Comparable
+        
+        public static func < (lhs: ReactionInfo, rhs: ReactionInfo) -> Bool {
+            return (lhs.reaction.sortId < rhs.reaction.sortId)
+        }
+    }
+}
+
 // MARK: - TypingIndicatorInfo
 
 public extension MessageViewModel {
@@ -453,7 +491,15 @@ public extension MessageViewModel {
     static let typingIndicatorId: Int64 = -2
     
     // Note: This init method is only used system-created cells or empty states
-    init(isTypingIndicator: Bool? = nil) {
+    init(
+        variant: Interaction.Variant = .standardOutgoing,
+        timestampMs: Int64 = Int64.max,
+        body: String? = nil,
+        quote: Quote? = nil,
+        cellType: CellType = .typingIndicator,
+        isTypingIndicator: Bool? = nil,
+        isLast: Bool = true
+    ) {
         self.threadId = "INVALID_THREAD_ID"
         self.threadVariant = .contact
         self.threadIsTrusted = false
@@ -464,17 +510,19 @@ public extension MessageViewModel {
         
         // Interaction Info
         
-        let targetId: Int64 = (isTypingIndicator == true ?
-            MessageViewModel.typingIndicatorId :
-            MessageViewModel.genericId
-        )
+        let targetId: Int64 = {
+            guard isTypingIndicator != true else { return MessageViewModel.typingIndicatorId }
+            guard cellType != .dateHeader else { return -timestampMs }
+            
+            return MessageViewModel.genericId
+        }()
         self.rowId = targetId
         self.id = targetId
-        self.variant = .standardOutgoing
-        self.timestampMs = Int64.max
+        self.variant = variant
+        self.timestampMs = timestampMs
         self.authorId = ""
         self.authorNameInternal = nil
-        self.body = nil
+        self.body = body
         self.rawBody = nil
         self.expiresStartedAtMs = nil
         self.expiresInSeconds = nil
@@ -485,7 +533,7 @@ public extension MessageViewModel {
         self.isSenderOpenGroupModerator = false
         self.isTypingIndicator = isTypingIndicator
         self.profile = nil
-        self.quote = nil
+        self.quote = quote
         self.quoteAttachment = nil
         self.linkPreview = nil
         self.linkPreviewAttachment = nil
@@ -494,17 +542,18 @@ public extension MessageViewModel {
         // Post-Query Processing Data
         
         self.attachments = nil
-        self.cellType = .typingIndicator
+        self.reactionInfo = nil
+        self.cellType = cellType
         self.authorName = ""
         self.senderName = nil
         self.shouldShowProfile = false
-        self.dateForUI = nil
+        self.shouldShowDateHeader = false
         self.containsOnlyEmoji = nil
         self.glyphCount = nil
         self.previousVariant = nil
         self.positionInCluster = .middle
         self.isOnlyMessageInCluster = true
-        self.isLast = true
+        self.isLast = isLast
         self.currentUserBlindedPublicKey = nil
     }
 }
@@ -554,9 +603,25 @@ extension MessageViewModel {
 public extension MessageViewModel {
     static func filterSQL(threadId: String) -> SQL {
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+        let setting: TypedTableAlias<Setting> = TypedTableAlias()
         
-        return SQL("\(interaction[.threadId]) = \(threadId)")
+        var targetValue: Bool = true
+        let boolSettingLiteral: Data = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
+        
+        return SQL("""
+            \(interaction[.threadId]) = \(threadId) AND (
+                \(SQL("\(interaction[.variant]) != \(Interaction.Variant.infoScreenshotNotification)")) OR
+                \(SQL("IFNULL(\(setting[.value]), false) == \(boolSettingLiteral)"))
+            )
+        """)
     }
+    
+    static let optimisedJoinSQL: SQL = {
+        let setting: TypedTableAlias<Setting> = TypedTableAlias()
+        let targetSetting: String = Setting.BoolKey.showScreenshotNotifications.rawValue
+        
+        return SQL("LEFT JOIN \(Setting.self) ON \(setting[.key]) = \(targetSetting)")
+    }()
     
     static let groupSQL: SQL = {
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
@@ -596,6 +661,7 @@ public extension MessageViewModel {
             let attachmentIdColumnLiteral: SQL = SQL(stringLiteral: Attachment.Columns.id.name)
             let groupMemberModeratorTableLiteral: SQL = SQL(stringLiteral: "groupMemberModerator")
             let groupMemberAdminTableLiteral: SQL = SQL(stringLiteral: "groupMemberAdmin")
+            let groupMemberGroupIdColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.groupId.name)
             let groupMemberProfileIdColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.profileId.name)
             let groupMemberRoleColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.role.name)
             
@@ -645,6 +711,7 @@ public extension MessageViewModel {
                     \(CellType.textOnlyMessage) AS \(ViewModel.cellTypeKey),
                     '' AS \(ViewModel.authorNameKey),
                     false AS \(ViewModel.shouldShowProfileKey),
+                    false AS \(ViewModel.shouldShowDateHeaderKey),
                     \(Position.middle) AS \(ViewModel.positionInClusterKey),
                     false AS \(ViewModel.isOnlyMessageInClusterKey),
                     false AS \(ViewModel.isLastKey)
@@ -674,11 +741,13 @@ public extension MessageViewModel {
                 )
                 LEFT JOIN \(GroupMember.self) AS \(groupMemberModeratorTableLiteral) ON (
                     \(SQL("\(thread[.variant]) = \(SessionThread.Variant.openGroup)")) AND
+                    \(groupMemberModeratorTableLiteral).\(groupMemberGroupIdColumnLiteral) = \(interaction[.threadId]) AND
                     \(groupMemberModeratorTableLiteral).\(groupMemberProfileIdColumnLiteral) = \(interaction[.authorId]) AND
                     \(SQL("\(groupMemberModeratorTableLiteral).\(groupMemberRoleColumnLiteral) = \(GroupMember.Role.moderator)"))
                 )
                 LEFT JOIN \(GroupMember.self) AS \(groupMemberAdminTableLiteral) ON (
                     \(SQL("\(thread[.variant]) = \(SessionThread.Variant.openGroup)")) AND
+                    \(groupMemberAdminTableLiteral).\(groupMemberGroupIdColumnLiteral) = \(interaction[.threadId]) AND
                     \(groupMemberAdminTableLiteral).\(groupMemberProfileIdColumnLiteral) = \(interaction[.authorId]) AND
                     \(SQL("\(groupMemberAdminTableLiteral).\(groupMemberRoleColumnLiteral) = \(GroupMember.Role.admin)"))
                 )
@@ -778,12 +847,100 @@ public extension MessageViewModel.AttachmentInteractionInfo {
                     
                     updatedPagedDataCache = updatedPagedDataCache.upserting(
                         dataToUpdate.with(
-                            attachments: attachments
-                                .sorted()
-                                .map { $0.attachment }
+                            attachments: .update(
+                                attachments
+                                    .sorted()
+                                    .map { $0.attachment }
+                            )
                         )
                     )
                 }
+            
+            return updatedPagedDataCache
+        }
+    }
+}
+
+// MARK: --ReactionInfo
+
+public extension MessageViewModel.ReactionInfo {
+    static let baseQuery: ((SQL?) -> AdaptedFetchRequest<SQLRequest<MessageViewModel.ReactionInfo>>) = {
+        return { additionalFilters -> AdaptedFetchRequest<SQLRequest<ReactionInfo>> in
+            let reaction: TypedTableAlias<Reaction> = TypedTableAlias()
+            let profile: TypedTableAlias<Profile> = TypedTableAlias()
+            
+            let finalFilterSQL: SQL = {
+                guard let additionalFilters: SQL = additionalFilters else {
+                    return SQL(stringLiteral: "")
+                }
+                
+                return """
+                    WHERE \(additionalFilters)
+                """
+            }()
+            let numColumnsBeforeLinkedRecords: Int = 1
+            let request: SQLRequest<ReactionInfo> = """
+                SELECT
+                    \(reaction.alias[Column.rowID]) AS \(ReactionInfo.rowIdKey),
+                    \(ReactionInfo.reactionKey).*,
+                    \(ReactionInfo.profileKey).*
+                FROM \(Reaction.self)
+                LEFT JOIN \(Profile.self) ON \(profile[.id]) = \(reaction[.authorId])
+                \(finalFilterSQL)
+            """
+            
+            return request.adapted { db in
+                let adapters = try splittingRowAdapters(columnCounts: [
+                    numColumnsBeforeLinkedRecords,
+                    Reaction.numberOfSelectedColumns(db),
+                    Profile.numberOfSelectedColumns(db)
+                ])
+                
+                return ScopeAdapter([
+                    ReactionInfo.reactionString: adapters[1],
+                    ReactionInfo.profileString: adapters[2]
+                ])
+            }
+        }
+    }()
+    
+    static var joinToViewModelQuerySQL: SQL = {
+        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+        let reaction: TypedTableAlias<Reaction> = TypedTableAlias()
+        
+        return """
+            JOIN \(Reaction.self) ON \(reaction[.interactionId]) = \(interaction[.id])
+        """
+    }()
+    
+    static func createAssociateDataClosure() -> (DataCache<MessageViewModel.ReactionInfo>, DataCache<MessageViewModel>) -> DataCache<MessageViewModel> {
+        return { dataCache, pagedDataCache -> DataCache<MessageViewModel> in
+            var updatedPagedDataCache: DataCache<MessageViewModel> = pagedDataCache
+            var pagedRowIdsWithNoReactions: Set<Int64> = Set(pagedDataCache.data.keys)
+            
+            // Add any new reactions
+            dataCache
+                .values
+                .grouped(by: \.reaction.interactionId)
+                .forEach { (interactionId: Int64, reactionInfo: [MessageViewModel.ReactionInfo]) in
+                    guard
+                        let interactionRowId: Int64 = updatedPagedDataCache.lookup[interactionId],
+                        let dataToUpdate: ViewModel = updatedPagedDataCache.data[interactionRowId]
+                    else { return }
+                    
+                    updatedPagedDataCache = updatedPagedDataCache.upserting(
+                        dataToUpdate.with(reactionInfo: .update(reactionInfo.sorted()))
+                    )
+                    pagedRowIdsWithNoReactions.remove(interactionRowId)
+                }
+            
+            // Remove any removed reactions
+            updatedPagedDataCache = updatedPagedDataCache.upserting(
+                items: pagedRowIdsWithNoReactions
+                    .compactMap { rowId -> ViewModel? in updatedPagedDataCache.data[rowId] }
+                    .filter { viewModel -> Bool in (viewModel.reactionInfo?.isEmpty == false) }
+                    .map { viewModel -> ViewModel in viewModel.with(reactionInfo: nil) }
+            )
             
             return updatedPagedDataCache
         }

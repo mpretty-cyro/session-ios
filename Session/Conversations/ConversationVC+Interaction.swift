@@ -29,16 +29,25 @@ extension ConversationVC:
     }
 
     @objc func openSettings() {
-        let settingsVC: OWSConversationSettingsViewController = OWSConversationSettingsViewController()
-        settingsVC.configure(
-            withThreadId: viewModel.threadData.threadId,
-            threadName: viewModel.threadData.displayName,
-            isClosedGroup: (viewModel.threadData.threadVariant == .closedGroup),
-            isOpenGroup: (viewModel.threadData.threadVariant == .openGroup),
-            isNoteToSelf: viewModel.threadData.threadIsNoteToSelf
+        let viewController: SessionTableViewController = SessionTableViewController(
+            viewModel: ThreadSettingsViewModel(
+                threadId: self.viewModel.threadData.threadId,
+                threadVariant: self.viewModel.threadData.threadVariant,
+                didTriggerSearch: { [weak self] in
+                    DispatchQueue.main.async {
+                        self?.showSearchUI()
+                        self?.popAllConversationSettingsViews {
+                            // Note: Without this delay the search bar doesn't show
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self?.searchController.uiSearchController.searchBar.becomeFirstResponder()
+                            }
+                        }
+                    }
+                }
+            )
         )
-        settingsVC.conversationSettingsViewDelegate = self
-        navigationController?.pushViewController(settingsVC, animated: true, completion: nil)
+        
+        navigationController?.pushViewController(viewController, animated: true)
     }
     
     // MARK: - ScrollToBottomButtonDelegate
@@ -55,12 +64,32 @@ extension ConversationVC:
     @objc func startCall(_ sender: Any?) {
         guard SessionCall.isEnabled else { return }
         guard Storage.shared[.areCallsEnabled] else {
-            let callPermissionRequestModal = CallPermissionRequestModal()
-            self.navigationController?.present(callPermissionRequestModal, animated: true, completion: nil)
+            let confirmationModal: ConfirmationModal = ConfirmationModal(
+                info: ConfirmationModal.Info(
+                    title: "modal_call_permission_request_title".localized(),
+                    explanation: "modal_call_permission_request_explanation".localized(),
+                    confirmTitle: "vc_settings_title".localized(),
+                    dismissOnConfirm: false // Custom dismissal logic
+                ) { [weak self] _ in
+                    self?.dismiss(animated: true) {
+                        let navController: UINavigationController = StyledNavigationController(
+                            rootViewController: SessionTableViewController(
+                                viewModel: PrivacySettingsViewModel(
+                                    shouldShowCloseButton: true
+                                )
+                            )
+                        )
+                        navController.modalPresentationStyle = .fullScreen
+                        self?.present(navController, animated: true, completion: nil)
+                    }
+                }
+            )
+            
+            self.navigationController?.present(confirmationModal, animated: true, completion: nil)
             return
         }
         
-        requestMicrophonePermissionIfNeeded { }
+        Permissions.requestMicrophonePermissionIfNeeded()
         
         let threadId: String = self.viewModel.threadData.threadId
         
@@ -73,8 +102,7 @@ extension ConversationVC:
         
         let callVC = CallVC(for: call)
         callVC.conversationVC = self
-        self.inputAccessoryView?.isHidden = true
-        self.inputAccessoryView?.alpha = 0
+        hideInputAccessoryView()
         
         present(callVC, animated: true, completion: nil)
     }
@@ -85,20 +113,42 @@ extension ConversationVC:
         self.showBlockedModalIfNeeded()
     }
 
-    func showBlockedModalIfNeeded() -> Bool {
-        guard self.viewModel.threadData.threadIsBlocked == true else { return false }
+    @discardableResult func showBlockedModalIfNeeded() -> Bool {
+        guard
+            self.viewModel.threadData.threadVariant == .contact &&
+            self.viewModel.threadData.threadIsBlocked == true
+        else { return false }
         
-        let blockedModal = BlockedModal(publicKey: viewModel.threadData.threadId)
-        blockedModal.modalPresentationStyle = .overFullScreen
-        blockedModal.modalTransitionStyle = .crossDissolve
-        present(blockedModal, animated: true, completion: nil)
+        let message = String(
+            format: "modal_blocked_explanation".localized(),
+            self.viewModel.threadData.displayName
+        )
+        let confirmationModal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: String(
+                    format: "modal_blocked_title".localized(),
+                    self.viewModel.threadData.displayName
+                ),
+                attributedExplanation: NSAttributedString(string: message)
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
+                        range: (message as NSString).range(of: self.viewModel.threadData.displayName)
+                    ),
+                confirmTitle: "modal_blocked_button_title".localized(),
+                dismissOnConfirm: false // Custom dismissal logic
+            ) { [weak self] _ in
+                self?.viewModel.unblockContact()
+                self?.dismiss(animated: true, completion: nil)
+            }
+        )
+        present(confirmationModal, animated: true, completion: nil)
         
         return true
     }
 
     // MARK: - SendMediaNavDelegate
 
-    func sendMediaNavDidCancel(_ sendMediaNavigationController: SendMediaNavigationController) {
+    func sendMediaNavDidCancel(_ sendMediaNavigationController: SendMediaNavigationController?) {
         dismiss(animated: true, completion: nil)
     }
 
@@ -149,7 +199,7 @@ extension ConversationVC:
         let gifVC = GifPickerViewController()
         gifVC.delegate = self
         
-        let navController = OWSNavigationController(rootViewController: gifVC)
+        let navController = StyledNavigationController(rootViewController: gifVC)
         navController.modalPresentationStyle = .fullScreen
         present(navController, animated: true) { }
     }
@@ -160,14 +210,14 @@ extension ConversationVC:
         let documentPickerVC = UIDocumentPickerViewController(documentTypes: [ kUTTypeItem as String ], in: UIDocumentPickerMode.import)
         documentPickerVC.delegate = self
         documentPickerVC.modalPresentationStyle = .fullScreen
-        SNAppearance.switchToDocumentPickerAppearance()
+        
         present(documentPickerVC, animated: true, completion: nil)
     }
     
     func handleLibraryButtonTapped() {
         let threadId: String = self.viewModel.threadData.threadId
         
-        requestLibraryPermissionIfNeeded { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
             DispatchQueue.main.async {
                 let sendMediaNavController = SendMediaNavigationController.showingMediaLibraryFirst(
                     threadId: threadId
@@ -180,9 +230,9 @@ extension ConversationVC:
     }
     
     func handleCameraButtonTapped() {
-        guard requestCameraPermissionIfNeeded() else { return }
+        guard Permissions.requestCameraPermissionIfNeeded(presentingViewController: self) else { return }
         
-        requestMicrophonePermissionIfNeeded { }
+        Permissions.requestMicrophonePermissionIfNeeded()
         
         if AVAudioSession.sharedInstance().recordPermission != .granted {
             SNLog("Proceeding without microphone access. Any recorded video will be silent.")
@@ -202,13 +252,8 @@ extension ConversationVC:
     }
     
     // MARK: - UIDocumentPickerDelegate
-
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        SNAppearance.switchToSessionAppearance() // Switch back to the correct appearance
-    }
-
+    
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        SNAppearance.switchToSessionAppearance()
         guard let url = urls.first else { return } // TODO: Handle multiple?
         
         let urlResourceValues: URLResourceValues
@@ -217,29 +262,49 @@ extension ConversationVC:
         }
         catch {
             DispatchQueue.main.async { [weak self] in
-                let alert = UIAlertController(title: "Session", message: "An error occurred.", preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-                
-                self?.present(alert, animated: true, completion: nil)
+                let modal: ConfirmationModal = ConfirmationModal(
+                    targetView: self?.view,
+                    info: ConfirmationModal.Info(
+                        title: "Session",
+                        explanation: "An error occurred.",
+                        cancelTitle: "BUTTON_OK".localized(),
+                        cancelStyle: .alert_text
+                    )
+                )
+                self?.present(modal, animated: true)
             }
             return
         }
         
         let type = urlResourceValues.typeIdentifier ?? (kUTTypeData as String)
         guard urlResourceValues.isDirectory != true else {
-            DispatchQueue.main.async {
-                OWSAlerts.showAlert(
-                    title: "ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_TITLE".localized(),
-                    message: "ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_BODY".localized()
+            DispatchQueue.main.async { [weak self] in
+                let modal: ConfirmationModal = ConfirmationModal(
+                    targetView: self?.view,
+                    info: ConfirmationModal.Info(
+                        title: "ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_TITLE".localized(),
+                        explanation: "ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_BODY".localized(),
+                        cancelTitle: "BUTTON_OK".localized(),
+                        cancelStyle: .alert_text
+                    )
                 )
+                self?.present(modal, animated: true)
             }
             return
         }
         
         let fileName = urlResourceValues.name ?? NSLocalizedString("ATTACHMENT_DEFAULT_FILENAME", comment: "")
         guard let dataSource = DataSourcePath.dataSource(with: url, shouldDeleteOnDeallocation: false) else {
-            DispatchQueue.main.async {
-                OWSAlerts.showAlert(title: "ATTACHMENT_PICKER_DOCUMENTS_FAILED_ALERT_TITLE".localized())
+            DispatchQueue.main.async { [weak self] in
+                let modal: ConfirmationModal = ConfirmationModal(
+                    targetView: self?.view,
+                    info: ConfirmationModal.Info(
+                        title: "ATTACHMENT_PICKER_DOCUMENTS_FAILED_ALERT_TITLE".localized(),
+                        cancelTitle: "BUTTON_OK".localized(),
+                        cancelStyle: .alert_text
+                    )
+                )
+                self?.present(modal, animated: true)
             }
             return
         }
@@ -313,15 +378,21 @@ extension ConversationVC:
 
         if text.contains(mnemonic) && !viewModel.threadData.threadIsNoteToSelf && !hasPermissionToSendSeed {
             // Warn the user if they're about to send their seed to someone
-            let modal = SendSeedModal()
-            modal.modalPresentationStyle = .overFullScreen
-            modal.modalTransitionStyle = .crossDissolve
-            modal.proceed = { self.sendMessage(hasPermissionToSendSeed: true) }
+            let modal: ConfirmationModal = ConfirmationModal(
+                info: ConfirmationModal.Info(
+                    title: "modal_send_seed_title".localized(),
+                    explanation: "modal_send_seed_explanation".localized(),
+                    confirmTitle: "modal_send_seed_send_button_title".localized(),
+                    confirmStyle: .danger,
+                    cancelStyle: .alert_text,
+                    onConfirm: { [weak self] _ in self?.sendMessage(hasPermissionToSendSeed: true) }
+                )
+            )
+            
             return present(modal, animated: true, completion: nil)
         }
         
-        // Clearing this out immediately (even though it already happens in 'messageSent') to prevent
-        // "double sending" if the user rapidly taps the send button
+        // Clearing this out immediately to make this appear more snappy
         DispatchQueue.main.async { [weak self] in
             self?.snInputView.text = ""
             self?.snInputView.quoteDraftInfo = nil
@@ -369,9 +440,15 @@ extension ConversationVC:
                     body: text,
                     timestampMs: sentTimestampMs,
                     hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: text),
+                    expiresInSeconds: try? DisappearingMessagesConfiguration
+                        .select(.durationSeconds)
+                        .filter(id: threadId)
+                        .filter(DisappearingMessagesConfiguration.Columns.isEnabled == true)
+                        .asRequest(of: TimeInterval.self)
+                        .fetchOne(db),
                     linkPreviewUrl: linkPreviewDraft?.urlString
                 ).inserted(db)
-
+                
                 // If there is a LinkPreview and it doesn't match an existing one then add it now
                 if
                     let linkPreviewDraft: LinkPreviewDraft = linkPreviewDraft,
@@ -411,7 +488,7 @@ extension ConversationVC:
         )
     }
 
-    func sendAttachments(_ attachments: [SignalAttachment], with text: String, onComplete: (() -> ())? = nil) {
+    func sendAttachments(_ attachments: [SignalAttachment], with text: String, hasPermissionToSendSeed: Bool = false, onComplete: (() -> ())? = nil) {
         guard !showBlockedModalIfNeeded() else { return }
         
         for attachment in attachments {
@@ -421,6 +498,32 @@ extension ConversationVC:
         }
         
         let text = replaceMentions(in: snInputView.text.trimmingCharacters(in: .whitespacesAndNewlines))
+        
+        if text.contains(mnemonic) && !viewModel.threadData.threadIsNoteToSelf && !hasPermissionToSendSeed {
+            // Warn the user if they're about to send their seed to someone
+            let modal: ConfirmationModal = ConfirmationModal(
+                info: ConfirmationModal.Info(
+                    title: "modal_send_seed_title".localized(),
+                    explanation: "modal_send_seed_explanation".localized(),
+                    confirmTitle: "modal_send_seed_send_button_title".localized(),
+                    confirmStyle: .danger,
+                    cancelStyle: .alert_text,
+                    onConfirm: { [weak self] _ in
+                        self?.sendAttachments(attachments, with: text, hasPermissionToSendSeed: true, onComplete: onComplete)
+                    }
+                )
+            )
+            
+            return present(modal, animated: true, completion: nil)
+        }
+        
+        // Clearing this out immediately to make this appear more snappy
+        DispatchQueue.main.async { [weak self] in
+            self?.snInputView.text = ""
+            self?.snInputView.quoteDraftInfo = nil
+
+            self?.resetMentions()
+        }
 
         // Note: 'shouldBeVisible' is set to true the first time a thread is saved so we can
         // use it to determine if the user is creating a new thread and update the 'isApproved'
@@ -459,7 +562,13 @@ extension ConversationVC:
                     variant: .standardOutgoing,
                     body: text,
                     timestampMs: sentTimestampMs,
-                    hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: text)
+                    hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: text),
+                    expiresInSeconds: try? DisappearingMessagesConfiguration
+                        .select(.durationSeconds)
+                        .filter(id: threadId)
+                        .filter(DisappearingMessagesConfiguration.Columns.isEnabled == true)
+                        .asRequest(of: TimeInterval.self)
+                        .fetchOne(db)
                 ).inserted(db)
 
                 try MessageSender.send(
@@ -481,13 +590,6 @@ extension ConversationVC:
     }
 
     func handleMessageSent() {
-        DispatchQueue.main.async { [weak self] in
-            self?.snInputView.text = ""
-            self?.snInputView.quoteDraftInfo = nil
-            
-            self?.resetMentions()
-        }
-
         if Storage.shared[.playNotificationSoundInForeground] {
             let soundID = Preferences.Sound.systemSoundId(for: .messageSent, quiet: true)
             AudioServicesPlaySystemSound(soundID)
@@ -505,12 +607,21 @@ extension ConversationVC:
     }
 
     func showLinkPreviewSuggestionModal() {
-        let linkPreviewModel = LinkPreviewModal() { [weak self] in
-            self?.snInputView.autoGenerateLinkPreview()
-        }
-        linkPreviewModel.modalPresentationStyle = .overFullScreen
-        linkPreviewModel.modalTransitionStyle = .crossDissolve
-        present(linkPreviewModel, animated: true, completion: nil)
+        let linkPreviewModal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: "modal_link_previews_title".localized(),
+                explanation: "modal_link_previews_explanation".localized(),
+                confirmTitle: "modal_link_previews_button_title".localized()
+            ) { [weak self] _ in
+                Storage.shared.writeAsync { db in
+                    db[.areLinkPreviewsEnabled] = true
+                }
+                
+                self?.snInputView.autoGenerateLinkPreview()
+            }
+        )
+        
+        present(linkPreviewModal, animated: true, completion: nil)
     }
     
     func inputTextViewDidChangeContent(_ inputTextView: InputTextView) {
@@ -520,16 +631,18 @@ extension ConversationVC:
             let threadId: String = self.viewModel.threadData.threadId
             let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
             let threadIsMessageRequest: Bool = (self.viewModel.threadData.threadIsMessageRequest == true)
+            let needsToStartTypingIndicator: Bool = TypingIndicators.didStartTypingNeedsToStart(
+                threadId: threadId,
+                threadVariant: threadVariant,
+                threadIsMessageRequest: threadIsMessageRequest,
+                direction: .outgoing,
+                timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
+            )
             
-            Storage.shared.writeAsync { db in
-                TypingIndicators.didStartTyping(
-                    db,
-                    threadId: threadId,
-                    threadVariant: threadVariant,
-                    threadIsMessageRequest: threadIsMessageRequest,
-                    direction: .outgoing,
-                    timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
-                )
+            if needsToStartTypingIndicator {
+                Storage.shared.writeAsync { db in
+                    TypingIndicators.start(db, threadId: threadId, direction: .outgoing)
+                }
             }
         }
         
@@ -556,7 +669,7 @@ extension ConversationVC:
 
     // MARK: --Mentions
     
-    func handleMentionSelected(_ mentionInfo: ConversationViewModel.MentionInfo, from view: MentionSelectionView) {
+    func handleMentionSelected(_ mentionInfo: MentionInfo, from view: MentionSelectionView) {
         guard let currentMentionStartIndex = currentMentionStartIndex else { return }
         
         mentions.append(mentionInfo)
@@ -628,7 +741,12 @@ extension ConversationVC:
         
         return result
     }
-
+    
+    func hideInputAccessoryView() {
+        self.inputAccessoryView?.isHidden = true
+        self.inputAccessoryView?.alpha = 0
+    }
+    
     func showInputAccessoryView() {
         UIView.animate(withDuration: 0.25, animations: {
             self.inputAccessoryView?.isHidden = false
@@ -648,25 +766,31 @@ extension ConversationVC:
             let index = self.viewModel.interactionData[sectionIndex]
                 .elements
                 .firstIndex(of: cellViewModel),
-            let cell = tableView.cellForRow(at: IndexPath(row: index, section: sectionIndex)) as? VisibleMessageCell,
-            let snapshot = cell.bubbleView.snapshotView(afterScreenUpdates: false),
+            let cell = tableView.cellForRow(at: IndexPath(row: index, section: sectionIndex)) as? MessageCell,
+            let contextSnapshotView: UIView = cell.contextSnapshotView,
+            let snapshot = contextSnapshotView.snapshotView(afterScreenUpdates: false),
             contextMenuWindow == nil,
             let actions: [ContextMenuVC.Action] = ContextMenuVC.actions(
                 for: cellViewModel,
+                recentEmojis: (self.viewModel.threadData.recentReactionEmoji ?? []).compactMap { EmojiWithSkinTones(rawValue: $0) },
                 currentUserIsOpenGroupModerator: OpenGroupManager.isUserModeratorOrAdmin(
                     self.viewModel.threadData.currentUserPublicKey,
                     for: self.viewModel.threadData.openGroupRoomToken,
                     on: self.viewModel.threadData.openGroupServer
                 ),
+                currentThreadIsMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true),
                 delegate: self
             )
         else { return }
+        
+        /// Lock the contentOffset of the tableView so the transition doesn't look buggy
+        self.tableView.lockContentOffset = true
         
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         self.contextMenuWindow = ContextMenuWindow()
         self.contextMenuVC = ContextMenuVC(
             snapshot: snapshot,
-            frame: cell.convert(cell.bubbleView.frame, to: keyWindow),
+            frame: contextSnapshotView.convert(contextSnapshotView.bounds, to: keyWindow),
             cellViewModel: cellViewModel,
             actions: actions
         ) { [weak self] in
@@ -675,14 +799,26 @@ extension ConversationVC:
             self?.contextMenuWindow = nil
             self?.scrollButton.alpha = 0
             
-            UIView.animate(withDuration: 0.25) {
-                self?.scrollButton.alpha = (self?.getScrollButtonOpacity() ?? 0)
-                self?.unreadCountView.alpha = (self?.scrollButton.alpha ?? 0)
-            }
+            UIView.animate(
+                withDuration: 0.25,
+                animations: {
+                    self?.scrollButton.alpha = (self?.getScrollButtonOpacity() ?? 0)
+                    self?.unreadCountView.alpha = (self?.scrollButton.alpha ?? 0)
+                },
+                completion: { _ in
+                    guard let contentOffset: CGPoint = self?.tableView.contentOffset else { return }
+                    
+                    // Unlock the contentOffset so everything will be in the right
+                    // place when we return
+                    self?.tableView.lockContentOffset = false
+                    self?.tableView.setContentOffset(contentOffset, animated: false)
+                }
+            )
         }
         
-        self.contextMenuWindow?.backgroundColor = .clear
+        self.contextMenuWindow?.themeBackgroundColor = .clear
         self.contextMenuWindow?.rootViewController = self.contextMenuVC
+        self.contextMenuWindow?.overrideUserInterfaceStyle = ThemeManager.currentTheme.interfaceStyle
         self.contextMenuWindow?.makeKeyAndVisible()
     }
 
@@ -702,11 +838,30 @@ extension ConversationVC:
         
         // If it's an incoming media message and the thread isn't trusted then show the placeholder view
         if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming && !cellViewModel.threadIsTrusted {
-            let modal = DownloadAttachmentModal(profile: cellViewModel.profile)
-            modal.modalPresentationStyle = .overFullScreen
-            modal.modalTransitionStyle = .crossDissolve
+            let message: String = String(
+                format: "modal_download_attachment_explanation".localized(),
+                cellViewModel.authorName
+            )
+            let confirmationModal: ConfirmationModal = ConfirmationModal(
+                info: ConfirmationModal.Info(
+                    title: String(
+                        format: "modal_download_attachment_title".localized(),
+                        cellViewModel.authorName
+                    ),
+                    attributedExplanation: NSAttributedString(string: message)
+                        .adding(
+                            attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
+                            range: (message as NSString).range(of: cellViewModel.authorName)
+                        ),
+                    confirmTitle: "modal_download_button_title".localized(),
+                    dismissOnConfirm: false // Custom dismissal logic
+                ) { [weak self] _ in
+                    self?.viewModel.trustContact()
+                    self?.dismiss(animated: true, completion: nil)
+                }
+            )
             
-            present(modal, animated: true, completion: nil)
+            present(confirmationModal, animated: true, completion: nil)
             return
         }
         
@@ -866,39 +1021,33 @@ extension ConversationVC:
         guard let url: URL = URL(string: urlString) else { return }
         
         // URLs can be unsafe, so always ask the user whether they want to open one
-        let alertVC = UIAlertController.init(
+        let actionSheet: UIAlertController = UIAlertController(
             title: "modal_open_url_title".localized(),
             message: String(format: "modal_open_url_explanation".localized(), url.absoluteString),
             preferredStyle: .actionSheet
         )
-        alertVC.addAction(UIAlertAction.init(title: "modal_open_url_button_title".localized(), style: .default) { [weak self] _ in
+        actionSheet.addAction(UIAlertAction(title: "modal_open_url_button_title".localized(), style: .default) { [weak self] _ in
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             self?.showInputAccessoryView()
         })
-        alertVC.addAction(UIAlertAction.init(title: "modal_copy_url_button_title".localized(), style: .default) { [weak self] _ in
+        actionSheet.addAction(UIAlertAction(title: "modal_copy_url_button_title".localized(), style: .default) { [weak self] _ in
             UIPasteboard.general.string = url.absoluteString
             self?.showInputAccessoryView()
         })
-        alertVC.addAction(UIAlertAction.init(title: "cancel".localized(), style: .cancel) { [weak self] _ in
+        actionSheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel) { [weak self] _ in
             self?.showInputAccessoryView()
         })
         
-        self.presentAlert(alertVC)
+        Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
+        self.present(actionSheet, animated: true)
     }
     
     func handleReplyButtonTapped(for cellViewModel: MessageViewModel) {
         reply(cellViewModel)
     }
     
-    func showUserDetails(for profile: Profile) {
-        let userDetailsSheet = UserDetailsSheet(for: profile)
-        userDetailsSheet.modalPresentationStyle = .overFullScreen
-        userDetailsSheet.modalTransitionStyle = .crossDissolve
-        
-        present(userDetailsSheet, animated: true, completion: nil)
-    }
-    
     func startThread(with sessionId: String, openGroupServer: String?, openGroupPublicKey: String?) {
+        guard viewModel.threadData.canWrite else { return }
         guard SessionId.Prefix(from: sessionId) == .blinded else {
             Storage.shared.write { db in
                 try SessionThread.fetchOrCreate(db, id: sessionId, variant: .contact)
@@ -934,8 +1083,357 @@ extension ConversationVC:
         guard let threadId: String = targetThreadId else { return }
         
         let conversationVC: ConversationVC = ConversationVC(threadId: threadId, threadVariant: .contact)
-            
         self.navigationController?.pushViewController(conversationVC, animated: true)
+    }
+    
+    func showReactionList(_ cellViewModel: MessageViewModel, selectedReaction: EmojiWithSkinTones?) {
+        guard
+            cellViewModel.reactionInfo?.isEmpty == false &&
+            (
+                self.viewModel.threadData.threadVariant == .closedGroup ||
+                self.viewModel.threadData.threadVariant == .openGroup
+            ),
+            let allMessages: [MessageViewModel] = self.viewModel.interactionData
+                .first(where: { $0.model == .messages })?
+                .elements
+        else { return }
+        
+        let reactionListSheet: ReactionListSheet = ReactionListSheet(for: cellViewModel.id) { [weak self] in
+            self?.currentReactionListSheet = nil
+        }
+        reactionListSheet.delegate = self
+        reactionListSheet.handleInteractionUpdates(
+            allMessages,
+            selectedReaction: selectedReaction,
+            initialLoad: true,
+            shouldShowClearAllButton: OpenGroupManager.isUserModeratorOrAdmin(
+                self.viewModel.threadData.currentUserPublicKey,
+                for: self.viewModel.threadData.openGroupRoomToken,
+                on: self.viewModel.threadData.openGroupServer
+            )
+        )
+        reactionListSheet.modalPresentationStyle = .overFullScreen
+        present(reactionListSheet, animated: true, completion: nil)
+        
+        // Store so we can updated the content based on the current VC
+        self.currentReactionListSheet = reactionListSheet
+    }
+    
+    func needsLayout(for cellViewModel: MessageViewModel, expandingReactions: Bool) {
+        guard
+            let messageSectionIndex: Int = self.viewModel.interactionData
+                .firstIndex(where: { $0.model == .messages }),
+            let targetMessageIndex = self.viewModel.interactionData[messageSectionIndex]
+                .elements
+                .firstIndex(where: { $0.id == cellViewModel.id })
+        else { return }
+        
+        if expandingReactions {
+            self.viewModel.expandReactions(for: cellViewModel.id)
+        }
+        else {
+            self.viewModel.collapseReactions(for: cellViewModel.id)
+        }
+        
+        UIView.setAnimationsEnabled(false)
+        tableView.reloadRows(
+            at: [IndexPath(row: targetMessageIndex, section: messageSectionIndex)],
+            with: .none
+        )
+        UIView.setAnimationsEnabled(true)
+    }
+    
+    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones) {
+        react(cellViewModel, with: emoji.rawValue, remove: false)
+    }
+    
+    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones) {
+        react(cellViewModel, with: emoji.rawValue, remove: true)
+    }
+    
+    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String) {
+        guard cellViewModel.threadVariant == .openGroup else { return }
+        
+        Storage.shared
+            .read { db -> Promise<Void> in
+                guard
+                    let openGroup: OpenGroup = try? OpenGroup
+                        .fetchOne(db, id: cellViewModel.threadId),
+                    let openGroupServerMessageId: Int64 = try? Interaction
+                        .select(.openGroupServerMessageId)
+                        .filter(id: cellViewModel.id)
+                        .asRequest(of: Int64.self)
+                        .fetchOne(db)
+                else {
+                    return Promise(error: StorageError.objectNotFound)
+                }
+                
+                let pendingChange = OpenGroupManager
+                    .addPendingReaction(
+                        emoji: emoji,
+                        id: openGroupServerMessageId,
+                        in: openGroup.roomToken,
+                        on: openGroup.server,
+                        type: .removeAll
+                    )
+                
+                return OpenGroupAPI
+                    .reactionDeleteAll(
+                        db,
+                        emoji: emoji,
+                        id: openGroupServerMessageId,
+                        in: openGroup.roomToken,
+                        on: openGroup.server
+                    )
+                    .map { _, response in
+                        OpenGroupManager
+                            .updatePendingChange(
+                                pendingChange,
+                                seqNo: response.seqNo
+                            )
+                    }
+            }
+            .done { _ in
+                Storage.shared.writeAsync { db in
+                    _ = try Reaction
+                        .filter(Reaction.Columns.interactionId == cellViewModel.id)
+                        .filter(Reaction.Columns.emoji == emoji)
+                        .deleteAll(db)
+                }
+            }
+            .retainUntilComplete()
+    }
+    
+    func react(_ cellViewModel: MessageViewModel, with emoji: String, remove: Bool) {
+        guard cellViewModel.variant == .standardIncoming || cellViewModel.variant == .standardOutgoing else {
+            return
+        }
+        
+        let threadIsMessageRequest: Bool = (self.viewModel.threadData.threadIsMessageRequest == true)
+        guard !threadIsMessageRequest else { return }
+        
+        // Perform local rate limiting (don't allow more than 20 reactions within 60 seconds)
+        let sentTimestamp: Int64 = Int64(floor(Date().timeIntervalSince1970 * 1000))
+        let recentReactionTimestamps: [Int64] = General.cache.wrappedValue.recentReactionTimestamps
+        
+        guard
+            recentReactionTimestamps.count < 20 ||
+            (sentTimestamp - (recentReactionTimestamps.first ?? sentTimestamp)) > (60 * 1000)
+        else {
+            let toastController: ToastController = ToastController(
+                text: "EMOJI_REACTS_RATE_LIMIT_TOAST".localized(),
+                background: .backgroundSecondary
+            )
+            toastController.presentToastView(
+                fromBottomOfView: self.view,
+                inset: (snInputView.bounds.height + Values.largeSpacing),
+                duration: .milliseconds(2500)
+            )
+            return
+        }
+        
+        General.cache.mutate {
+            $0.recentReactionTimestamps = Array($0.recentReactionTimestamps
+                .suffix(19))
+                .appending(sentTimestamp)
+        }
+        
+        // Perform the sending logic
+        Storage.shared.writeAsync(
+            updates: { db in
+                guard let thread: SessionThread = try SessionThread.fetchOne(db, id: cellViewModel.threadId) else {
+                    return
+                }
+                
+                // Update the thread to be visible
+                _ = try SessionThread
+                    .filter(id: thread.id)
+                    .updateAll(db, SessionThread.Columns.shouldBeVisible.set(to: true))
+                
+                let pendingReaction: Reaction? = {
+                    if remove {
+                        return try? Reaction
+                            .filter(Reaction.Columns.interactionId == cellViewModel.id)
+                            .filter(Reaction.Columns.authorId == cellViewModel.currentUserPublicKey)
+                            .filter(Reaction.Columns.emoji == emoji)
+                            .fetchOne(db)
+                    } else {
+                        let sortId = Reaction.getSortId(
+                            db,
+                            interactionId: cellViewModel.id,
+                            emoji: emoji
+                        )
+                        
+                        return Reaction(
+                            interactionId: cellViewModel.id,
+                            serverHash: nil,
+                            timestampMs: sentTimestamp,
+                            authorId: cellViewModel.currentUserPublicKey,
+                            emoji: emoji,
+                            count: 1,
+                            sortId: sortId
+                        )
+                    }
+                }()
+                
+                // Update the database
+                if remove {
+                    try Reaction
+                        .filter(Reaction.Columns.interactionId == cellViewModel.id)
+                        .filter(Reaction.Columns.authorId == cellViewModel.currentUserPublicKey)
+                        .filter(Reaction.Columns.emoji == emoji)
+                        .deleteAll(db)
+                }
+                else {
+                    try pendingReaction?.insert(db)
+                    
+                    // Add it to the recent list
+                    Emoji.addRecent(db, emoji: emoji)
+                }
+                
+                if let openGroup: OpenGroup = try? OpenGroup.fetchOne(db, id: cellViewModel.threadId),
+                   OpenGroupManager.isOpenGroupSupport(.reactions, on: openGroup.server)
+                {
+                    // Send reaction to open groups
+                    guard
+                        let openGroupServerMessageId: Int64 = try? Interaction
+                            .select(.openGroupServerMessageId)
+                            .filter(id: cellViewModel.id)
+                            .asRequest(of: Int64.self)
+                            .fetchOne(db)
+                    else { return }
+                    
+                    if remove {
+                        let pendingChange = OpenGroupManager
+                            .addPendingReaction(
+                                emoji: emoji,
+                                id: openGroupServerMessageId,
+                                in: openGroup.roomToken,
+                                on: openGroup.server,
+                                type: .remove
+                            )
+                        OpenGroupAPI
+                            .reactionDelete(
+                                db,
+                                emoji: emoji,
+                                id: openGroupServerMessageId,
+                                in: openGroup.roomToken,
+                                on: openGroup.server
+                            )
+                            .map { _, response in
+                                OpenGroupManager
+                                    .updatePendingChange(
+                                        pendingChange,
+                                        seqNo: response.seqNo
+                                    )
+                            }
+                            .catch { [weak self] _ in
+                                OpenGroupManager.removePendingChange(pendingChange)
+
+                                self?.handleReactionSentFailure(
+                                    pendingReaction,
+                                    remove: remove
+                                )
+
+                            }
+                            .retainUntilComplete()
+                    }
+                    else {
+                        let pendingChange = OpenGroupManager
+                            .addPendingReaction(
+                                emoji: emoji,
+                                id: openGroupServerMessageId,
+                                in: openGroup.roomToken,
+                                on: openGroup.server,
+                                type: .add
+                            )
+
+                        OpenGroupAPI
+                            .reactionAdd(
+                                db,
+                                emoji: emoji,
+                                id: openGroupServerMessageId,
+                                in: openGroup.roomToken,
+                                on: openGroup.server
+                            )
+                            .map { _, response in
+                                OpenGroupManager
+                                    .updatePendingChange(
+                                        pendingChange,
+                                        seqNo: response.seqNo
+                                    )
+                            }
+                            .catch { [weak self] _ in
+                                OpenGroupManager.removePendingChange(pendingChange)
+                                
+                                self?.handleReactionSentFailure(
+                                    pendingReaction,
+                                    remove: remove
+                                )
+                            }
+                            .retainUntilComplete()
+                    }
+                }
+                else {
+                    // Send the actual message
+                    try MessageSender.send(
+                        db,
+                        message: VisibleMessage(
+                            sentTimestamp: UInt64(sentTimestamp),
+                            text: nil,
+                            reaction: VisibleMessage.VMReaction(
+                                timestamp: UInt64(cellViewModel.timestampMs),
+                                publicKey: {
+                                    guard cellViewModel.variant == .standardIncoming else {
+                                        return cellViewModel.currentUserPublicKey
+                                    }
+                                    
+                                    return cellViewModel.authorId
+                                }(),
+                                emoji: emoji,
+                                kind: (remove ? .remove : .react)
+                            )
+                        ),
+                        interactionId: cellViewModel.id,
+                        in: thread
+                    )
+                }
+            }
+        )
+    }
+    
+    func handleReactionSentFailure(_ pendingReaction: Reaction?, remove: Bool) {
+        guard let pendingReaction = pendingReaction else { return }
+        Storage.shared.writeAsync { db in
+            // Reverse the database
+            if remove {
+                try pendingReaction.insert(db)
+            }
+            else {
+                try Reaction
+                    .filter(Reaction.Columns.interactionId == pendingReaction.interactionId)
+                    .filter(Reaction.Columns.authorId == pendingReaction.authorId)
+                    .filter(Reaction.Columns.emoji == pendingReaction.emoji)
+                    .deleteAll(db)
+            }
+        }
+    }
+    
+    func showFullEmojiKeyboard(_ cellViewModel: MessageViewModel) {
+        hideInputAccessoryView()
+        
+        let emojiPicker = EmojiPickerSheet(
+            completionHandler: { [weak self] emoji in
+                guard let emoji: EmojiWithSkinTones = emoji else { return }
+                
+                self?.react(cellViewModel, with: emoji)
+            },
+            dismissHandler: { [weak self] in
+                self?.showInputAccessoryView()
+            }
+        )
+        
+        present(emojiPicker, animated: true, completion: nil)
     }
     
     func contextMenuDismissed() {
@@ -989,11 +1487,66 @@ extension ConversationVC:
     
     func joinOpenGroup(name: String?, url: String) {
         // Open groups can be unsafe, so always ask the user whether they want to join one
-        let joinOpenGroupModal: JoinOpenGroupModal = JoinOpenGroupModal(name: name, url: url)
-        joinOpenGroupModal.modalPresentationStyle = .overFullScreen
-        joinOpenGroupModal.modalTransitionStyle = .crossDissolve
+        let finalName: String = (name ?? "Open Group")
+        let message: String = "Are you sure you want to join the \(finalName) open group?";
+        let modal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: "Join \(finalName)?",
+                attributedExplanation: NSMutableAttributedString(string: message)
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
+                        range: (message as NSString).range(of: finalName)
+                    ),
+                confirmTitle: "JOIN_COMMUNITY_BUTTON_TITLE".localized(),
+                onConfirm: { modal in
+                    guard let presentingViewController: UIViewController = modal.presentingViewController else {
+                        return
+                    }
+                    guard let (room, server, publicKey) = OpenGroupManager.parseOpenGroup(from: url) else {
+                        let errorModal: ConfirmationModal = ConfirmationModal(
+                            info: ConfirmationModal.Info(
+                                title: "COMMUNITY_ERROR_GENERIC".localized(),
+                                cancelTitle: "BUTTON_OK".localized(),
+                                cancelStyle: .alert_text
+                            )
+                        )
+                        
+                        return presentingViewController.present(errorModal, animated: true, completion: nil)
+                    }
+                    
+                    Storage.shared
+                        .writeAsync { db in
+                            OpenGroupManager.shared.add(
+                                db,
+                                roomToken: room,
+                                server: server,
+                                publicKey: publicKey,
+                                isConfigMessage: false
+                            )
+                        }
+                        .done(on: DispatchQueue.main) { _ in
+                            Storage.shared.writeAsync { db in
+                                try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete() // FIXME: It's probably cleaner to do this inside addOpenGroup(...)
+                            }
+                        }
+                        .catch(on: DispatchQueue.main) { error in
+                            let errorModal: ConfirmationModal = ConfirmationModal(
+                                info: ConfirmationModal.Info(
+                                    title: "COMMUNITY_ERROR_GENERIC".localized(),
+                                    explanation: error.localizedDescription,
+                                    cancelTitle: "BUTTON_OK".localized(),
+                                    cancelStyle: .alert_text
+                                )
+                            )
+                            
+                            presentingViewController.present(errorModal, animated: true, completion: nil)
+                        }
+                        .retainUntilComplete()
+                }
+            )
+        )
         
-        present(joinOpenGroupModal, animated: true, completion: nil)
+        present(modal, animated: true, completion: nil)
     }
     
     // MARK: - ContextMenuActionDelegate
@@ -1006,7 +1559,9 @@ extension ConversationVC:
             body: cellViewModel.body,
             timestampMs: cellViewModel.timestampMs,
             attachments: cellViewModel.attachments,
-            linkPreviewAttachment: cellViewModel.linkPreviewAttachment
+            linkPreviewAttachment: cellViewModel.linkPreviewAttachment,
+            currentUserPublicKey: cellViewModel.currentUserPublicKey,
+            currentUserBlindedPublicKey: cellViewModel.currentUserBlindedPublicKey
         )
         
         guard let quoteDraft: QuotedReplyModel = maybeQuoteDraft else { return }
@@ -1020,7 +1575,7 @@ extension ConversationVC:
 
     func copy(_ cellViewModel: MessageViewModel) {
         switch cellViewModel.cellType {
-            case .typingIndicator: break
+            case .typingIndicator, .dateHeader: break
             
             case .textOnlyMessage:
                 UIPasteboard.general.string = cellViewModel.body
@@ -1052,9 +1607,22 @@ extension ConversationVC:
     }
 
     func delete(_ cellViewModel: MessageViewModel) {
-        // Only allow deletion on incoming and outgoing messages
-        guard cellViewModel.variant == .standardIncoming || cellViewModel.variant == .standardOutgoing else {
-            return
+        switch cellViewModel.variant {
+            case .standardIncomingDeleted, .infoCall,
+                .infoScreenshotNotification, .infoMediaSavedNotification,
+                .infoClosedGroupCreated, .infoClosedGroupUpdated, .infoClosedGroupCurrentUserLeft,
+                .infoMessageRequestAccepted, .infoDisappearingMessagesUpdate:
+                // Info messages and unsent messages should just trigger a local
+                // deletion (they are created as side effects so we wouldn't be
+                // able to delete them for all participants anyway)
+                Storage.shared.writeAsync { db in
+                    _ = try Interaction
+                        .filter(id: cellViewModel.id)
+                        .deleteAll(db)
+                }
+                return
+                
+            case .standardOutgoing, .standardIncoming: break
         }
         
         let threadId: String = self.viewModel.threadData.threadId
@@ -1118,7 +1686,58 @@ extension ConversationVC:
                             on: openGroup.server
                         )
                     )
-                else { return }
+                else {
+                    // If the message hasn't been sent yet then just delete locally
+                    guard cellViewModel.state == .sending || cellViewModel.state == .failed else { return }
+                    
+                    // Retrieve any message send jobs for this interaction
+                    let jobs: [Job] = Storage.shared
+                        .read { db in
+                            try? Job
+                                .filter(Job.Columns.variant == Job.Variant.messageSend)
+                                .filter(Job.Columns.interactionId == cellViewModel.id)
+                                .fetchAll(db)
+                        }
+                        .defaulting(to: [])
+                    
+                    // If the job is currently running then wait until it's done before triggering
+                    // the deletion
+                    let targetJob: Job? = jobs.first(where: { JobRunner.isCurrentlyRunning($0) })
+                    
+                    guard targetJob == nil else {
+                        JobRunner.afterCurrentlyRunningJob(targetJob) { [weak self] result in
+                            switch result {
+                                // If it succeeded then we'll need to delete from the server so re-run
+                                // this function (if we still don't have the server id for some reason
+                                // then this would result in a local-only deletion which should be fine
+                                case .succeeded: self?.delete(cellViewModel)
+                                    
+                                // Otherwise we just need to cancel the pending job (in case it retries)
+                                // and delete the interaction
+                                default:
+                                    JobRunner.removePendingJob(targetJob)
+                                    
+                                    Storage.shared.writeAsync { db in
+                                        _ = try Interaction
+                                            .filter(id: cellViewModel.id)
+                                            .deleteAll(db)
+                                    }
+                            }
+                        }
+                        return
+                    }
+                    
+                    // If it's not currently running then remove any pending jobs (just to be safe) and
+                    // delete the interaction locally
+                    jobs.forEach { JobRunner.removePendingJob($0) }
+                    
+                    Storage.shared.writeAsync { db in
+                        _ = try Interaction
+                            .filter(id: cellViewModel.id)
+                            .deleteAll(db)
+                    }
+                    return
+                }
                 
                 // Delete the message from the open group
                 deleteRemotely(
@@ -1175,8 +1794,8 @@ extension ConversationVC:
                     return
                 }
                 
-                let alertVC = UIAlertController.init(title: nil, message: nil, preferredStyle: .actionSheet)
-                alertVC.addAction(UIAlertAction(title: "delete_message_for_me".localized(), style: .destructive) { [weak self] _ in
+                let actionSheet: UIAlertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+                actionSheet.addAction(UIAlertAction(title: "delete_message_for_me".localized(), style: .destructive) { [weak self] _ in
                     Storage.shared.writeAsync { db in
                         _ = try Interaction
                             .filter(id: cellViewModel.id)
@@ -1194,7 +1813,7 @@ extension ConversationVC:
                     self?.showInputAccessoryView()
                 })
                 
-                alertVC.addAction(UIAlertAction(
+                actionSheet.addAction(UIAlertAction(
                     title: (cellViewModel.threadVariant == .closedGroup ?
                         "delete_message_for_everyone".localized() :
                         String(format: "delete_message_for_me_and_recipient".localized(), threadName)
@@ -1228,13 +1847,14 @@ extension ConversationVC:
                     }
                 })
 
-                alertVC.addAction(UIAlertAction.init(title: "TXT_CANCEL_TITLE".localized(), style: .cancel) { [weak self] _ in
+                actionSheet.addAction(UIAlertAction.init(title: "TXT_CANCEL_TITLE".localized(), style: .cancel) { [weak self] _ in
                     self?.showInputAccessoryView()
                 })
 
                 self.inputAccessoryView?.isHidden = true
                 self.inputAccessoryView?.alpha = 0
-                self.presentAlert(alertVC)
+                Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
+                self.present(actionSheet, animated: true)
         }
     }
 
@@ -1300,85 +1920,105 @@ extension ConversationVC:
         guard cellViewModel.threadVariant == .openGroup else { return }
         
         let threadId: String = self.viewModel.threadData.threadId
-        let alert: UIAlertController = UIAlertController(
-            title: "Session",
-            message: "This will ban the selected user from this room. It won't ban them from other rooms.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: { [weak self] _ in
-            Storage.shared
-                .read { db -> Promise<Void> in
-                    guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
-                        return Promise(error: StorageError.objectNotFound)
-                    }
+        let modal: ConfirmationModal = ConfirmationModal(
+            targetView: self.view,
+            info: ConfirmationModal.Info(
+                title: "Session",
+                explanation: "This will ban the selected user from this room. It won't ban them from other rooms.",
+                confirmTitle: "BUTTON_OK".localized(),
+                cancelStyle: .alert_text,
+                onConfirm: { [weak self] _ in
+                    Storage.shared
+                        .read { db -> Promise<Void> in
+                            guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
+                                return Promise(error: StorageError.objectNotFound)
+                            }
+                            
+                            return OpenGroupAPI
+                                .userBan(
+                                    db,
+                                    sessionId: cellViewModel.authorId,
+                                    from: [openGroup.roomToken],
+                                    on: openGroup.server
+                                )
+                                .map { _ in () }
+                        }
+                        .catch(on: DispatchQueue.main) { _ in
+                            let modal: ConfirmationModal = ConfirmationModal(
+                                targetView: self?.view,
+                                info: ConfirmationModal.Info(
+                                    title: CommonStrings.errorAlertTitle,
+                                    explanation: "context_menu_ban_user_error_alert_message".localized(),
+                                    cancelTitle: "BUTTON_OK".localized(),
+                                    cancelStyle: .alert_text
+                                )
+                            )
+                            self?.present(modal, animated: true)
+                        }
+                        .retainUntilComplete()
                     
-                    return OpenGroupAPI
-                        .userBan(
-                            db,
-                            sessionId: cellViewModel.authorId,
-                            from: [openGroup.roomToken],
-                            on: openGroup.server
-                        )
-                        .map { _ in () }
-                }
-                .catch(on: DispatchQueue.main) { _ in
-                    OWSAlerts.showErrorAlert(message: "context_menu_ban_user_error_alert_message".localized())
-                }
-                .retainUntilComplete()
-            
-            self?.becomeFirstResponder()
-        }))
-        alert.addAction(UIAlertAction(title: "Cancel", style: .default, handler: { [weak self] _ in
-            self?.becomeFirstResponder()
-        }))
-        
-        present(alert, animated: true, completion: nil)
+                    self?.becomeFirstResponder()
+                },
+                afterClosed: { [weak self] in self?.becomeFirstResponder() }
+            )
+        )
+        self.present(modal, animated: true)
     }
 
     func banAndDeleteAllMessages(_ cellViewModel: MessageViewModel) {
         guard cellViewModel.threadVariant == .openGroup else { return }
         
         let threadId: String = self.viewModel.threadData.threadId
-        let alert: UIAlertController = UIAlertController(
-            title: "Session",
-            message: "This will ban the selected user from this room and delete all messages sent by them. It won't ban them from other rooms or delete the messages they sent there.",
-            preferredStyle: .alert
+        let modal: ConfirmationModal = ConfirmationModal(
+            targetView: self.view,
+            info: ConfirmationModal.Info(
+                title: "Session",
+                explanation: "This will ban the selected user from this room and delete all messages sent by them. It won't ban them from other rooms or delete the messages they sent there.",
+                confirmTitle: "BUTTON_OK".localized(),
+                cancelStyle: .alert_text,
+                onConfirm: { [weak self] _ in
+                    Storage.shared
+                        .read { db -> Promise<Void> in
+                            guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
+                                return Promise(error: StorageError.objectNotFound)
+                            }
+                        
+                            return OpenGroupAPI
+                                .userBanAndDeleteAllMessages(
+                                    db,
+                                    sessionId: cellViewModel.authorId,
+                                    in: openGroup.roomToken,
+                                    on: openGroup.server
+                                )
+                                .map { _ in () }
+                        }
+                        .catch(on: DispatchQueue.main) { _ in
+                            let modal: ConfirmationModal = ConfirmationModal(
+                                targetView: self?.view,
+                                info: ConfirmationModal.Info(
+                                    title: CommonStrings.errorAlertTitle,
+                                    explanation: "context_menu_ban_user_error_alert_message".localized(),
+                                    cancelTitle: "BUTTON_OK".localized(),
+                                    cancelStyle: .alert_text
+                                )
+                            )
+                            self?.present(modal, animated: true)
+                        }
+                        .retainUntilComplete()
+                    
+                    self?.becomeFirstResponder()
+                },
+                afterClosed: { [weak self] in self?.becomeFirstResponder() }
+            )
         )
-        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: { [weak self] _ in
-            Storage.shared
-                .read { db -> Promise<Void> in
-                    guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
-                        return Promise(error: StorageError.objectNotFound)
-                    }
-                
-                    return OpenGroupAPI
-                        .userBanAndDeleteAllMessages(
-                            db,
-                            sessionId: cellViewModel.authorId,
-                            in: openGroup.roomToken,
-                            on: openGroup.server
-                        )
-                        .map { _ in () }
-                }
-                .catch(on: DispatchQueue.main) { _ in
-                    OWSAlerts.showErrorAlert(message: "context_menu_ban_user_error_alert_message".localized())
-                }
-                .retainUntilComplete()
-            
-            self?.becomeFirstResponder()
-        }))
-        alert.addAction(UIAlertAction(title: "Cancel", style: .default, handler: { [weak self] _ in
-            self?.becomeFirstResponder()
-        }))
-        
-        present(alert, animated: true, completion: nil)
+        self.present(modal, animated: true)
     }
 
     // MARK: - VoiceMessageRecordingViewDelegate
 
     func startVoiceMessageRecording() {
         // Request permission if needed
-        requestMicrophonePermissionIfNeeded() { [weak self] in
+        Permissions.requestMicrophonePermissionIfNeeded() { [weak self] in
             self?.cancelVoiceMessageRecording()
         }
         
@@ -1461,10 +2101,16 @@ extension ConversationVC:
         guard duration > 1 else {
             self.audioRecorder = nil
             
-            OWSAlerts.showAlert(
-                title: "VOICE_MESSAGE_TOO_SHORT_ALERT_TITLE".localized(),
-                message: "VOICE_MESSAGE_TOO_SHORT_ALERT_MESSAGE".localized()
+            let modal: ConfirmationModal = ConfirmationModal(
+                targetView: self.view,
+                info: ConfirmationModal.Info(
+                    title: "VOICE_MESSAGE_TOO_SHORT_ALERT_TITLE".localized(),
+                    explanation: "VOICE_MESSAGE_TOO_SHORT_ALERT_MESSAGE".localized(),
+                    cancelTitle: "BUTTON_OK".localized(),
+                    cancelStyle: .alert_text
+                )
             )
+            self.present(modal, animated: true)
             return
         }
         
@@ -1500,110 +2146,42 @@ extension ConversationVC:
         Environment.shared?.audioSession.endAudioActivity(recordVoiceMessageActivity)
     }
     
-    // MARK: - Permissions
+    // MARK: - Data Extraction Notifications
     
-    func requestCameraPermissionIfNeeded() -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-            case .authorized: return true
-            case .denied, .restricted:
-                let modal = PermissionMissingModal(permission: "camera") { }
-                modal.modalPresentationStyle = .overFullScreen
-                modal.modalTransitionStyle = .crossDissolve
-                present(modal, animated: true, completion: nil)
-                return false
-                
-            case .notDetermined:
-                AVCaptureDevice.requestAccess(for: .video, completionHandler: { _ in })
-                return false
-                
-            default: return false
-        }
-    }
-
-    func requestMicrophonePermissionIfNeeded(onNotGranted: @escaping () -> Void) {
-        switch AVAudioSession.sharedInstance().recordPermission {
-            case .granted: break
-            case .denied:
-                onNotGranted()
-                let modal = PermissionMissingModal(permission: "microphone") {
-                    onNotGranted()
-                }
-                modal.modalPresentationStyle = .overFullScreen
-                modal.modalTransitionStyle = .crossDissolve
-                present(modal, animated: true, completion: nil)
-                
-            case .undetermined:
-                onNotGranted()
-                AVAudioSession.sharedInstance().requestRecordPermission { _ in }
-                
-            default: break
-        }
-    }
-
-    func requestLibraryPermissionIfNeeded(onAuthorized: @escaping () -> Void) {
-        let authorizationStatus: PHAuthorizationStatus
-        if #available(iOS 14, *) {
-            authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            if authorizationStatus == .notDetermined {
-                // When the user chooses to select photos (which is the .limit status),
-                // the PHPhotoUI will present the picker view on the top of the front view.
-                // Since we have the ScreenLockUI showing when we request premissions,
-                // the picker view will be presented on the top of the ScreenLockUI.
-                // However, the ScreenLockUI will dismiss with the permission request alert view, so
-                // the picker view then will dismiss, too. The selection process cannot be finished
-                // this way. So we add a flag (isRequestingPermission) to prevent the ScreenLockUI
-                // from showing when we request the photo library permission.
-                Environment.shared?.isRequestingPermission = true
-                let appMode = AppModeManager.shared.currentAppMode
-                // FIXME: Rather than setting the app mode to light and then to dark again once we're done,
-                // it'd be better to just customize the appearance of the image picker. There doesn't currently
-                // appear to be a good way to do so though...
-                AppModeManager.shared.setCurrentAppMode(to: .light)
-                PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-                    DispatchQueue.main.async {
-                        AppModeManager.shared.setCurrentAppMode(to: appMode)
-                    }
-                    Environment.shared?.isRequestingPermission = false
-                    if [ PHAuthorizationStatus.authorized, PHAuthorizationStatus.limited ].contains(status) {
-                        onAuthorized()
-                    }
-                }
-            }
-        } else {
-            authorizationStatus = PHPhotoLibrary.authorizationStatus()
-            if authorizationStatus == .notDetermined {
-                PHPhotoLibrary.requestAuthorization { status in
-                    if status == .authorized {
-                        onAuthorized()
-                    }
-                }
-            }
-        }
+    @objc func sendScreenshotNotification() {
+        // Only send screenshot notifications to one-to-one conversations
+        guard self.viewModel.threadData.threadVariant == .contact else { return }
         
-        switch authorizationStatus {
-            case .authorized, .limited:
-                onAuthorized()
-                
-            case .denied, .restricted:
-                let modal = PermissionMissingModal(permission: "library") { }
-                modal.modalPresentationStyle = .overFullScreen
-                modal.modalTransitionStyle = .crossDissolve
-                present(modal, animated: true, completion: nil)
-                
-            default: return
+        let threadId: String = self.viewModel.threadData.threadId
+        
+        Storage.shared.writeAsync { db in
+            guard let thread: SessionThread = try SessionThread.fetchOne(db, id: threadId) else { return }
+            
+            try MessageSender.send(
+                db,
+                message: DataExtractionNotification(
+                    kind: .screenshot
+                ),
+                interactionId: nil,
+                in: thread
+            )
         }
     }
 
     // MARK: - Convenience
     
     func showErrorAlert(for attachment: SignalAttachment, onDismiss: (() -> ())?) {
-        OWSAlerts.showAlert(
-            title: "ATTACHMENT_ERROR_ALERT_TITLE".localized(),
-            message: (attachment.localizedErrorDescription ?? SignalAttachment.missingDataErrorMessage),
-            buttonTitle: nil
-        ) { _ in
-            onDismiss?()
-        }
+        let modal: ConfirmationModal = ConfirmationModal(
+            targetView: self.view,
+            info: ConfirmationModal.Info(
+                title: "ATTACHMENT_ERROR_ALERT_TITLE".localized(),
+                explanation: (attachment.localizedErrorDescription ?? SignalAttachment.missingDataErrorMessage),
+                cancelTitle: "BUTTON_OK".localized(),
+                cancelStyle: .alert_text,
+                afterClosed: onDismiss
+            )
+        )
+        self.present(modal, animated: true)
     }
 }
 
@@ -1708,6 +2286,35 @@ extension ConversationVC {
             preferredStyle: .actionSheet
         )
         alertVC.addAction(UIAlertAction(title: "TXT_DELETE_TITLE".localized(), style: .destructive) { _ in
+            // Delete the request
+            Storage.shared.writeAsync(
+                updates: { db in
+                    _ = try SessionThread
+                        .filter(id: threadId)
+                        .deleteAll(db)
+                },
+                completion: { db, _ in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.navigationController?.popViewController(animated: true)
+                    }
+                }
+            )
+        })
+        alertVC.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel, handler: nil))
+        
+        self.present(alertVC, animated: true, completion: nil)
+    }
+    
+    @objc func block() {
+        guard self.viewModel.threadData.threadVariant == .contact else { return }
+        
+        let threadId: String = self.viewModel.threadData.threadId
+        let alertVC: UIAlertController = UIAlertController(
+            title: "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized(),
+            message: nil,
+            preferredStyle: .actionSheet
+        )
+        alertVC.addAction(UIAlertAction(title: "BLOCK_LIST_BLOCK_BUTTON".localized(), style: .destructive) { _ in
             // Delete the request
             Storage.shared.writeAsync(
                 updates: { db in

@@ -9,22 +9,22 @@ import SessionUtilitiesKit
 public final class SnodeAPI {
     private static let sodium = Sodium()
     
-    private static var hasLoadedSnodePool = false
-    private static var loadedSwarms: Set<String> = []
-    private static var getSnodePoolPromise: Promise<Set<Snode>>?
+    private static var hasLoadedSnodePool: Atomic<Bool> = Atomic(false)
+    private static var loadedSwarms: Atomic<Set<String>> = Atomic([])
+    private static var getSnodePoolPromise: Atomic<Promise<Set<Snode>>?> = Atomic(nil)
     
     /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
-    internal static var snodeFailureCount: [Snode: UInt] = [:]
+    internal static var snodeFailureCount: Atomic<[Snode: UInt]> = Atomic([:])
     /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
-    internal static var snodePool: Set<Snode> = []
+    internal static var snodePool: Atomic<Set<Snode>> = Atomic([])
 
     /// The offset between the user's clock and the Service Node's clock. Used in cases where the
     /// user's clock is incorrect.
     ///
     /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
-    public static var clockOffset: Int64 = 0
+    public static var clockOffset: Atomic<Int64> = Atomic(0)
     /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
-    public static var swarmCache: [String: Set<Snode>] = [:]
+    public static var swarmCache: Atomic<[String: Set<Snode>]> = Atomic([:])
     
     // MARK: - Namespaces
     
@@ -48,20 +48,21 @@ public final class SnodeAPI {
 
     // MARK: Snode Pool Interaction
     
-    private static var hasInsufficientSnodes: Bool { snodePool.count < minSnodePoolCount }
+    private static var hasInsufficientSnodes: Bool { snodePool.wrappedValue.count < minSnodePoolCount }
     
     private static func loadSnodePoolIfNeeded() {
-        guard !hasLoadedSnodePool else { return }
+        guard !hasLoadedSnodePool.wrappedValue else { return }
         
-        Storage.shared.read { db in
-            snodePool = ((try? Snode.fetchSet(db)) ?? Set())
-        }
+        let fetchedSnodePool: Set<Snode> = Storage.shared
+            .read { db in try Snode.fetchSet(db) }
+            .defaulting(to: [])
         
-        hasLoadedSnodePool = true
+        snodePool.mutate { $0 = fetchedSnodePool }
+        hasLoadedSnodePool.mutate { $0 = true }
     }
     
     private static func setSnodePool(to newValue: Set<Snode>, db: Database? = nil) {
-        snodePool = newValue
+        snodePool.mutate { $0 = newValue }
         
         if let db: Database = db {
             _ = try? Snode.deleteAll(db)
@@ -79,13 +80,13 @@ public final class SnodeAPI {
         #if DEBUG
         dispatchPrecondition(condition: .onQueue(Threading.workQueue))
         #endif
-        var snodePool = SnodeAPI.snodePool
+        var snodePool = SnodeAPI.snodePool.wrappedValue
         snodePool.remove(snode)
         setSnodePool(to: snodePool)
     }
     
     @objc public static func clearSnodePool() {
-        snodePool.removeAll()
+        snodePool.mutate { $0.removeAll() }
         
         Threading.workQueue.async {
             setSnodePool(to: [])
@@ -94,20 +95,22 @@ public final class SnodeAPI {
     
     // MARK: Swarm Interaction
     private static func loadSwarmIfNeeded(for publicKey: String) {
-        guard !loadedSwarms.contains(publicKey) else { return }
+        guard !loadedSwarms.wrappedValue.contains(publicKey) else { return }
         
-        Storage.shared.read { db in
-            swarmCache[publicKey] = ((try? Snode.fetchSet(db, publicKey: publicKey)) ?? [])
-        }
+        let updatedCacheForKey: Set<Snode> = Storage.shared
+           .read { db in try Snode.fetchSet(db, publicKey: publicKey) }
+           .defaulting(to: [])
         
-        loadedSwarms.insert(publicKey)
+        swarmCache.mutate { $0[publicKey] = updatedCacheForKey }
+        loadedSwarms.mutate { $0.insert(publicKey) }
     }
     
     private static func setSwarm(to newValue: Set<Snode>, for publicKey: String, persist: Bool = true) {
         #if DEBUG
         dispatchPrecondition(condition: .onQueue(Threading.workQueue))
         #endif
-        swarmCache[publicKey] = newValue
+        swarmCache.mutate { $0[publicKey] = newValue }
+        
         guard persist else { return }
         
         Storage.shared.write { db in
@@ -119,7 +122,7 @@ public final class SnodeAPI {
         #if DEBUG
         dispatchPrecondition(condition: .onQueue(Threading.workQueue))
         #endif
-        let swarmOrNil = swarmCache[publicKey]
+        let swarmOrNil = swarmCache.wrappedValue[publicKey]
         guard var swarm = swarmOrNil, let index = swarm.firstIndex(of: snode) else { return }
         swarm.remove(at: index)
         setSwarm(to: swarm, for: publicKey)
@@ -129,13 +132,17 @@ public final class SnodeAPI {
     
     internal static func invoke(_ method: SnodeAPIEndpoint, on snode: Snode, associatedWith publicKey: String? = nil, parameters: JSON) -> Promise<Data> {
         if Features.useOnionRequests {
-            return RequestAPI
-                .sendRequest(
-                    to: snode,
-                    invoking: method,
-                    with: parameters,
-                    associatedWith: publicKey
-                )
+            return Storage.shared
+                .read { db in
+                    RequestAPI
+                        .sendRequest(
+                            db,
+                            to: snode,
+                            invoking: method,
+                            with: parameters,
+                            associatedWith: publicKey
+                        )
+                }
                 .map2 { responseData in
                     guard let responseJson: JSON = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON else {
                         throw HTTP.Error.invalidJSON
@@ -230,7 +237,7 @@ public final class SnodeAPI {
     }
     
     private static func getSnodePoolFromSnode() -> Promise<Set<Snode>> {
-        var snodePool = SnodeAPI.snodePool
+        var snodePool = SnodeAPI.snodePool.wrappedValue
         var snodes: Set<Snode> = []
         (0..<3).forEach { _ in
             guard let snode = snodePool.randomElement() else { return }
@@ -299,13 +306,13 @@ public final class SnodeAPI {
         let hasSnodePoolExpired = given(Storage.shared[.lastSnodePoolRefreshDate]) {
             now.timeIntervalSince($0) > 2 * 60 * 60
         }.defaulting(to: true)
-        let snodePool: Set<Snode> = SnodeAPI.snodePool
+        let snodePool: Set<Snode> = SnodeAPI.snodePool.wrappedValue
         
         guard hasInsufficientSnodes || hasSnodePoolExpired else {
             return Promise.value(snodePool)
         }
         
-        if let getSnodePoolPromise = getSnodePoolPromise { return getSnodePoolPromise }
+        if let getSnodePoolPromise = getSnodePoolPromise.wrappedValue { return getSnodePoolPromise }
         
         let promise: Promise<Set<Snode>>
         if snodePool.count < minSnodePoolCount {
@@ -317,7 +324,7 @@ public final class SnodeAPI {
             }
         }
         
-        getSnodePoolPromise = promise
+        getSnodePoolPromise.mutate { $0 = promise }
         promise.map2 { snodePool -> Set<Snode> in
             guard !snodePool.isEmpty else { throw SnodeAPIError.snodePoolUpdatingFailed }
             
@@ -340,10 +347,10 @@ public final class SnodeAPI {
             return promise
         }
         promise.done2 { _ in
-            getSnodePoolPromise = nil
+            getSnodePoolPromise.mutate { $0 = nil }
         }
         promise.catch2 { _ in
-            getSnodePoolPromise = nil
+            getSnodePoolPromise.mutate { $0 = nil }
         }
         
         return promise
@@ -460,7 +467,7 @@ public final class SnodeAPI {
     public static func getSwarm(for publicKey: String) -> Promise<Set<Snode>> {
         loadSwarmIfNeeded(for: publicKey)
         
-        if let cachedSwarm = swarmCache[publicKey], cachedSwarm.count >= minSwarmSnodeCount {
+        if let cachedSwarm = swarmCache.wrappedValue[publicKey], cachedSwarm.count >= minSwarmSnodeCount {
             return Promise<Set<Snode>> { $0.fulfill(cachedSwarm) }
         }
         
@@ -543,7 +550,7 @@ public final class SnodeAPI {
         let lastHash = SnodeReceivedMessageInfo.fetchLastNotExpired(for: snode, namespace: namespace, associatedWith: publicKey)?.hash ?? ""
 
         // Construct signature
-        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset)
+        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
         let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
         let namespaceVerificationString = (namespace == defaultNamespace ? "" : String(namespace))
         
@@ -642,7 +649,7 @@ public final class SnodeAPI {
         }
         
         // Construct signature
-        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset)
+        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
         let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
         
         guard
@@ -1024,9 +1031,9 @@ public final class SnodeAPI {
         dispatchPrecondition(condition: .onQueue(Threading.workQueue))
         #endif
         func handleBadSnode() {
-            let oldFailureCount = SnodeAPI.snodeFailureCount[snode] ?? 0
+            let oldFailureCount = (SnodeAPI.snodeFailureCount.wrappedValue[snode] ?? 0)
             let newFailureCount = oldFailureCount + 1
-            SnodeAPI.snodeFailureCount[snode] = newFailureCount
+            SnodeAPI.snodeFailureCount.mutate { $0[snode] = newFailureCount }
             SNLog("Couldn't reach snode at: \(snode); setting failure count to \(newFailureCount).")
             if newFailureCount >= SnodeAPI.snodeFailureThreshold {
                 SNLog("Failure threshold reached for: \(snode); dropping it.")
@@ -1034,8 +1041,8 @@ public final class SnodeAPI {
                     SnodeAPI.dropSnodeFromSwarmIfNeeded(snode, publicKey: publicKey)
                 }
                 SnodeAPI.dropSnodeFromSnodePool(snode)
-                SNLog("Snode pool count: \(snodePool.count).")
-                SnodeAPI.snodeFailureCount[snode] = 0
+                SNLog("Snode pool count: \(snodePool.wrappedValue.count).")
+                SnodeAPI.snodeFailureCount.mutate { $0[snode] = 0 }
             }
         }
         

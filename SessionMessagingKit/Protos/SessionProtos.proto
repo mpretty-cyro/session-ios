@@ -43,7 +43,9 @@ message UnsendRequest {
 
 message MessageRequestResponse {
   // @required
-  required bool   isApproved        = 1; // Whether the request was approved
+  required bool                      isApproved                = 1; // Whether the request was approved
+  optional bytes                     profileKey                = 2;
+  optional LokiProfile               profile                   = 3;
 }
 
 message Content {
@@ -98,6 +100,11 @@ message DataExtractionNotification {
   optional uint64 timestamp = 2;
 }
 
+message LokiProfile {
+  optional string displayName = 1;
+  optional string profilePicture = 2;
+}
+
 message DataMessage {
 
   enum Flags {
@@ -133,9 +140,18 @@ message DataMessage {
     optional AttachmentPointer image = 3;
   }
 
-  message LokiProfile {
-    optional string displayName = 1;
-    optional string profilePicture = 2;
+  message Reaction {
+    enum Action {
+        REACT = 0;
+        REMOVE = 1;
+    }
+    // @required
+    required uint64 id        = 1; // Message timestamp
+    // @required
+    required string author    = 2;
+    optional string emoji     = 3;
+    // @required
+    required Action action    = 4;
   }
 
   message OpenGroupInvitation {
@@ -184,6 +200,7 @@ message DataMessage {
   optional uint64                    timestamp                 = 7;
   optional Quote                     quote                     = 8;
   repeated Preview                   preview                   = 10;
+  optional Reaction                  reaction                  = 11;
   optional LokiProfile               profile                   = 101;
   optional OpenGroupInvitation       openGroupInvitation       = 102;
   optional ClosedGroupControlMessage closedGroupControlMessage = 104;

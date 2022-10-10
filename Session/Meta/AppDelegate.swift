@@ -1,20 +1,18 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
-import GRDB
-import PromiseKit
-import WebRTC
-import SessionUIKit
 import UIKit
+import UserNotifications
+import GRDB
+import WebRTC
+import PromiseKit
+import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
-import SessionUIKit
-import UserNotifications
-import UIKit
 import SignalUtilitiesKit
+import SessionSnodeKit
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, AppModeManagerDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
     var backgroundSnapshotBlockerWindow: UIWindow?
     var appStartupWindow: UIWindow?
@@ -31,7 +29,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         SetCurrentAppContext(MainAppContext())
         verifyDBKeysAvailableBeforeBackgroundLaunch()
 
-        AppModeManager.configure(delegate: self)
         Cryptography.seedRandom()
         AppVersion.sharedInstance()
 
@@ -41,8 +38,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // This block will be cleared in storageIsReady.
         DeviceSleepManager.sharedInstance.addBlock(blockObject: self)
         
-        let mainWindow: UIWindow = UIWindow(frame: UIScreen.main.bounds)
+        let mainWindow: UIWindow = TraitObservingWindow(frame: UIScreen.main.bounds)
         self.loadingViewController = LoadingViewController()
+        
+        // Store a weak reference in the ThemeManager so it can properly apply themes as needed
+        ThemeManager.mainWindow = mainWindow
         
         AppSetup.setupEnvironment(
             appSpecificBlock: {
@@ -52,12 +52,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 // Note: Intentionally dispatching sync as we want to wait for these to complete before
                 // continuing
                 DispatchQueue.main.sync {
-                    OWSScreenLockUI.sharedManager().setup(withRootWindow: mainWindow)
+                    ScreenLockUI.shared.setupWithRootWindow(rootWindow: mainWindow)
                     OWSWindowManager.shared().setup(
                         withRootWindow: mainWindow,
-                        screenBlockingWindow: OWSScreenLockUI.sharedManager().screenBlockingWindow
+                        screenBlockingWindow: ScreenLockUI.shared.screenBlockingWindow
                     )
-                    OWSScreenLockUI.sharedManager().startObserving()
+                    ScreenLockUI.shared.startObserving()
                 }
             },
             migrationProgressChanged: { [weak self] progress, minEstimatedTotalTime in
@@ -72,11 +72,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                     return
                 }
                 
+                // FIXME: Remove this (or create a proper migration if we want to keep it)
+                let networkLayer: RequestAPI.NetworkLayer? = Storage.shared[.debugNetworkLayer]
+                
+                if networkLayer == nil {
+                    let previousNetworkLayer: RequestAPI.NetworkLayer = RequestAPI.NetworkLayer(rawValue: UserDefaults.standard.string(forKey: "networkLayer") ?? "")
+                        .defaulting(to: .onionRequest)
+                    
+                    Storage.shared.writeAsync { db in
+                        db[.debugNetworkLayer] = previousNetworkLayer
+                    }
+                }
+                
                 self?.completePostMigrationSetup(needsConfigSync: needsConfigSync)
             }
         )
         
-        SNAppearance.switchToSessionAppearance()
+        if Environment.shared?.callManager.wrappedValue?.currentCall == nil {
+            UserDefaults.sharedLokiProject?.set(false, forKey: "isCallOngoing")
+        }
         
         // No point continuing if we are running tests
         guard !CurrentAppContext().isRunningTests else { return true }
@@ -87,8 +101,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Show LoadingViewController until the async database view registrations are complete.
         mainWindow.rootViewController = self.loadingViewController
         mainWindow.makeKeyAndVisible()
-
-        adapt(appMode: AppModeManager.getAppModeOrSystemDefault())
 
         // This must happen in appDidFinishLaunching or earlier to ensure we don't
         // miss notifications.
@@ -122,6 +134,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         /// `appDidFinishLaunching` seems to fix this odd behaviour (even though it doesn't match
         /// Apple's documentation on the matter)
         UNUserNotificationCenter.current().delegate = self
+        
+        // Resume database
+        NotificationCenter.default.post(name: Database.resumeNotification, object: self)
     }
     
     func applicationDidEnterBackground(_ application: UIApplication) {
@@ -129,16 +144,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         // NOTE: Fix an edge case where user taps on the callkit notification
         // but answers the call on another device
-        stopPollers(shouldStopUserPoller: !self.hasIncomingCallWaiting())
+        stopPollers(shouldStopUserPoller: !self.hasCallOngoing())
+        
+        // Stop all jobs except for message sending and when completed suspend the database
+        JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend) {
+            if !self.hasCallOngoing() {
+                NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+            }
+        }
     }
     
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
         Logger.info("applicationDidReceiveMemoryWarning")
     }
-    
+
     func applicationWillTerminate(_ application: UIApplication) {
         DDLog.flushLog()
-        
+
         stopPollers()
     }
     
@@ -148,7 +170,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         UserDefaults.sharedLokiProject?[.isMainAppActive] = true
         
         ensureRootViewController()
-        adapt(appMode: AppModeManager.getAppModeOrSystemDefault())
 
         AppReadiness.runNowOrWhenAppDidBecomeReady { [weak self] in
             self?.handleActivation()
@@ -185,8 +206,48 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - Background Fetching
     
     func application(_ application: UIApplication, performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        // Resume database
+        NotificationCenter.default.post(name: Database.resumeNotification, object: self)
+        
+        // Background tasks only last for a certain amount of time (which can result in a crash and a
+        // prompt appearing for the user), we want to avoid this and need to make sure to suspend the
+        // database again before the background task ends so we start a timer that expires 1 second
+        // before the background task is due to expire in order to do so
+        let cancelTimer: Timer = Timer.scheduledTimerOnMainThread(
+            withTimeInterval: (application.backgroundTimeRemaining - 1),
+            repeats: false
+        ) { timer in
+            timer.invalidate()
+            
+            guard BackgroundPoller.isValid else { return }
+            
+            BackgroundPoller.isValid = false
+            
+            // Suspend database
+            NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+            
+            SNLog("Background poll failed due to manual timeout")
+            completionHandler(.failed)
+        }
+        
+        // Flag the background poller as valid first and then trigger it to poll once the app is
+        // ready (we do this here rather than in `BackgroundPoller.poll` to avoid the rare edge-case
+        // that could happen when the timeout triggers before the app becomes ready which would have
+        // incorrectly set this 'isValid' flag to true after it should have timed out)
+        BackgroundPoller.isValid = true
+        
         AppReadiness.runNowOrWhenAppDidBecomeReady {
-            BackgroundPoller.poll(completionHandler: completionHandler)
+            BackgroundPoller.poll { result in
+                guard BackgroundPoller.isValid else { return }
+                
+                BackgroundPoller.isValid = false
+                
+                // Suspend database
+                NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+                
+                cancelTimer.invalidate()
+                completionHandler(result)
+            }
         }
     }
     
@@ -196,15 +257,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         Configuration.performMainSetup()
         JobRunner.add(executor: SyncPushTokensJob.self, for: .syncPushTokens)
         
-        // Trigger any launch-specific jobs and start the JobRunner
-        JobRunner.appDidFinishLaunching()
-        
         /// Setup the UI
         ///
-        /// **Note:** This **MUST** be run before calling `AppReadiness.setAppIsReady()` otherwise if
-        /// we are launching the app from a push notification the HomeVC won't be setup yet and it won't open the
-        /// related thread
+        /// **Note:** This **MUST** be run before calling:
+        /// - `AppReadiness.setAppIsReady()`:
+        ///    If we are launching the app from a push notification the HomeVC won't be setup yet
+        ///    and it won't open the related thread
+        ///
+        /// - `JobRunner.appDidFinishLaunching()`:
+        ///    The jobs which run on launch (eg. DisappearingMessages job) can impact the interactions
+        ///    which get fetched to display on the home screen, if the PagedDatabaseObserver hasn't
+        ///    been setup yet then the home screen can show stale (ie. deleted) interactions incorrectly
         self.ensureRootViewController(isPreAppReadyCall: true)
+        
+        // Trigger any launch-specific jobs and start the JobRunner
+        JobRunner.appDidFinishLaunching()
         
         // Note that this does much more than set a flag;
         // it will also run all deferred blocks (including the JobRunner
@@ -243,8 +310,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             message: "DATABASE_MIGRATION_FAILED".localized(),
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "modal_share_logs_title".localized(), style: .default) { _ in
-            ShareLogsModal.shareLogs(from: alert) { [weak self] in
+        alert.addAction(UIAlertAction(title: "HELP_REPORT_BUG_ACTION_TITLE".localized(), style: .default) { _ in
+            HelpViewModel.shareLogs(viewControllerToDismiss: alert) { [weak self] in
                 self?.showFailedMigrationAlert(error: error)
             }
         })
@@ -340,7 +407,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
         
         self.hasInitialRootViewController = true
-        self.window?.rootViewController = OWSNavigationController(
+        self.window?.rootViewController = StyledNavigationController(
             rootViewController: (Identity.userExists() ?
                 HomeVC() :
                 LandingVC()
@@ -389,6 +456,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                         return try Interaction
                             .filter(Interaction.Columns.wasRead == false)
                             .filter(
+                                // Exclude outgoing and deleted messages from the count
+                                Interaction.Columns.variant != Interaction.Variant.standardOutgoing &&
+                                Interaction.Columns.variant != Interaction.Variant.standardIncomingDeleted
+                            )
+                            .filter(
                                 // Only count mentions if 'onlyNotifyForMentions' is set
                                 thread[.onlyNotifyForMentions] == false ||
                                 Interaction.Columns.hasMention == true
@@ -419,7 +491,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         AppReadiness.runNowOrWhenAppDidBecomeReady {
             guard Identity.userExists() else { return }
             
-            SessionApp.homeViewController.wrappedValue?.createNewDM()
+            SessionApp.homeViewController.wrappedValue?.createNewConversation()
             completionHandler(true)
         }
     }
@@ -506,41 +578,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             poller.stop()
         }
         
-        ClosedGroupPoller.shared.stop()
+        ClosedGroupPoller.shared.stopAllPollers()
         OpenGroupManager.shared.stopPolling()
-    }
-    
-    // MARK: - App Mode
-
-    private func adapt(appMode: AppMode) {
-        // FIXME: Need to update this when an appropriate replacement is added (see https://teng.pub/technical/2021/11/9/uiapplication-key-window-replacement)
-        guard let window: UIWindow = UIApplication.shared.keyWindow else { return }
-        
-        switch (appMode) {
-            case .light:
-                window.overrideUserInterfaceStyle = .light
-                window.backgroundColor = .white
-            
-            case .dark:
-                window.overrideUserInterfaceStyle = .dark
-                window.backgroundColor = .black
-        }
-        
-        if LKAppModeUtilities.isSystemDefault {
-            window.overrideUserInterfaceStyle = .unspecified
-        }
-        
-        NotificationCenter.default.post(name: .appModeChanged, object: nil)
-    }
-    
-    func setCurrentAppMode(to appMode: AppMode) {
-        UserDefaults.standard[.appMode] = appMode.rawValue
-        adapt(appMode: appMode)
-    }
-    
-    func setAppModeToSystemDefault() {
-        UserDefaults.standard.removeObject(forKey: SNUserDefaults.Int.appMode.rawValue)
-        adapt(appMode: AppModeManager.getAppModeOrSystemDefault())
     }
     
     // MARK: - App Link
@@ -566,11 +605,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
 
     private func createNewDMFromDeepLink(sessionId: String) {
-        guard let homeViewController: HomeVC = (window?.rootViewController as? OWSNavigationController)?.visibleViewController as? HomeVC else {
+        guard let homeViewController: HomeVC = (window?.rootViewController as? UINavigationController)?.visibleViewController as? HomeVC else {
             return
         }
         
-        homeViewController.createNewDMFromDeepLink(sessionID: sessionId)
+        homeViewController.createNewDMFromDeepLink(sessionId: sessionId)
     }
         
     // MARK: - Call handling
@@ -579,6 +618,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         guard let call = AppEnvironment.shared.callManager.currentCall else { return false }
         
         return !call.hasStartedConnecting
+    }
+    
+    func hasCallOngoing() -> Bool {
+        guard let call = AppEnvironment.shared.callManager.currentCall else { return false }
+        
+        return !call.hasEnded
     }
     
     func handleAppActivatedWithOngoingCallIfNeeded() {

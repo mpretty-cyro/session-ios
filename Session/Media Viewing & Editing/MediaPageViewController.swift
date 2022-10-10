@@ -32,6 +32,17 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             owsFailDebug("unexpectedly unable to build new gallery page")
             return
         }
+        
+        // Cache and retrieve the new album items
+        viewModel.loadAndCacheAlbumData(
+            for: item.interactionId,
+            in: self.viewModel.threadId
+        )
+        
+        // Swap out the database observer
+        dataChangeObservable?.cancel()
+        viewModel.replaceAlbumObservation(toObservationFor: item.interactionId)
+        startObservingChanges()
 
         updateTitle(item: item)
         updateCaption(item: item)
@@ -93,12 +104,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     var footerBar: UIToolbar = {
         let result: UIToolbar = UIToolbar()
         result.clipsToBounds = true // hide 1px top-border
-        result.tintColor = Colors.text
-        result.barTintColor = Colors.navigationBarBackground
+        result.themeTintColor = .textPrimary
+        result.themeBarTintColor = .backgroundPrimary
+        result.themeBackgroundColor = .backgroundPrimary
         result.setBackgroundImage(UIImage(), forToolbarPosition: .any, barMetrics: UIBarMetrics.default)
         result.setShadowImage(UIImage(), forToolbarPosition: .any)
         result.isTranslucent = false
-        result.backgroundColor = Colors.navigationBarBackground
 
         return result
     }()
@@ -115,7 +126,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         // Navigation
 
-        let backButton = OWSViewController.createOWSBackButton(withTarget: self, selector: #selector(didPressDismissButton))
+        let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
         self.navigationItem.leftBarButtonItem = backButton
         self.navigationItem.titleView = portraitHeaderView
 
@@ -154,9 +165,9 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
 
         // Views
-        pagerScrollView.backgroundColor = Colors.navigationBarBackground
+        pagerScrollView.themeBackgroundColor = .newConversation_background
 
-        view.backgroundColor = Colors.navigationBarBackground
+        view.themeBackgroundColor = .newConversation_background
 
         captionContainerView.delegate = self
         updateCaptionContainerVisibility()
@@ -169,7 +180,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         let bottomContainer: DynamicallySizedView = DynamicallySizedView()
         bottomContainer.clipsToBounds = true
         bottomContainer.autoresizingMask = .flexibleHeight
-        bottomContainer.backgroundColor = Colors.navigationBarBackground
+        bottomContainer.themeBackgroundColor = .backgroundPrimary
         self.bottomContainer = bottomContainer
 
         let bottomStack = UIStackView(arrangedSubviews: [captionContainerView, galleryRailView, footerBar])
@@ -179,7 +190,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         bottomStack.autoPinEdgesToSuperviewEdges()
         
         let galleryRailBlockingView: UIView = UIView()
-        galleryRailBlockingView.backgroundColor = Colors.navigationBarBackground
+        galleryRailBlockingView.themeBackgroundColor = .backgroundPrimary
         bottomStack.addSubview(galleryRailBlockingView)
         galleryRailBlockingView.pin(.top, to: .bottom, of: footerBar)
         galleryRailBlockingView.pin(.left, to: .left, of: bottomStack)
@@ -196,12 +207,6 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         let verticalSwipe = UISwipeGestureRecognizer(target: self, action: #selector(didSwipeView))
         verticalSwipe.direction = [.up, .down]
         view.addGestureRecognizer(verticalSwipe)
-
-        let navigationBar = navigationController!.navigationBar
-        navigationBar.setBackgroundImage(UIImage(), for: UIBarMetrics.default)
-        navigationBar.shadowImage = UIImage()
-        navigationBar.isTranslucent = false
-        navigationBar.barTintColor = Colors.navigationBarBackground
         
         // Notifications
         NotificationCenter.default.addObserver(
@@ -295,10 +300,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     private var shouldHideToolbars: Bool = false {
         didSet {
             guard oldValue != shouldHideToolbars else { return }
-
-            // Hiding the status bar affects the positioning of the navbar. We don't want to show
-            // that in an animation, it's better to just have everythign "flit" in/out
-            UIApplication.shared.setStatusBarHidden(shouldHideToolbars, with: .none)
+            
             self.navigationController?.setNavigationBarHidden(shouldHideToolbars, animated: false)
 
             UIView.animate(withDuration: 0.1) {
@@ -316,7 +318,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             target: self,
             action: #selector(didPressShare)
         )
-        shareBarButton.tintColor = Colors.text
+        shareBarButton.themeTintColor = .textPrimary
         
         return shareBarButton
     }()
@@ -327,7 +329,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             target: self,
             action: #selector(didPressDelete)
         )
-        deleteBarButton.tintColor = Colors.text
+        deleteBarButton.themeTintColor = .textPrimary
         
         return deleteBarButton
     }()
@@ -342,7 +344,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             target: self,
             action: #selector(didPressPlayBarButton)
         )
-        videoPlayBarButton.tintColor = Colors.text
+        videoPlayBarButton.themeTintColor = .textPrimary
         
         return videoPlayBarButton
     }()
@@ -353,7 +355,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             target: self,
             action: #selector(didPressPauseBarButton)
         )
-        videoPauseBarButton.tintColor = Colors.text
+        videoPauseBarButton.themeTintColor = .textPrimary
         
         return videoPauseBarButton
     }()
@@ -458,7 +460,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         // MediaTileViewController then just pop/dismiss the screen
         guard
             let presentingNavController: UINavigationController = (self.presentingViewController as? UINavigationController),
-            !(presentingNavController.viewControllers.last is MediaTileViewController)
+            !(presentingNavController.viewControllers.last is AllMediaViewController)
         else {
             guard self.navigationController?.viewControllers.count == 1 else {
                 self.navigationController?.popViewController(animated: true)
@@ -471,7 +473,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         
         // Otherwise if we came via the conversation screen we need to push a new
         // instance of MediaTileViewController
-        let tileViewController: MediaTileViewController = MediaGalleryViewModel.createTileViewController(
+        let allMediaViewController: AllMediaViewController = MediaGalleryViewModel.createAllMediaViewController(
             threadId: self.viewModel.threadId,
             threadVariant: self.viewModel.threadVariant,
             focusedAttachmentId: currentItem.attachment.id,
@@ -479,9 +481,9 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         )
         
         let navController: MediaGalleryNavigationController = MediaGalleryNavigationController()
-        navController.viewControllers = [tileViewController]
+        navController.viewControllers = [allMediaViewController]
         navController.modalPresentationStyle = .overFullScreen
-        navController.transitioningDelegate = tileViewController
+        navController.transitioningDelegate = allMediaViewController
         
         self.navigationController?.present(navController, animated: true)
     }
@@ -579,10 +581,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
                     .deleteAll(db)
             }
         }
-        actionSheet.addAction(OWSAlerts.cancelAction)
+        actionSheet.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel))
         actionSheet.addAction(deleteAction)
 
-        self.presentAlert(actionSheet)
+        Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
+        self.present(actionSheet, animated: true)
     }
 
     // MARK: - Video interaction
@@ -681,10 +684,15 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
         
         // Then check if there is an interaction before the current album interaction
-        guard let interactionIdAfter: Int64 = self.viewModel.interactionIdAfter[interactionId] else { return nil }
+        guard let interactionIdAfter: Int64 = self.viewModel.interactionIdAfter[interactionId] else {
+            return nil
+        }
         
         // Cache and retrieve the new album items
-        let newAlbumItems: [MediaGalleryViewModel.Item] = viewModel.loadAndCacheAlbumData(for: interactionIdAfter)
+        let newAlbumItems: [MediaGalleryViewModel.Item] = viewModel.loadAndCacheAlbumData(
+            for: interactionIdAfter,
+            in: self.viewModel.threadId
+        )
         
         guard
             !newAlbumItems.isEmpty,
@@ -723,10 +731,15 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
         
         // Then check if there is an interaction before the current album interaction
-        guard let interactionIdBefore: Int64 = self.viewModel.interactionIdBefore[interactionId] else { return nil }
+        guard let interactionIdBefore: Int64 = self.viewModel.interactionIdBefore[interactionId] else {
+            return nil
+        }
 
         // Cache and retrieve the new album items
-        let newAlbumItems: [MediaGalleryViewModel.Item] = viewModel.loadAndCacheAlbumData(for: interactionIdBefore)
+        let newAlbumItems: [MediaGalleryViewModel.Item] = viewModel.loadAndCacheAlbumData(
+            for: interactionIdBefore,
+            in: self.viewModel.threadId
+        )
         
         guard
             !newAlbumItems.isEmpty,
@@ -808,9 +821,9 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }()
 
     lazy private var portraitHeaderNameLabel: UILabel = {
-        let label = UILabel()
-        label.textColor = Colors.text
+        let label: UILabel = UILabel()
         label.font = .systemFont(ofSize: Values.mediumFontSize)
+        label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.8
@@ -819,9 +832,9 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }()
 
     lazy private var portraitHeaderDateLabel: UILabel = {
-        let label = UILabel()
-        label.textColor = Colors.text
+        let label: UILabel = UILabel()
         label.font = .systemFont(ofSize: Values.verySmallFontSize)
+        label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.8
@@ -830,7 +843,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }()
 
     private lazy var portraitHeaderView: UIView = {
-        let stackView = UIStackView()
+        let stackView: UIStackView = UIStackView()
         stackView.axis = .vertical
         stackView.alignment = .center
         stackView.spacing = 0
@@ -905,12 +918,15 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
 extension MediaGalleryViewModel.Item: GalleryRailItem {
     public func buildRailItemView() -> UIView {
-        let imageView = UIImageView()
+        let imageView: UIImageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
-        getRailImage().map { [weak imageView] image in
-            guard let imageView = imageView else { return }
-            imageView.image = image
-        }.retainUntilComplete()
+        
+        getRailImage()
+            .map { [weak imageView] image in
+                guard let imageView = imageView else { return }
+                imageView.image = image
+            }
+            .retainUntilComplete()
 
         return imageView
     }

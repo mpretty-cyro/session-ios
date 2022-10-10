@@ -1,22 +1,24 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import GRDB
+import DifferenceKit
 import PromiseKit
 import SessionUtilitiesKit
 
 public protocol RequestAPIType {
-    static func sendRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
-    static func sendRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
+    static func sendRequest(_ db: Database, to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
+    static func sendRequest(_ db: Database, request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
 }
 
 public extension RequestAPIType {
-    static func sendRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
-        sendRequest(request, to: server, using: .v4, with: x25519PublicKey)
+    static func sendRequest(_ db: Database, request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+        sendRequest(db, request: request, to: server, using: .v4, with: x25519PublicKey)
     }
 }
 
 public enum RequestAPI: RequestAPIType {
-    public enum NetworkLayer: String, Codable, CaseIterable {
+    public enum NetworkLayer: String, Codable, CaseIterable, Equatable, Hashable, EnumStringSetting, Differentiable {
         case onionRequest
         case lokinet
         case nativeLokinet
@@ -30,11 +32,24 @@ public enum RequestAPI: RequestAPIType {
                 case .direct: return "Direct"
             }
         }
+        
+        public static func didChangeNetworkLayer() {
+            NotificationCenter.default.post(name: .networkLayerChanged, object: nil, userInfo: nil)
+            
+            LokinetWrapper.stop()
+            GetSnodePoolJob.run()
+            
+            // Cancel and remove all current requests
+            RequestAPI.currentRequests.mutate { requests in
+                requests.forEach { $0.task?.cancel() }
+                requests = []
+            }
+        }
     }
     
     fileprivate static let currentRequests: Atomic<[RequestContainer<(OnionRequestResponseInfoType, Data?)>]> = Atomic([])
     
-    public static func sendRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
+    public static func sendRequest(_ db: Database, to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
         let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
         
         guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
@@ -42,7 +57,8 @@ public enum RequestAPI: RequestAPIType {
         }
         
         return sendRequest(
-            .post,
+            db,
+            method: .post,
             headers: [:],
             endpoint: "storage_rpc/v1",
             body: payload,
@@ -54,7 +70,7 @@ public enum RequestAPI: RequestAPIType {
             return data
         }
         .recover2 { error -> Promise<Data> in
-            let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+            let layer: NetworkLayer = Storage.shared[.debugNetworkLayer].defaulting(to: .onionRequest)
             
             guard
                 layer == .onionRequest,
@@ -66,7 +82,13 @@ public enum RequestAPI: RequestAPIType {
     }
     
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    public static func sendRequest(
+        _ db: Database,
+        request: URLRequest,
+        to server: String,
+        using version: OnionRequestAPIVersion = .v4,
+        with x25519PublicKey: String
+    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
             return Promise(error: OnionRequestAPIError.invalidURL)
         }
@@ -85,7 +107,7 @@ public enum RequestAPI: RequestAPIType {
                 }
             }
         
-        let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+        let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
         let destination = OnionRequestAPIDestination.server(
             host: host,
             target: version.rawValue,
@@ -108,7 +130,8 @@ public enum RequestAPI: RequestAPIType {
         }
         
         return sendRequest(
-            (HTTP.Verb.from(request.httpMethod) ?? .get),   // The default (if nil) is 'GET'
+            db,
+            method: (HTTP.Verb.from(request.httpMethod) ?? .get),   // The default (if nil) is 'GET'
             headers: headers,
             endpoint: endpoint,
             body: body,
@@ -118,7 +141,8 @@ public enum RequestAPI: RequestAPIType {
     }
     
     private static func sendRequest(
-        _ method: HTTP.Verb,
+        _ db: Database,
+        method: HTTP.Verb,
         headers: [String: Any],
         endpoint: String,
         body: Data?,
@@ -126,7 +150,7 @@ public enum RequestAPI: RequestAPIType {
         version: OnionRequestAPIVersion = .v4
     ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         let container: RequestContainer<(OnionRequestResponseInfoType, Data?)> = {
-            let layer: NetworkLayer = (NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest)
+            let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
 
             switch layer {
                 case .onionRequest:
@@ -180,7 +204,7 @@ public enum RequestAPI: RequestAPIType {
                 else { return response }
                     
                 let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
-                SnodeAPI.clockOffset = offset
+                SnodeAPI.clockOffset.mutate { $0 = offset }
                 
                 return response
             }
@@ -190,34 +214,6 @@ public enum RequestAPI: RequestAPIType {
                     requests = requests.filter { $0.uuid != container.uuid }
                 }
             }
-    }
-}
-
-@objc(SSKNetworkLayer)
-public class objc_NetworkLayer: NSObject {
-    @objc public static func currentLayer() -> String {
-        return (RequestAPI.NetworkLayer(rawValue: UserDefaults.standard[.networkLayer] ?? "") ?? .onionRequest).rawValue
-    }
-    
-    @objc public static func allLayers() -> [String] {
-        return RequestAPI.NetworkLayer.allCases.map { $0.rawValue }
-    }
-    
-    @objc public static func allLayerNames() -> [String] {
-        return RequestAPI.NetworkLayer.allCases.map { $0.name }
-    }
-    
-    @objc public static func setLayerTo(_ value: String) {
-        UserDefaults.standard[.networkLayer] = (RequestAPI.NetworkLayer(rawValue: value) ?? .onionRequest).rawValue
-        NotificationCenter.default.post(name: .networkLayerChanged, object: nil, userInfo: nil)
-        
-        GetSnodePoolJob.run()
-        
-        // Cancel and remove all current requests
-        RequestAPI.currentRequests.mutate { requests in
-            requests.forEach { $0.task?.cancel() }
-            requests = []
-        }
     }
 }
 

@@ -1237,12 +1237,14 @@ class OpenGroupAPISpec: QuickSpec {
                             sender: "testSender",
                             posted: 321,
                             edited: nil,
+                            deleted: nil,
                             seqNo: 10,
                             whisper: false,
                             whisperMods: false,
                             whisperTo: nil,
                             base64EncodedData: nil,
-                            base64EncodedSignature: nil
+                            base64EncodedSignature: nil,
+                            reactions: nil
                         )
                         
                         override class var mockResponse: Data? { return try! JSONEncoder().encode(data) }
@@ -1605,12 +1607,14 @@ class OpenGroupAPISpec: QuickSpec {
                             sender: "testSender",
                             posted: 321,
                             edited: nil,
+                            deleted: nil,
                             seqNo: 10,
                             whisper: false,
                             whisperMods: false,
                             whisperTo: nil,
                             base64EncodedData: nil,
-                            base64EncodedSignature: nil
+                            base64EncodedSignature: nil,
+                            reactions: nil
                         )
                         
                         override class var mockResponse: Data? { return try! JSONEncoder().encode(data) }

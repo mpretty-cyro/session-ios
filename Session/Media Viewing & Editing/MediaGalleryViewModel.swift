@@ -18,12 +18,19 @@ public class MediaGalleryViewModel {
         case loadNewer
     }
     
+    // MARK: Media type
+    public enum MediaType {
+        case media
+        case document
+    }
+    
     // MARK: - Variables
     
     public let threadId: String
     public let threadVariant: SessionThread.Variant
     private var focusedAttachmentId: String?
     public private(set) var focusedIndexPath: IndexPath?
+    public var mediaType: MediaType
     
     /// This value is the current state of an album view
     private var cachedInteractionIdBefore: Atomic<[Int64: Int64]> = Atomic([:])
@@ -54,6 +61,7 @@ public class MediaGalleryViewModel {
         threadId: String,
         threadVariant: SessionThread.Variant,
         isPagedData: Bool,
+        mediaType: MediaType,
         pageSize: Int = 1,
         focusedAttachmentId: String? = nil,
         performInitialQuerySync: Bool = false
@@ -62,6 +70,7 @@ public class MediaGalleryViewModel {
         self.threadVariant = threadVariant
         self.focusedAttachmentId = focusedAttachmentId
         self.pagedDataObserver = nil
+        self.mediaType = mediaType
         
         guard isPagedData else { return }
      
@@ -80,7 +89,7 @@ public class MediaGalleryViewModel {
                 )
             ],
             joinSQL: Item.joinSQL,
-            filterSQL: Item.filterSQL(threadId: threadId),
+            filterSQL: Item.filterSQL(threadId: threadId, mediaType: self.mediaType),
             orderSQL: Item.galleryOrderSQL,
             dataQuery: Item.baseQuery(orderSQL: Item.galleryOrderSQL),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
@@ -243,15 +252,27 @@ public class MediaGalleryViewModel {
             """
         }()
         
-        fileprivate static func filterSQL(threadId: String) -> SQL {
+        fileprivate static func filterSQL(threadId: String, mediaType: MediaType) -> SQL {
             let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
             let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
             
-            return SQL("""
-                \(attachment[.isVisualMedia]) = true AND
-                \(attachment[.isValid]) = true AND
-                \(interaction[.threadId]) = \(threadId)
-            """)
+            switch (mediaType) {
+                case .media:
+                    return SQL("""
+                        \(attachment[.isVisualMedia]) = true AND
+                        \(attachment[.isValid]) = true AND
+                        \(interaction[.threadId]) = \(threadId)
+                    """)
+                case .document:
+                    // FIXME: Remove "\(attachment[.sourceFilename]) <> 'session-audio-message'" when all platforms send the voice message properly
+                    return SQL("""
+                        \(attachment[.isVisualMedia]) = false AND
+                        \(attachment[.isValid]) = true AND
+                        \(interaction[.threadId]) = \(threadId) AND
+                        \(attachment[.variant]) = \(Attachment.Variant.standard) AND
+                        \(attachment[.sourceFilename]) <> 'session-audio-message'
+                    """)
+            }
         }
         
         fileprivate static let galleryOrderSQL: SQL = {
@@ -367,7 +388,7 @@ public class MediaGalleryViewModel {
             .removeDuplicates()
     }
     
-    @discardableResult public func loadAndCacheAlbumData(for interactionId: Int64) -> [Item] {
+    @discardableResult public func loadAndCacheAlbumData(for interactionId: Int64, in threadId: String) -> [Item] {
         typealias AlbumInfo = (albumData: [Item], interactionIdBefore: Int64?, interactionIdAfter: Int64?)
         
         // Note: It's possible we already have cached album data for this interaction
@@ -381,6 +402,7 @@ public class MediaGalleryViewModel {
                 .baseQuery(
                     orderSQL: SQL(interactionAttachment[.albumIndex]),
                     customFilters: SQL("""
+                        \(attachment[.isVisualMedia]) = true AND
                         \(attachment[.isValid]) = true AND
                         \(interaction[.id]) = \(interactionId)
                     """)
@@ -394,13 +416,23 @@ public class MediaGalleryViewModel {
             let itemBefore: Item? = try Item
                 .baseQuery(
                     orderSQL: Item.galleryReverseOrderSQL,
-                    customFilters: SQL("\(interaction[.timestampMs]) > \(albumTimestampMs)")
+                    customFilters: SQL("""
+                        \(attachment[.isVisualMedia]) = true AND
+                        \(attachment[.isValid]) = true AND
+                        \(interaction[.timestampMs]) > \(albumTimestampMs) AND
+                        \(interaction[.threadId]) = \(threadId)
+                    """)
                 )
                 .fetchOne(db)
             let itemAfter: Item? = try Item
                 .baseQuery(
                     orderSQL: Item.galleryOrderSQL,
-                    customFilters: SQL("\(interaction[.timestampMs]) < \(albumTimestampMs)")
+                    customFilters: SQL("""
+                        \(attachment[.isVisualMedia]) = true AND
+                        \(attachment[.isValid]) = true AND
+                        \(interaction[.timestampMs]) < \(albumTimestampMs) AND
+                        \(interaction[.threadId]) = \(threadId)
+                    """)
                 )
                 .fetchOne(db)
             
@@ -503,9 +535,10 @@ public class MediaGalleryViewModel {
         let viewModel: MediaGalleryViewModel = MediaGalleryViewModel(
             threadId: threadId,
             threadVariant: threadVariant,
-            isPagedData: false
+            isPagedData: false,
+            mediaType: .media
         )
-        viewModel.loadAndCacheAlbumData(for: interactionId)
+        viewModel.loadAndCacheAlbumData(for: interactionId, in: threadId)
         viewModel.replaceAlbumObservation(toObservationFor: interactionId)
         
         guard
@@ -528,7 +561,7 @@ public class MediaGalleryViewModel {
         return navController
     }
     
-    public static func createTileViewController(
+    public static func createMediaTileViewController(
         threadId: String,
         threadVariant: SessionThread.Variant,
         focusedAttachmentId: String?,
@@ -538,6 +571,7 @@ public class MediaGalleryViewModel {
             threadId: threadId,
             threadVariant: threadVariant,
             isPagedData: true,
+            mediaType: .media,
             pageSize: MediaTileViewController.itemPageSize,
             focusedAttachmentId: focusedAttachmentId,
             performInitialQuerySync: performInitialQuerySync
@@ -545,6 +579,53 @@ public class MediaGalleryViewModel {
         
         return MediaTileViewController(
             viewModel: viewModel
+        )
+    }
+    
+    public static func createDocumentTitleViewController(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedAttachmentId: String?,
+        performInitialQuerySync: Bool = false
+    ) -> DocumentTileViewController {
+        let viewModel: MediaGalleryViewModel = MediaGalleryViewModel(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            isPagedData: true,
+            mediaType: .document,
+            pageSize: MediaTileViewController.itemPageSize,
+            focusedAttachmentId: focusedAttachmentId,
+            performInitialQuerySync: performInitialQuerySync
+        )
+        
+        return DocumentTileViewController(
+            viewModel: viewModel
+        )
+    }
+    
+    public static func createAllMediaViewController(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedAttachmentId: String?,
+        performInitialQuerySync: Bool = false
+    ) -> AllMediaViewController {
+        let mediaTitleViewController = createMediaTileViewController(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            focusedAttachmentId: focusedAttachmentId,
+            performInitialQuerySync: performInitialQuerySync
+        )
+        
+        let documentTitleViewController = createDocumentTitleViewController(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            focusedAttachmentId: focusedAttachmentId,
+            performInitialQuerySync: performInitialQuerySync
+        )
+        
+        return AllMediaViewController(
+            mediaTitleViewController: mediaTitleViewController,
+            documentTitleViewController: documentTitleViewController
         )
     }
 }
@@ -556,9 +637,9 @@ public class MediaGalleryViewModel {
 @objc(SNMediaGallery)
 public class SNMediaGallery: NSObject {
     @objc(pushTileViewWithSliderEnabledForThreadId:isClosedGroup:isOpenGroup:fromNavController:)
-    static func pushTileView(threadId: String, isClosedGroup: Bool, isOpenGroup: Bool, fromNavController: OWSNavigationController) {
+    static func pushTileView(threadId: String, isClosedGroup: Bool, isOpenGroup: Bool, fromNavController: UINavigationController) {
         fromNavController.pushViewController(
-            MediaGalleryViewModel.createTileViewController(
+            MediaGalleryViewModel.createAllMediaViewController(
                 threadId: threadId,
                 threadVariant: {
                     if isClosedGroup { return .closedGroup }
