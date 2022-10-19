@@ -636,6 +636,7 @@
 		FD37EA1728AC5605003AE748 /* NotificationContentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37EA1628AC5605003AE748 /* NotificationContentViewModel.swift */; };
 		FD37EA1928AC5CCA003AE748 /* NotificationSoundViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37EA1828AC5CCA003AE748 /* NotificationSoundViewModel.swift */; };
 		FD39352C28F382920084DADA /* VersionFooterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39352B28F382920084DADA /* VersionFooterView.swift */; };
+		FD39353428F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */; };
 		FD3AABE928306BBD00E5099A /* ThreadPickerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3AABE828306BBD00E5099A /* ThreadPickerViewModel.swift */; };
 		FD3C905C27E3FBEF00CD579F /* BatchRequestInfoSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3C905B27E3FBEF00CD579F /* BatchRequestInfoSpec.swift */; };
 		FD3C906027E410F700CD579F /* FileUploadResponseSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3C905F27E410F700CD579F /* FileUploadResponseSpec.swift */; };
@@ -672,7 +673,7 @@
 		FD705A92278D051200F16121 /* ReusableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD705A91278D051200F16121 /* ReusableView.swift */; };
 		FD7115EB28C5D78E00B47552 /* ThreadSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115EA28C5D78E00B47552 /* ThreadSettingsViewModel.swift */; };
 		FD7115F228C6CB3900B47552 /* _010_AddThreadIdToFTS.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115F128C6CB3900B47552 /* _010_AddThreadIdToFTS.swift */; };
-		FD7115F428C71EB200B47552 /* ThreadDisappearingMessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesViewModel.swift */; };
+		FD7115F428C71EB200B47552 /* ThreadDisappearingMessagesSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesSettingsViewModel.swift */; };
 		FD7115F828C8151C00B47552 /* DisposableBarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115F728C8151C00B47552 /* DisposableBarButtonItem.swift */; };
 		FD7115FA28C8153400B47552 /* UIBarButtonItem+Combine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115F928C8153400B47552 /* UIBarButtonItem+Combine.swift */; };
 		FD7115FC28C8155800B47552 /* Publisher+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7115FB28C8155800B47552 /* Publisher+Utilities.swift */; };
@@ -834,6 +835,8 @@
 		FDF0B75A2807F3A3004C14C5 /* MessageSenderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B7592807F3A3004C14C5 /* MessageSenderError.swift */; };
 		FDF0B75C2807F41D004C14C5 /* MessageSender+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B75B2807F41D004C14C5 /* MessageSender+Convenience.swift */; };
 		FDF0B75E280AAF35004C14C5 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B75D280AAF35004C14C5 /* Preferences.swift */; };
+		FDF1AD5F28FF5F930080A701 /* EditClosedGroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */; };
+		FDF1AD6128FF61110080A701 /* _011_AddClosedGroupInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF1AD6028FF61110080A701 /* _011_AddClosedGroupInfo.swift */; };
 		FDF222072818CECF000A4995 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF222062818CECF000A4995 /* ConversationViewModel.swift */; };
 		FDF222092818D2B0000A4995 /* NSAttributedString+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF222082818D2B0000A4995 /* NSAttributedString+Utilities.swift */; };
 		FDF2220B2818F38D000A4995 /* SessionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF2220A2818F38D000A4995 /* SessionApp.swift */; };
@@ -1721,6 +1724,7 @@
 		FD37EA1828AC5CCA003AE748 /* NotificationSoundViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundViewModel.swift; sourceTree = "<group>"; };
 		FD37EA1A28ACB51F003AE748 /* _007_HomeQueryOptimisationIndexes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _007_HomeQueryOptimisationIndexes.swift; sourceTree = "<group>"; };
 		FD39352B28F382920084DADA /* VersionFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionFooterView.swift; sourceTree = "<group>"; };
+		FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD3AABE828306BBD00E5099A /* ThreadPickerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadPickerViewModel.swift; sourceTree = "<group>"; };
 		FD3C905B27E3FBEF00CD579F /* BatchRequestInfoSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchRequestInfoSpec.swift; sourceTree = "<group>"; };
 		FD3C905F27E410F700CD579F /* FileUploadResponseSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileUploadResponseSpec.swift; sourceTree = "<group>"; };
@@ -1758,7 +1762,7 @@
 		FD7115ED28C5D79B00B47552 /* SessionAvatarCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAvatarCell.swift; sourceTree = "<group>"; };
 		FD7115EF28C5D7DE00B47552 /* SessionHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHeaderView.swift; sourceTree = "<group>"; };
 		FD7115F128C6CB3900B47552 /* _010_AddThreadIdToFTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _010_AddThreadIdToFTS.swift; sourceTree = "<group>"; };
-		FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDisappearingMessagesViewModel.swift; sourceTree = "<group>"; };
+		FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDisappearingMessagesSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD7115F728C8151C00B47552 /* DisposableBarButtonItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisposableBarButtonItem.swift; sourceTree = "<group>"; };
 		FD7115F928C8153400B47552 /* UIBarButtonItem+Combine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIBarButtonItem+Combine.swift"; sourceTree = "<group>"; };
 		FD7115FB28C8155800B47552 /* Publisher+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Publisher+Utilities.swift"; sourceTree = "<group>"; };
@@ -1913,6 +1917,8 @@
 		FDF0B7592807F3A3004C14C5 /* MessageSenderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSenderError.swift; sourceTree = "<group>"; };
 		FDF0B75B2807F41D004C14C5 /* MessageSender+Convenience.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "MessageSender+Convenience.swift"; sourceTree = "<group>"; };
 		FDF0B75D280AAF35004C14C5 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditClosedGroupViewModel.swift; sourceTree = "<group>"; };
+		FDF1AD6028FF61110080A701 /* _011_AddClosedGroupInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _011_AddClosedGroupInfo.swift; sourceTree = "<group>"; };
 		FDF222062818CECF000A4995 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		FDF222082818D2B0000A4995 /* NSAttributedString+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSAttributedString+Utilities.swift"; sourceTree = "<group>"; };
 		FDF2220A2818F38D000A4995 /* SessionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionApp.swift; sourceTree = "<group>"; };
@@ -2677,7 +2683,8 @@
 				3427C64120F500DE00EEC730 /* OWSMessageTimerView.h */,
 				3427C64220F500DF00EEC730 /* OWSMessageTimerView.m */,
 				FD7115EA28C5D78E00B47552 /* ThreadSettingsViewModel.swift */,
-				FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesViewModel.swift */,
+				FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */,
+				FD7115F328C71EB200B47552 /* ThreadDisappearingMessagesSettingsViewModel.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -2940,6 +2947,7 @@
 			isa = PBXGroup;
 			children = (
 				B80A579E23DFF1F300876683 /* NewClosedGroupVC.swift */,
+				FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */,
 				C3E5C2F9251DBABB0040DFFC /* EditClosedGroupVC.swift */,
 			);
 			path = "Closed Groups";
@@ -3541,6 +3549,7 @@
 				FD09B7E4288670BB00ED0B66 /* _008_EmojiReacts.swift */,
 				7BAA7B6528D2DE4700AE1489 /* _009_OpenGroupPermission.swift */,
 				FD7115F128C6CB3900B47552 /* _010_AddThreadIdToFTS.swift */,
+				FDF1AD6028FF61110080A701 /* _011_AddClosedGroupInfo.swift */,
 			);
 			path = Migrations;
 			sourceTree = "<group>";
@@ -5518,6 +5527,7 @@
 				FD5C7301284F0F7A0029977D /* MessageReceiver+UnsendRequests.swift in Sources */,
 				C3C2A75F2553A3C500C340D1 /* VisibleMessage+LinkPreview.swift in Sources */,
 				FD245C642850664F00B966DD /* Threading.swift in Sources */,
+				FDF1AD6128FF61110080A701 /* _011_AddClosedGroupInfo.swift in Sources */,
 				FD848B8D283E0B26000E298B /* MessageInputTypes.swift in Sources */,
 				C32C5C3D256DCBAF003C73A2 /* AppReadiness.m in Sources */,
 				FD09799B27FFC82D00936362 /* Quote.swift in Sources */,
@@ -5606,6 +5616,7 @@
 				7B8C44C528B49DDA00FBE25F /* NewConversationVC.swift in Sources */,
 				7B1B52E028580D51006069F2 /* EmojiSkinTonePicker.swift in Sources */,
 				B849789625D4A2F500D0D0B3 /* LinkPreviewView.swift in Sources */,
+				FD39353428F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift in Sources */,
 				FD71164428E2CB8A00B47552 /* SessionCell+Accessory.swift in Sources */,
 				7B1B52DF28580D51006069F2 /* EmojiPickerCollectionView.swift in Sources */,
 				FD71165228E410BE00B47552 /* SessionTableSection.swift in Sources */,
@@ -5677,7 +5688,7 @@
 				45B5360E206DD8BB00D61655 /* UIResponder+OWS.swift in Sources */,
 				7B9F71C928470667006DFE7B /* ReactionListSheet.swift in Sources */,
 				7B7037452834BCC0000DCF35 /* ReactionView.swift in Sources */,
-				FD7115F428C71EB200B47552 /* ThreadDisappearingMessagesViewModel.swift in Sources */,
+				FD7115F428C71EB200B47552 /* ThreadDisappearingMessagesSettingsViewModel.swift in Sources */,
 				B8D84ECF25E3108A005A043E /* ExpandingAttachmentsButton.swift in Sources */,
 				7B7CB190270FB2150079FF93 /* MiniCallView.swift in Sources */,
 				FD87DCFC28B755B800AF0F98 /* BlockedContactsViewController.swift in Sources */,
@@ -5695,6 +5706,7 @@
 				45F32C232057297A00A300D5 /* MediaPageViewController.swift in Sources */,
 				7B9F71D42852EEE2006DFE7B /* Emoji+Name.swift in Sources */,
 				4CA46F4C219CCC630038ABDE /* CaptionView.swift in Sources */,
+				FDF1AD5F28FF5F930080A701 /* EditClosedGroupViewModel.swift in Sources */,
 				C328253025CA55370062D0A7 /* ContextMenuWindow.swift in Sources */,
 				34BECE2E1F7ABCE000D7438D /* GifPickerViewController.swift in Sources */,
 				B84664F5235022F30083A1CD /* MentionUtilities.swift in Sources */,

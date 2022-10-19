@@ -347,7 +347,9 @@ open class Storage {
         onError: @escaping (Error) -> Void,
         onChange: @escaping (Reducer.Value) -> Void
     ) -> DatabaseCancellable {
-        guard isValid, let dbWriter: DatabaseWriter = dbWriter else { return AnyDatabaseCancellable(cancel: {}) }
+        guard isValid, let dbWriter: DatabaseWriter = dbWriter else {
+            return AnyDatabaseCancellable(cancel: {})
+        }
         
         return observation.start(
             in: dbWriter,

@@ -305,6 +305,7 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
                         
                     case .dismiss: self?.dismiss(animated: true)
                     case .pop: self?.navigationController?.popViewController(animated: true)
+                    case .popToRoot: self?.navigationController?.popToRootViewController(animated: true)
                 }
             }
             .store(in: &disposables)
@@ -465,10 +466,6 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
         let confirmationModal: ConfirmationModal = ConfirmationModal(
             targetView: tappedView,
             info: confirmationInfo
-                .with(onConfirm: { [weak self] _ in
-                    performAction()
-                    self?.dismiss(animated: true)
-                })
         )
         present(confirmationModal, animated: true, completion: nil)
     }

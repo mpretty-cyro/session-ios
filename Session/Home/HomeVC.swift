@@ -636,7 +636,7 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
                                 
                                 completionHandler(true)
                             },
-                            afterClosed: { completionHandler(false) }
+                            onCancel: { _ in completionHandler(false) }
                         )
                     )
                     

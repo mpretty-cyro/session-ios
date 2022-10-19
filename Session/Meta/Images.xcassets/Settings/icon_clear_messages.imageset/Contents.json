@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "icon_clear_messages.pdf",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

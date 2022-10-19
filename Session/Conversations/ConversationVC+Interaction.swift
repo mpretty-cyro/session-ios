@@ -1956,8 +1956,6 @@ extension ConversationVC:
                             self?.present(modal, animated: true)
                         }
                         .retainUntilComplete()
-                    
-                    self?.becomeFirstResponder()
                 },
                 afterClosed: { [weak self] in self?.becomeFirstResponder() }
             )
@@ -2005,8 +2003,6 @@ extension ConversationVC:
                             self?.present(modal, animated: true)
                         }
                         .retainUntilComplete()
-                    
-                    self?.becomeFirstResponder()
                 },
                 afterClosed: { [weak self] in self?.becomeFirstResponder() }
             )

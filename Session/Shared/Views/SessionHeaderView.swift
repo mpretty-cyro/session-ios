@@ -71,7 +71,7 @@ class SessionHeaderView: UITableViewHeaderFooterView {
         let titleIsEmpty: Bool = (title ?? "").isEmpty
         let edgePadding: CGFloat = {
             switch style {
-                case .rounded:
+                case .rounded, .button:
                     // Align to the start of the text in the cell
                     return (Values.largeSpacing + Values.mediumSpacing)
                 

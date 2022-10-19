@@ -70,7 +70,7 @@ public enum Permissions {
                                 UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
                             })
                         },
-                        afterClosed: { onNotGranted?() }
+                        onCancel: { _ in onNotGranted?() }
                     )
                 )
                 presentingViewController.present(confirmationModal, animated: true, completion: nil)

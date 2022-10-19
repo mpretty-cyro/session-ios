@@ -69,6 +69,24 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let closedGroupProfileBackFallbackString: String = CodingKeys.closedGroupProfileBackFallback.stringValue
     public static let interactionAttachmentDescriptionInfoString: String = CodingKeys.interactionAttachmentDescriptionInfo.stringValue
     
+    // MARK: - NotificationOption
+    
+    public enum NotificationOption: CaseIterable, Equatable, Hashable, Differentiable {
+        case allMessages
+        case mentionsOnly
+        case mute
+        
+        public var title: String {
+            switch self {
+                case .allMessages: return "NOTIFICATIONS_OPTION_ALL_MESSAGES".localized()
+                case .mentionsOnly: return "NOTIFICATIONS_OPTION_MENTIONS_ONLY".localized()
+                case .mute: return "NOTIFICATIONS_OPTION_MUTE".localized()
+            }
+        }
+    }
+    
+    // MARK: - Variables
+    
     public var differenceIdentifier: String { threadId }
     public var id: String { threadId }
     
@@ -191,6 +209,13 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
             case .closedGroup: return closedGroupUserCount
             case .openGroup: return openGroupUserCount
         }
+    }
+        
+    public var notificationOption: NotificationOption {
+        guard self.threadMutedUntilTimestamp == nil else { return .mute }
+        guard self.threadOnlyNotifyForMentions != true else { return .mentionsOnly }
+        
+        return .allMessages
     }
     
     /// This function returns the thread contact profile name formatted for the specific type of thread provided
@@ -818,6 +843,10 @@ public extension SessionThreadViewModel {
         let profile: TypedTableAlias<Profile> = TypedTableAlias()
         
         let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
+        let adminMemberLiteral: SQL = SQL(stringLiteral: "adminMember")
+        let groupMemberRoleColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.role.name)
+        let groupMemberGroupIdColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.groupId.name)
+        let groupMemberProfileIdColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.profileId.name)
         
         /// **Note:** The `numColumnsBeforeProfiles` value **MUST** match the number of fields before
         /// the `ViewModel.contactProfileKey` entry below otherwise the query will fail to
@@ -846,6 +875,8 @@ public extension SessionThreadViewModel {
                 
                 \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
+                (\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
+        
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
                     
@@ -860,6 +891,11 @@ public extension SessionThreadViewModel {
                 \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
                 \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
                 \(SQL("\(groupMember[.profileId]) = \(userPublicKey)"))
+            )
+            LEFT JOIN \(GroupMember.self) AS \(adminMemberLiteral) ON (
+                \(SQL("\(adminMemberLiteral).\(groupMemberRoleColumnLiteral) = \(GroupMember.Role.admin)")) AND
+                \(adminMemberLiteral).\(groupMemberGroupIdColumnLiteral) = \(closedGroup[.threadId]) AND
+                \(SQL("\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) = \(userPublicKey)"))
             )
         
             LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (

@@ -8,12 +8,16 @@ import SignalUtilitiesKit
 
 extension SessionCell {
     public class AccessoryView: UIView {
+        // Note: We set a minimum width for the 'AccessoryView' so that the titles line up
+        // nicely when we have a mix of icons and switches
+        private static let minWidth: CGFloat = 50
+        
         // MARK: - UI
         
         private lazy var imageViewConstraints: [NSLayoutConstraint] = [
             imageView.pin(.top, to: .top, of: self),
-            imageView.pin(.leading, to: .leading, of: self),
-            imageView.pin(.trailing, to: .trailing, of: self),
+            imageView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
+            imageView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             imageView.pin(.bottom, to: .bottom, of: self)
         ]
         private lazy var imageViewWidthConstraint: NSLayoutConstraint = imageView.set(.width, to: 0)
@@ -26,8 +30,8 @@ extension SessionCell {
         ]
         private lazy var dropDownStackViewConstraints: [NSLayoutConstraint] = [
             dropDownStackView.pin(.top, to: .top, of: self),
-            dropDownStackView.pin(.leading, to: .leading, of: self),
-            dropDownStackView.pin(.trailing, to: .trailing, of: self),
+            dropDownStackView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
+            dropDownStackView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             dropDownStackView.pin(.bottom, to: .bottom, of: self)
         ]
         private lazy var radioViewWidthConstraint: NSLayoutConstraint = radioView.set(.width, to: 0)
@@ -36,20 +40,20 @@ extension SessionCell {
         private lazy var radioBorderViewHeightConstraint: NSLayoutConstraint = radioBorderView.set(.height, to: 0)
         private lazy var radioBorderViewConstraints: [NSLayoutConstraint] = [
             radioBorderView.pin(.top, to: .top, of: self),
-            radioBorderView.pin(.leading, to: .leading, of: self),
-            radioBorderView.pin(.trailing, to: .trailing, of: self),
+            radioBorderView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
+            radioBorderView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             radioBorderView.pin(.bottom, to: .bottom, of: self)
         ]
         private lazy var highlightingBackgroundLabelConstraints: [NSLayoutConstraint] = [
             highlightingBackgroundLabel.pin(.top, to: .top, of: self),
-            highlightingBackgroundLabel.pin(.leading, to: .leading, of: self),
-            highlightingBackgroundLabel.pin(.trailing, to: .trailing, of: self),
+            highlightingBackgroundLabel.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
+            highlightingBackgroundLabel.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             highlightingBackgroundLabel.pin(.bottom, to: .bottom, of: self)
         ]
         private lazy var profilePictureViewConstraints: [NSLayoutConstraint] = [
             profilePictureView.pin(.top, to: .top, of: self),
-            profilePictureView.pin(.leading, to: .leading, of: self),
-            profilePictureView.pin(.trailing, to: .trailing, of: self),
+            profilePictureView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
+            profilePictureView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             profilePictureView.pin(.bottom, to: .bottom, of: self)
         ]
         
@@ -168,6 +172,10 @@ extension SessionCell {
         }
 
         private func setupViewHierarchy() {
+            self.widthAnchor
+                .constraint(greaterThanOrEqualToConstant: AccessoryView.minWidth)
+                .isActive = true
+            
             addSubview(imageView)
             addSubview(toggleSwitch)
             addSubview(dropDownStackView)

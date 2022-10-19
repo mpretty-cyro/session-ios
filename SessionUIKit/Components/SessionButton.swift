@@ -125,8 +125,9 @@ public final class SessionButton: UIButton {
         setThemeBackgroundColor(
             {
                 switch style {
-                    case .bordered, .borderless: return .sessionButton_background
-                    case .destructive, .destructiveBorderless: return .sessionButton_destructiveBackground
+                    case .bordered: return .sessionButton_background
+                    case .destructive: return .sessionButton_destructiveBackground
+                    case .borderless, .destructiveBorderless: return .clear
                     case .filled: return .sessionButton_filledBackground
                 }
             }(),
@@ -135,8 +136,9 @@ public final class SessionButton: UIButton {
         setThemeBackgroundColor(
             {
                 switch style {
-                    case .bordered, .borderless: return .sessionButton_highlight
-                    case .destructive, .destructiveBorderless: return .sessionButton_destructiveHighlight
+                    case .bordered: return .sessionButton_highlight
+                    case .destructive: return .sessionButton_destructiveHighlight
+                    case .borderless, .destructiveBorderless: return nil
                     case .filled: return .sessionButton_filledHighlight
                 }
             }(),

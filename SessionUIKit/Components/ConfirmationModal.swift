@@ -26,8 +26,11 @@ public class ConfirmationModal: Modal {
         let confirmStyle: ThemeValue
         let cancelTitle: String
         let cancelStyle: ThemeValue
+        let showCloseButton: Bool
         let dismissOnConfirm: Bool
+        let dismissOnCancel: Bool
         let onConfirm: ((UIViewController) -> ())?
+        let onCancel: ((UIViewController) -> ())?
         let afterClosed: (() -> ())?
         
         // MARK: - Initialization
@@ -41,8 +44,11 @@ public class ConfirmationModal: Modal {
             confirmStyle: ThemeValue = .alert_text,
             cancelTitle: String = "TXT_CANCEL_TITLE".localized(),
             cancelStyle: ThemeValue = .danger,
+            showCloseButton: Bool = false,
             dismissOnConfirm: Bool = true,
+            dismissOnCancel: Bool = true,
             onConfirm: ((UIViewController) -> ())? = nil,
+            onCancel: ((UIViewController) -> ())? = nil,
             afterClosed: (() -> ())? = nil
         ) {
             self.title = title
@@ -53,8 +59,11 @@ public class ConfirmationModal: Modal {
             self.confirmStyle = confirmStyle
             self.cancelTitle = cancelTitle
             self.cancelStyle = cancelStyle
+            self.showCloseButton = showCloseButton
             self.dismissOnConfirm = dismissOnConfirm
+            self.dismissOnCancel = dismissOnCancel
             self.onConfirm = onConfirm
+            self.onCancel = onCancel
             self.afterClosed = afterClosed
         }
         
@@ -62,6 +71,7 @@ public class ConfirmationModal: Modal {
         
         public func with(
             onConfirm: ((UIViewController) -> ())? = nil,
+            onCancel: ((UIViewController) -> ())? = nil,
             afterClosed: (() -> ())? = nil
         ) -> Info {
             return Info(
@@ -72,8 +82,11 @@ public class ConfirmationModal: Modal {
                 confirmStyle: self.confirmStyle,
                 cancelTitle: self.cancelTitle,
                 cancelStyle: self.cancelStyle,
+                showCloseButton: self.showCloseButton,
                 dismissOnConfirm: self.dismissOnConfirm,
+                dismissOnCancel: self.dismissOnCancel,
                 onConfirm: (onConfirm ?? self.onConfirm),
+                onCancel: (onCancel ?? self.onCancel),
                 afterClosed: (afterClosed ?? self.afterClosed)
             )
         }
@@ -90,7 +103,9 @@ public class ConfirmationModal: Modal {
                 lhs.confirmStyle == rhs.confirmStyle &&
                 lhs.cancelTitle == rhs.cancelTitle &&
                 lhs.cancelStyle == rhs.cancelStyle &&
-                lhs.dismissOnConfirm == rhs.dismissOnConfirm
+                lhs.showCloseButton == rhs.showCloseButton &&
+                lhs.dismissOnConfirm == rhs.dismissOnConfirm &&
+                lhs.dismissOnCancel == rhs.dismissOnCancel
             )
         }
         
@@ -103,13 +118,50 @@ public class ConfirmationModal: Modal {
             confirmStyle.hash(into: &hasher)
             cancelTitle.hash(into: &hasher)
             cancelStyle.hash(into: &hasher)
+            showCloseButton.hash(into: &hasher)
             dismissOnConfirm.hash(into: &hasher)
+            dismissOnCancel.hash(into: &hasher)
         }
     }
     
-    private let internalOnConfirm: (UIViewController) -> ()
+    private let info: Info
+    
+    private lazy var internalOnConfirm: (UIViewController) -> () = { [weak self] viewController in
+        if self?.info.dismissOnConfirm == true {
+            self?.close()
+        }
+        
+        self?.info.onConfirm?(viewController)
+    }
+    private lazy var internalOnCancel: (UIViewController) -> () = { [weak self] viewController in
+        if self?.info.dismissOnCancel == true {
+            self?.close()
+        }
+        
+        self?.info.onCancel?(viewController)
+    }
     
     // MARK: - Components
+    
+    private lazy var closeButton: UIButton = {
+        let result: UIButton = UIButton()
+        result.setImage(
+            UIImage(systemName: "xmark")?
+                .withRenderingMode(.alwaysTemplate),
+            for: .normal
+        )
+        result.themeTintColor = .alert_text
+        result.contentEdgeInsets = UIEdgeInsets(
+            top: Values.smallSpacing,
+            left: Values.smallSpacing,
+            bottom: Values.smallSpacing,
+            right: Values.smallSpacing
+        )
+        result.isHidden = true
+        result.addTarget(self, action: #selector(close), for: .touchUpInside)
+        
+        return result
+    }()
     
     private lazy var titleLabel: UILabel = {
         let result: UILabel = UILabel()
@@ -133,6 +185,21 @@ public class ConfirmationModal: Modal {
         return result
     }()
     
+    private lazy var contentStackView: UIStackView = {
+        let result = UIStackView(arrangedSubviews: [ titleLabel, explanationLabel ])
+        result.axis = .vertical
+        result.spacing = Values.smallSpacing
+        result.isLayoutMarginsRelativeArrangement = true
+        result.layoutMargins = UIEdgeInsets(
+            top: Values.largeSpacing,
+            left: Values.largeSpacing,
+            bottom: Values.verySmallSpacing,
+            right: Values.largeSpacing
+        )
+        
+        return result
+    }()
+    
     private lazy var confirmButton: UIButton = {
         let result: UIButton = Modal.createButton(
             title: "",
@@ -151,21 +218,6 @@ public class ConfirmationModal: Modal {
         return result
     }()
     
-    private lazy var contentStackView: UIStackView = {
-        let result = UIStackView(arrangedSubviews: [ titleLabel, explanationLabel ])
-        result.axis = .vertical
-        result.spacing = Values.smallSpacing
-        result.isLayoutMarginsRelativeArrangement = true
-        result.layoutMargins = UIEdgeInsets(
-            top: Values.largeSpacing,
-            left: Values.largeSpacing,
-            bottom: Values.verySmallSpacing,
-            right: Values.largeSpacing
-        )
-        
-        return result
-    }()
-    
     private lazy var mainStackView: UIStackView = {
         let result = UIStackView(arrangedSubviews: [ contentStackView, buttonStackView ])
         result.axis = .vertical
@@ -177,13 +229,7 @@ public class ConfirmationModal: Modal {
     // MARK: - Lifecycle
     
     public init(targetView: UIView? = nil, info: Info) {
-        self.internalOnConfirm = { viewController in
-            if info.dismissOnConfirm {
-                viewController.dismiss(animated: true)
-            }
-            
-            info.onConfirm?(viewController)
-        }
+        self.info = info
         
         super.init(targetView: targetView, afterClosed: info.afterClosed)
         
@@ -203,6 +249,7 @@ public class ConfirmationModal: Modal {
             explanationLabel.attributedText = attributedExplanation
         }
     
+        closeButton.isHidden = !info.showCloseButton
         explanationLabel.isHidden = (
             info.explanation == nil &&
             info.attributedExplanation == nil
@@ -220,13 +267,22 @@ public class ConfirmationModal: Modal {
     
     public override func populateContentView() {
         contentView.addSubview(mainStackView)
+        contentView.addSubview(closeButton)
         
         mainStackView.pin(to: contentView)
+        closeButton.pin(.top, to: .top, of: contentView, withInset: Values.smallSpacing)
+        closeButton.pin(.trailing, to: .trailing, of: contentView, withInset: -Values.smallSpacing)
     }
     
     // MARK: - Interaction
     
     @objc private func confirmationPressed() {
-        internalOnConfirm(self)
+        self.internalOnConfirm(self)
+    }
+    
+    @objc override public func cancelPressed() {
+        // Note: We intentionally don't call `super.cancelPressed` as that would trigger
+        // the `close` function regardless of the `dismissOnCancel` flag
+        self.internalOnCancel(self)
     }
 }

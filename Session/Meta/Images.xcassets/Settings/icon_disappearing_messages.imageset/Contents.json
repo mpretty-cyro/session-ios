@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "icon_disappearing_messages.pdf",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

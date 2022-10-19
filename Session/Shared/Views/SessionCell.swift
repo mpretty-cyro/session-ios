@@ -325,9 +325,9 @@ public class SessionCell: UITableViewCell {
         rightAccessoryFillConstraint.isActive = rightFitToEdge
         contentStackView.layoutMargins = UIEdgeInsets(
             top: (leftFitToEdge || rightFitToEdge ? 0 : Values.mediumSpacing),
-            left: (leftFitToEdge ? 0 : Values.largeSpacing),
+            left: (leftFitToEdge ? 0 : Values.mediumSpacing),
             bottom: (leftFitToEdge || rightFitToEdge ? 0 : Values.mediumSpacing),
-            right: (rightFitToEdge ? 0 : Values.largeSpacing)
+            right: (rightFitToEdge ? 0 : Values.mediumSpacing)
         )
         
         titleLabel.text = info.title

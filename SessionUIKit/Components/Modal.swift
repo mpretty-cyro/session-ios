@@ -47,7 +47,7 @@ open class Modal: UIViewController, UIGestureRecognizerDelegate {
     
     public lazy var cancelButton: UIButton = {
         let result: UIButton = Modal.createButton(title: "cancel".localized(), titleColor: .textPrimary)
-        result.addTarget(self, action: #selector(close), for: .touchUpInside)
+        result.addTarget(self, action: #selector(cancelPressed), for: .touchUpInside)
                 
         return result
     }()
@@ -128,6 +128,10 @@ open class Modal: UIViewController, UIGestureRecognizerDelegate {
     }
     
     // MARK: - Interaction
+    
+    @objc open func cancelPressed() {
+        close()
+    }
     
     @objc func close() {
         // Recursively dismiss all modals (ie. find the first modal presented by a non-modal
