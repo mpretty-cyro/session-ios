@@ -34,12 +34,9 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel<NoNav, PhotoCollecti
     // MARK: - Content
 
     override var title: String { "NOTIFICATIONS_STYLE_SOUND_TITLE".localized() }
+    override var observableTableData: ObservableData { _observableTableData }
 
-    private var _settingsData: [SectionModel] = []
-    public override var settingsData: [SectionModel] { _settingsData }
-    public override var observableSettingsData: ObservableData { _observableSettingsData }
-
-    private lazy var _observableSettingsData: ObservableData = {
+    private lazy var _observableTableData: ObservableData = {
         self.photoCollections
             .map { collections in
                 [
@@ -76,13 +73,8 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel<NoNav, PhotoCollecti
             }
             .removeDuplicates()
             .eraseToAnyPublisher()
+            .mapToSessionTableViewData(for: self)
     }()
-
-    // MARK: - Functions
-
-    public override func updateSettings(_ updatedSettings: [SectionModel]) {
-        self._settingsData = updatedSettings
-    }
 
     // MARK: PhotoLibraryDelegate
 

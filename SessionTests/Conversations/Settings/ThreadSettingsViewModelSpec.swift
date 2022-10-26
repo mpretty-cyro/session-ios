@@ -8,7 +8,7 @@ import Nimble
 @testable import Session
 
 class ThreadSettingsViewModelSpec: QuickSpec {
-    typealias ParentType = SessionTableViewModel<ThreadSettingsViewModel.NavButton, ThreadSettingsViewModel.Section, ThreadSettingsViewModel.Setting>
+    typealias ViewModelType = SessionTableViewModel<ThreadSettingsViewModel.NavButton, ThreadSettingsViewModel.Section, ThreadSettingsViewModel.Setting>
     
     // MARK: - Spec
     
@@ -19,6 +19,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
         var dependencies: Dependencies!
         var viewModel: ThreadSettingsViewModel!
         var didTriggerSearchCallbackTriggered: Bool = false
+        var transitionInfo: (viewController: UIViewController, transitionType: TransitionType)!
         
         describe("a ThreadSettingsViewModel") {
             // MARK: - Configuration
@@ -69,12 +70,24 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         didTriggerSearchCallbackTriggered = true
                     }
                 )
+                setupStandardBinding()
+            }
+            
+            func setupStandardBinding() {
                 cancellables.append(
-                    viewModel.observableSettingsData
+                    viewModel.observableTableData
                         .receiveOnMain(immediately: true)
                         .sink(
                             receiveCompletion: { _ in },
-                            receiveValue: { viewModel.updateSettings($0) }
+                            receiveValue: { viewModel.updateTableData($0.0) }
+                        )
+                )
+                cancellables.append(
+                    viewModel.transitionToScreen
+                        .receiveOnMain(immediately: true)
+                        .sink(
+                            receiveCompletion: { _ in },
+                            receiveValue: { transitionInfo = $0 }
                         )
                 )
             }
@@ -87,13 +100,14 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 dependencies = nil
                 viewModel = nil
                 didTriggerSearchCallbackTriggered = false
+                transitionInfo = nil
             }
             
             // MARK: - Basic Tests
             
             context("with any conversation type") {
                 it("triggers the search callback when tapping search") {
-                    viewModel.settingsData
+                    viewModel.tableData
                         .first(where: { $0.model == .content })?
                         .elements
                         .first(where: { $0.id == .searchConversation })?
@@ -102,49 +116,18 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                     expect(didTriggerSearchCallbackTriggered).to(beTrue())
                 }
                 
-                it("mutes a conversation") {
-                    viewModel.settingsData
+                it("takes the user to notification settings") {
+                    typealias ViewControllerType = SessionTableViewController<ThreadNotificationSettingsViewModel.NavButton, ThreadNotificationSettingsViewModel.Section, ThreadNotificationSettingsViewModel.Item>
+                    
+                    viewModel.tableData
                         .first(where: { $0.model == .content })?
                         .elements
-                        .first(where: { $0.id == .notificationMute })?
+                        .first(where: { $0.id == .notifications })?
                         .onTap?(nil)
                     
-                    expect(
-                        mockStorage
-                            .read { db in try SessionThread.fetchOne(db, id: "TestId") }?
-                            .mutedUntilTimestamp
-                    )
-                    .toNot(beNil())
-                }
-                
-                it("unmutes a conversation") {
-                    mockStorage.write { db in
-                        try SessionThread
-                            .updateAll(
-                                db,
-                                SessionThread.Columns.mutedUntilTimestamp.set(to: 1234567890)
-                            )
-                    }
-                    
-                    expect(
-                        mockStorage
-                            .read { db in try SessionThread.fetchOne(db, id: "TestId") }?
-                            .mutedUntilTimestamp
-                    )
-                    .toNot(beNil())
-                    
-                    viewModel.settingsData
-                        .first(where: { $0.model == .content })?
-                        .elements
-                        .first(where: { $0.id == .notificationMute })?
-                        .onTap?(nil)
-                
-                    expect(
-                        mockStorage
-                            .read { db in try SessionThread.fetchOne(db, id: "TestId") }?
-                            .mutedUntilTimestamp
-                    )
-                    .to(beNil())
+                    expect(transitionInfo.transitionType).to(equal(.push))
+                    expect((transitionInfo.viewController as? ViewControllerType)?.viewModelType)
+                        .to(beAKindOf(ThreadNotificationSettingsViewModel.Type.self))
                 }
             }
             
@@ -167,14 +150,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             didTriggerSearchCallbackTriggered = true
                         }
                     )
-                    cancellables.append(
-                        viewModel.observableSettingsData
-                            .receiveOnMain(immediately: true)
-                            .sink(
-                                receiveCompletion: { _ in },
-                                receiveValue: { viewModel.updateSettings($0) }
-                            )
-                    )
+                    setupStandardBinding()
                 }
                 
                 it("has the correct title") {
@@ -188,7 +164,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                     expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                     expect(viewModel.rightNavItems.firstValue())
                         .to(equal([
-                            ParentType.NavItem(
+                            ViewModelType.NavItem(
                                 id: .edit,
                                 systemItem: .edit,
                                 accessibilityIdentifier: "Edit button"
@@ -196,12 +172,12 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         ]))
                 }
                 
-                it("has no mute button") {
+                it("has no notifications item") {
                     expect(
-                        viewModel.settingsData
+                        viewModel.tableData
                             .first(where: { $0.model == .content })?
                             .elements
-                            .first(where: { $0.id == .notificationMute })
+                            .first(where: { $0.id == .notifications })
                     ).to(beNil())
                 }
                 
@@ -209,7 +185,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                     beforeEach {
                         viewModel.rightNavItems.firstValue()??.first?.action?()
                         
-                        let leftAccessory: SessionCell.Accessory? = viewModel.settingsData.first?
+                        let leftAccessory: SessionCell.Accessory? = viewModel.tableData.first?
                             .elements.first?
                             .leftAccessory
                         
@@ -225,7 +201,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         
                         expect(viewModel.leftNavItems.firstValue())
                             .to(equal([
-                                ParentType.NavItem(
+                                ViewModelType.NavItem(
                                     id: .cancel,
                                     systemItem: .cancel,
                                     accessibilityIdentifier: "Cancel button"
@@ -233,7 +209,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             ]))
                         expect(viewModel.rightNavItems.firstValue())
                             .to(equal([
-                                ParentType.NavItem(
+                                ViewModelType.NavItem(
                                     id: .done,
                                     systemItem: .done,
                                     accessibilityIdentifier: "Done button"
@@ -253,7 +229,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                             expect(viewModel.rightNavItems.firstValue())
                                 .to(equal([
-                                    ParentType.NavItem(
+                                    ViewModelType.NavItem(
                                         id: .edit,
                                         systemItem: .edit,
                                         accessibilityIdentifier: "Edit button"
@@ -285,7 +261,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                             expect(viewModel.rightNavItems.firstValue())
                                 .to(equal([
-                                    ParentType.NavItem(
+                                    ViewModelType.NavItem(
                                         id: .edit,
                                         systemItem: .edit,
                                         accessibilityIdentifier: "Edit button"
@@ -330,7 +306,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                     expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                     expect(viewModel.rightNavItems.firstValue())
                         .to(equal([
-                            ParentType.NavItem(
+                            ViewModelType.NavItem(
                                 id: .edit,
                                 systemItem: .edit,
                                 accessibilityIdentifier: "Edit button"
@@ -342,7 +318,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                     beforeEach {
                         viewModel.rightNavItems.firstValue()??.first?.action?()
                         
-                        let leftAccessory: SessionCell.Accessory? = viewModel.settingsData.first?
+                        let leftAccessory: SessionCell.Accessory? = viewModel.tableData.first?
                             .elements.first?
                             .leftAccessory
                         
@@ -358,7 +334,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         
                         expect(viewModel.leftNavItems.firstValue())
                             .to(equal([
-                                ParentType.NavItem(
+                                ViewModelType.NavItem(
                                     id: .cancel,
                                     systemItem: .cancel,
                                     accessibilityIdentifier: "Cancel button"
@@ -366,7 +342,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             ]))
                         expect(viewModel.rightNavItems.firstValue())
                             .to(equal([
-                                ParentType.NavItem(
+                                ViewModelType.NavItem(
                                     id: .done,
                                     systemItem: .done,
                                     accessibilityIdentifier: "Done button"
@@ -386,7 +362,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                             expect(viewModel.rightNavItems.firstValue())
                                 .to(equal([
-                                    ParentType.NavItem(
+                                    ViewModelType.NavItem(
                                         id: .edit,
                                         systemItem: .edit,
                                         accessibilityIdentifier: "Edit button"
@@ -416,7 +392,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             expect(viewModel.leftNavItems.firstValue()).to(equal([]))
                             expect(viewModel.rightNavItems.firstValue())
                                 .to(equal([
-                                    ParentType.NavItem(
+                                    ViewModelType.NavItem(
                                         id: .edit,
                                         systemItem: .edit,
                                         accessibilityIdentifier: "Edit button"
@@ -455,14 +431,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             didTriggerSearchCallbackTriggered = true
                         }
                     )
-                    cancellables.append(
-                        viewModel.observableSettingsData
-                            .receiveOnMain(immediately: true)
-                            .sink(
-                                receiveCompletion: { _ in },
-                                receiveValue: { viewModel.updateSettings($0) }
-                            )
-                    )
+                    setupStandardBinding()
                 }
                 
                 it("has the correct title") {
@@ -497,14 +466,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                             didTriggerSearchCallbackTriggered = true
                         }
                     )
-                    cancellables.append(
-                        viewModel.observableSettingsData
-                            .receiveOnMain(immediately: true)
-                            .sink(
-                                receiveCompletion: { _ in },
-                                receiveValue: { viewModel.updateSettings($0) }
-                            )
-                    )
+                    setupStandardBinding()
                 }
                 
                 it("has the correct title") {

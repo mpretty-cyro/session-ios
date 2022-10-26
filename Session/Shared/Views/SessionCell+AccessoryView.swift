@@ -12,14 +12,19 @@ extension SessionCell {
         // nicely when we have a mix of icons and switches
         private static let minWidth: CGFloat = 50
         
+        private var onTap: ((SessionButton?) -> Void)?
+        
         // MARK: - UI
         
+        private lazy var minWidthConstraint: NSLayoutConstraint = self.widthAnchor
+            .constraint(greaterThanOrEqualToConstant: AccessoryView.minWidth)
+        private lazy var fixedWidthConstraint: NSLayoutConstraint = self.set(.width, to: AccessoryView.minWidth)
         private lazy var imageViewConstraints: [NSLayoutConstraint] = [
             imageView.pin(.top, to: .top, of: self),
-            imageView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
-            imageView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             imageView.pin(.bottom, to: .bottom, of: self)
         ]
+        private lazy var imageViewLeadingConstraint: NSLayoutConstraint = imageView.pin(.leading, to: .leading, of: self)
+        private lazy var imageViewTrailingConstraint: NSLayoutConstraint = imageView.pin(.trailing, to: .trailing, of: self)
         private lazy var imageViewWidthConstraint: NSLayoutConstraint = imageView.set(.width, to: 0)
         private lazy var imageViewHeightConstraint: NSLayoutConstraint = imageView.set(.height, to: 0)
         private lazy var toggleSwitchConstraints: [NSLayoutConstraint] = [
@@ -40,8 +45,7 @@ extension SessionCell {
         private lazy var radioBorderViewHeightConstraint: NSLayoutConstraint = radioBorderView.set(.height, to: 0)
         private lazy var radioBorderViewConstraints: [NSLayoutConstraint] = [
             radioBorderView.pin(.top, to: .top, of: self),
-            radioBorderView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
-            radioBorderView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
+            radioBorderView.center(.horizontal, in: self),
             radioBorderView.pin(.bottom, to: .bottom, of: self)
         ]
         private lazy var highlightingBackgroundLabelConstraints: [NSLayoutConstraint] = [
@@ -50,11 +54,19 @@ extension SessionCell {
             highlightingBackgroundLabel.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             highlightingBackgroundLabel.pin(.bottom, to: .bottom, of: self)
         ]
+        private lazy var profilePictureViewLeadingConstraint: NSLayoutConstraint = profilePictureView.pin(.leading, to: .leading, of: self)
+        private lazy var profilePictureViewTrailingConstraint: NSLayoutConstraint = profilePictureView.pin(.trailing, to: .trailing, of: self)
         private lazy var profilePictureViewConstraints: [NSLayoutConstraint] = [
             profilePictureView.pin(.top, to: .top, of: self),
-            profilePictureView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing),
-            profilePictureView.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing),
             profilePictureView.pin(.bottom, to: .bottom, of: self)
+        ]
+        private lazy var profilePictureViewWidthConstraint: NSLayoutConstraint = profilePictureView.set(.width, to: 0)
+        private lazy var profilePictureViewHeightConstraint: NSLayoutConstraint = profilePictureView.set(.height, to: 0)
+        private lazy var buttonConstraints: [NSLayoutConstraint] = [
+            button.pin(.top, to: .top, of: self),
+            button.pin(.leading, to: .leading, of: self),
+            button.pin(.trailing, to: .trailing, of: self),
+            button.pin(.bottom, to: .bottom, of: self)
         ]
         
         private let imageView: UIImageView = {
@@ -147,10 +159,16 @@ extension SessionCell {
         private lazy var profilePictureView: ProfilePictureView = {
             let result: ProfilePictureView = ProfilePictureView()
             result.translatesAutoresizingMaskIntoConstraints = false
-            result.size = Values.smallProfilePictureSize
             result.isHidden = true
-            result.set(.width, to: Values.smallProfilePictureSize)
-            result.set(.height, to: Values.smallProfilePictureSize)
+            
+            return result
+        }()
+        
+        private lazy var button: SessionButton = {
+            let result: SessionButton = SessionButton(style: .bordered, size: .medium)
+            result.translatesAutoresizingMaskIntoConstraints = false
+            result.addTarget(self, action: #selector(buttonTapped), for: .touchUpInside)
+            result.isHidden = true
             
             return result
         }()
@@ -172,16 +190,13 @@ extension SessionCell {
         }
 
         private func setupViewHierarchy() {
-            self.widthAnchor
-                .constraint(greaterThanOrEqualToConstant: AccessoryView.minWidth)
-                .isActive = true
-            
             addSubview(imageView)
             addSubview(toggleSwitch)
             addSubview(dropDownStackView)
             addSubview(radioBorderView)
             addSubview(highlightingBackgroundLabel)
             addSubview(profilePictureView)
+            addSubview(button)
             
             dropDownStackView.addArrangedSubview(dropDownImageView)
             dropDownStackView.addArrangedSubview(dropDownLabel)
@@ -193,7 +208,8 @@ extension SessionCell {
         // MARK: - Content
         
         func prepareForReuse() {
-            self.isHidden = true
+            isHidden = true
+            onTap = nil
             
             imageView.image = nil
             imageView.themeTintColor = .textPrimary
@@ -215,7 +231,14 @@ extension SessionCell {
             radioView.isHidden = true
             highlightingBackgroundLabel.isHidden = true
             profilePictureView.isHidden = true
+            button.isHidden = true
             
+            minWidthConstraint.constant = AccessoryView.minWidth
+            minWidthConstraint.isActive = false
+            fixedWidthConstraint.constant = AccessoryView.minWidth
+            fixedWidthConstraint.isActive = false
+            imageViewLeadingConstraint.isActive = false
+            imageViewTrailingConstraint.isActive = false
             imageViewWidthConstraint.isActive = false
             imageViewHeightConstraint.isActive = false
             imageViewConstraints.forEach { $0.isActive = false }
@@ -227,7 +250,12 @@ extension SessionCell {
             radioBorderViewHeightConstraint.isActive = false
             radioBorderViewConstraints.forEach { $0.isActive = false }
             highlightingBackgroundLabelConstraints.forEach { $0.isActive = false }
+            profilePictureViewLeadingConstraint.isActive = false
+            profilePictureViewTrailingConstraint.isActive = false
+            profilePictureViewWidthConstraint.isActive = false
+            profilePictureViewHeightConstraint.isActive = false
             profilePictureViewConstraints.forEach { $0.isActive = false }
+            buttonConstraints.forEach { $0.isActive = false }
         }
         
         public func update(
@@ -250,14 +278,22 @@ extension SessionCell {
                     switch iconSize {
                         case .fit:
                             imageView.sizeToFit()
+                            fixedWidthConstraint.constant = (imageView.bounds.width + (shouldFill ? 0 : (Values.smallSpacing * 2)))
+                            fixedWidthConstraint.isActive = true
                             imageViewWidthConstraint.constant = imageView.bounds.width
                             imageViewHeightConstraint.constant = imageView.bounds.height
 
                         default:
+                            fixedWidthConstraint.isActive = (iconSize.size <= fixedWidthConstraint.constant)
                             imageViewWidthConstraint.constant = iconSize.size
                             imageViewHeightConstraint.constant = iconSize.size
                     }
                     
+                    minWidthConstraint.isActive = !fixedWidthConstraint.isActive
+                    imageViewLeadingConstraint.constant = (shouldFill ? 0 : Values.smallSpacing)
+                    imageViewTrailingConstraint.constant = (shouldFill ? 0 : -Values.smallSpacing)
+                    imageViewLeadingConstraint.isActive = true
+                    imageViewTrailingConstraint.isActive = true
                     imageViewWidthConstraint.isActive = true
                     imageViewHeightConstraint.isActive = true
                     imageViewConstraints.forEach { $0.isActive = true }
@@ -271,14 +307,22 @@ extension SessionCell {
                     switch iconSize {
                         case .fit:
                             imageView.sizeToFit()
+                            fixedWidthConstraint.constant = (imageView.bounds.width + (shouldFill ? 0 : (Values.smallSpacing * 2)))
+                            fixedWidthConstraint.isActive = true
                             imageViewWidthConstraint.constant = imageView.bounds.width
                             imageViewHeightConstraint.constant = imageView.bounds.height
 
                         default:
+                            fixedWidthConstraint.isActive = (iconSize.size <= fixedWidthConstraint.constant)
                             imageViewWidthConstraint.constant = iconSize.size
                             imageViewHeightConstraint.constant = iconSize.size
                     }
                     
+                    minWidthConstraint.isActive = !fixedWidthConstraint.isActive
+                    imageViewLeadingConstraint.constant = (shouldFill ? 0 : Values.smallSpacing)
+                    imageViewTrailingConstraint.constant = (shouldFill ? 0 : -Values.smallSpacing)
+                    imageViewLeadingConstraint.isActive = true
+                    imageViewTrailingConstraint.isActive = true
                     imageViewWidthConstraint.isActive = true
                     imageViewHeightConstraint.isActive = true
                     imageViewConstraints.forEach { $0.isActive = true }
@@ -286,9 +330,11 @@ extension SessionCell {
                 case .toggle(let dataSource):
                     toggleSwitch.isHidden = false
                     toggleSwitch.isEnabled = isEnabled
+                    
+                    fixedWidthConstraint.isActive = true
                     toggleSwitchConstraints.forEach { $0.isActive = true }
                     
-                    let newValue: Bool = dataSource.currentBoolValue
+                    let newValue: Bool = dataSource.currentBoolValue// TODO: Clean this up so it's less flakey? (if the change is made async then the UI won't be updated)
                     
                     if newValue != toggleSwitch.isOn {
                         toggleSwitch.setOn(newValue, animated: true)
@@ -298,6 +344,7 @@ extension SessionCell {
                     dropDownLabel.text = dataSource.currentStringValue
                     dropDownStackView.isHidden = false
                     dropDownStackViewConstraints.forEach { $0.isActive = true }
+                    minWidthConstraint.isActive = true
                     
                 case .radio(let size, let isSelectedRetriever, let storedSelection):
                     let isSelected: Bool = isSelectedRetriever()
@@ -323,6 +370,7 @@ extension SessionCell {
                     radioBorderViewWidthConstraint.constant = size.borderSize
                     radioBorderViewHeightConstraint.constant = size.borderSize
                     
+                    fixedWidthConstraint.isActive = true
                     radioViewWidthConstraint.isActive = true
                     radioViewHeightConstraint.isActive = true
                     radioBorderViewWidthConstraint.isActive = true
@@ -334,15 +382,60 @@ extension SessionCell {
                     highlightingBackgroundLabel.themeTextColor = tintColor
                     highlightingBackgroundLabel.isHidden = false
                     highlightingBackgroundLabelConstraints.forEach { $0.isActive = true }
+                    minWidthConstraint.isActive = true
                     
-                case .profile(let profileId, let profile):
+                case .profile(
+                    let profileId,
+                    let profileSize,
+                    let profile,
+                    let additionalProfile,
+                    let threadVariant,
+                    let openGroupProfilePictureData,
+                    let useFallbackPicture,
+                    let showMultiAvatarForClosedGroup
+                ):
+                    // Note: We MUST set the 'size' property before triggering the 'update'
+                    // function or the profile picture won't layout correctly
+                    switch profileSize {
+                        case .fit:
+                            profilePictureView.size = IconSize.large.size
+                            profilePictureViewWidthConstraint.constant = IconSize.large.size
+                            profilePictureViewHeightConstraint.constant = IconSize.large.size
+
+                        default:
+                            profilePictureView.size = profileSize.size
+                            profilePictureViewWidthConstraint.constant = profileSize.size
+                            profilePictureViewHeightConstraint.constant = profileSize.size
+                    }
+                    
                     profilePictureView.update(
                         publicKey: profileId,
                         profile: profile,
-                        threadVariant: .contact
+                        additionalProfile: additionalProfile,
+                        threadVariant: threadVariant,
+                        openGroupProfilePictureData: openGroupProfilePictureData,
+                        useFallbackPicture: useFallbackPicture,
+                        showMultiAvatarForClosedGroup: showMultiAvatarForClosedGroup
                     )
                     profilePictureView.isHidden = false
+                    
+                    fixedWidthConstraint.constant = profilePictureViewWidthConstraint.constant
+                    fixedWidthConstraint.isActive = true
+                    profilePictureViewLeadingConstraint.constant = (profilePictureView.size > AccessoryView.minWidth ? 0 : Values.smallSpacing)
+                    profilePictureViewTrailingConstraint.constant = (profilePictureView.size > AccessoryView.minWidth ? 0 : -Values.smallSpacing)
+                    profilePictureViewLeadingConstraint.isActive = true
+                    profilePictureViewTrailingConstraint.isActive = true
+                    profilePictureViewWidthConstraint.isActive = true
+                    profilePictureViewHeightConstraint.isActive = true
                     profilePictureViewConstraints.forEach { $0.isActive = true }
+                    
+                case .button(let style, let title, let onTap):
+                    self.onTap = onTap
+                    button.setTitle(title, for: .normal)
+                    button.setStyle(style)
+                    button.isHidden = false
+                    minWidthConstraint.isActive = true
+                    buttonConstraints.forEach { $0.isActive = true }
                     
                 case .customView(let viewGenerator):
                     let generatedView: UIView = viewGenerator()
@@ -353,10 +446,9 @@ extension SessionCell {
                     generatedView.pin(.trailing, to: .trailing, of: self)
                     generatedView.pin(.bottom, to: .bottom, of: self)
                     
-                    self.customView?.removeFromSuperview()  // Just in case
-                    self.customView = generatedView
-                
-                case .threadInfo: break
+                    customView?.removeFromSuperview()  // Just in case
+                    customView = generatedView
+                    minWidthConstraint.isActive = true
             }
         }
         
@@ -369,6 +461,9 @@ extension SessionCell {
         func setSelected(_ selected: Bool, animated: Bool) {
             highlightingBackgroundLabel.setSelected(selected, animated: animated)
         }
+        
+        @objc private func buttonTapped() {
+            onTap?(button)
+        }
     }
-
 }

@@ -29,15 +29,23 @@ extension SessionCell {
         )
         
         case highlightingBackgroundLabel(title: String)
-        case profile(String, Profile?)
-        case customView(viewGenerator: () -> UIView)
-        case threadInfo(
-            threadViewModel: SessionThreadViewModel,
-            style: ThreadInfoStyle = ThreadInfoStyle(),
-            avatarTapped: (() -> Void)? = nil,
-            titleTapped: (() -> Void)? = nil,
-            titleChanged: ((String) -> Void)? = nil
+        case profile(
+            id: String,
+            size: IconSize,
+            profile: Profile?,
+            additionalProfile: Profile?,
+            threadVariant: SessionThread.Variant,
+            openGroupProfilePictureData: Data?,
+            useFallbackPicture: Bool,
+            showMultiAvatarForClosedGroup: Bool
         )
+        
+        case button(
+            style: SessionButton.Style,
+            title: String,
+            run: (SessionButton?) -> ()
+        )
+        case customView(viewGenerator: () -> UIView)
         
         // MARK: - Convenience Vatiables
         
@@ -51,6 +59,7 @@ extension SessionCell {
         var currentBoolValue: Bool {
             switch self {
                 case .toggle(let dataSource), .dropDown(let dataSource): return dataSource.currentBoolValue
+                case .radio(_, let isSelected, _): return isSelected()
                 default: return false
             }
         }
@@ -84,15 +93,30 @@ extension SessionCell {
                 case .highlightingBackgroundLabel(let title):
                     title.hash(into: &hasher)
                     
-                case .profile(let profileId, let profile):
+                case .profile(
+                    let profileId,
+                    let size,
+                    let profile,
+                    let additionalProfile,
+                    let threadVariant,
+                    let openGroupProfilePictureData,
+                    let useFallbackPicture,
+                    let showMultiAvatarForClosedGroup
+                ):
                     profileId.hash(into: &hasher)
+                    size.hash(into: &hasher)
                     profile.hash(into: &hasher)
+                    additionalProfile.hash(into: &hasher)
+                    threadVariant.hash(into: &hasher)
+                    openGroupProfilePictureData.hash(into: &hasher)
+                    useFallbackPicture.hash(into: &hasher)
+                    showMultiAvatarForClosedGroup.hash(into: &hasher)
                     
                 case .customView: break
-                
-                case .threadInfo(let threadViewModel, let style, _, _, _):
-                    threadViewModel.hash(into: &hasher)
+                    
+                case .button(let style, let title, _):
                     style.hash(into: &hasher)
+                    title.hash(into: &hasher)
             }
         }
         
@@ -129,20 +153,47 @@ extension SessionCell {
                 case (.highlightingBackgroundLabel(let lhsTitle), .highlightingBackgroundLabel(let rhsTitle)):
                     return (lhsTitle == rhsTitle)
                     
-                case (.profile(let lhsProfileId, let lhsProfile), .profile(let rhsProfileId, let rhsProfile)):
+                case (
+                    .profile(
+                        let lhsProfileId,
+                        let lhsSize,
+                        let lhsProfile,
+                        let lhsAdditionalProfile,
+                        let lhsThreadVariant,
+                        let lhsOpenGroupProfilePictureData,
+                        let lhsUseFallbackPicture,
+                        let lhsShowMultiAvatarForClosedGroup
+                    ),
+                    .profile(
+                        let rhsProfileId,
+                        let rhsSize,
+                        let rhsProfile,
+                        let rhsAdditionalProfile,
+                        let rhsThreadVariant,
+                        let rhsOpenGroupProfilePictureData,
+                        let rhsUseFallbackPicture,
+                        let rhsShowMultiAvatarForClosedGroup
+                    )
+                ):
                     return (
                         lhsProfileId == rhsProfileId &&
-                        lhsProfile == rhsProfile
+                        lhsSize == rhsSize &&
+                        lhsProfile == rhsProfile &&
+                        lhsAdditionalProfile == rhsAdditionalProfile &&
+                        lhsThreadVariant == rhsThreadVariant &&
+                        lhsOpenGroupProfilePictureData == rhsOpenGroupProfilePictureData &&
+                        lhsUseFallbackPicture == rhsUseFallbackPicture &&
+                        lhsShowMultiAvatarForClosedGroup == rhsShowMultiAvatarForClosedGroup
                     )
                     
                 case (.customView, .customView): return false
                     
-                case (.threadInfo(let lhsThreadViewModel, let lhsStyle, _, _, _), .threadInfo(let rhsThreadViewModel, let rhsStyle, _, _, _)):
+                case (.button(let lhsStyle, let lhsTitle, _), .button(let rhsStyle, let rhsTitle, _)):
                     return (
-                        lhsThreadViewModel == rhsThreadViewModel &&
-                        lhsStyle == rhsStyle
+                        lhsStyle == rhsStyle &&
+                        lhsTitle == rhsTitle
                     )
-
+                
                 default: return false
             }
         }
@@ -200,6 +251,34 @@ extension SessionCell.Accessory {
     
     public static func iconAsync(size: IconSize, shouldFill: Bool, setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
         return .iconAsync(size: size, customTint: nil, shouldFill: shouldFill, setter: setter)
+    }
+    
+    // MARK: - .profile Variants
+    
+    public static func profile(id: String, profile: Profile?) -> SessionCell.Accessory {
+        return .profile(
+            id: id,
+            size: .large,
+            profile: profile,
+            additionalProfile: nil,
+            threadVariant: .contact,
+            openGroupProfilePictureData: nil,
+            useFallbackPicture: false,
+            showMultiAvatarForClosedGroup: false
+        )
+    }
+    
+    public static func profile(id: String, size: IconSize, profile: Profile?) -> SessionCell.Accessory {
+        return .profile(
+            id: id,
+            size: size,
+            profile: profile,
+            additionalProfile: nil,
+            threadVariant: .contact,
+            openGroupProfilePictureData: nil,
+            useFallbackPicture: false,
+            showMultiAvatarForClosedGroup: false
+        )
     }
     
     // MARK: - .radio Variants
@@ -290,45 +369,6 @@ extension SessionCell.Accessory {
                 case .small: return 15
                 case .medium: return 20
             }
-        }
-    }
-}
-
-// MARK: - SessionCell.Accessory.ThreadInfoStyle
-
-extension SessionCell.Accessory {
-    public struct ThreadInfoStyle: Hashable, Equatable {
-        public enum Style: Hashable, Equatable {
-            case small
-            case monoSmall
-            case monoLarge
-        }
-        
-        public struct Action: Hashable, Equatable {
-            let title: String
-            let run: (SessionButton?) -> ()
-            
-            public func hash(into hasher: inout Hasher) {
-                title.hash(into: &hasher)
-            }
-            
-            public static func == (lhs: Action, rhs: Action) -> Bool {
-                return (lhs.title == rhs.title)
-            }
-        }
-        
-        public let separatorTitle: String?
-        public let descriptionStyle: Style
-        public let descriptionActions: [Action]
-        
-        public init(
-            separatorTitle: String? = nil,
-            descriptionStyle: Style = .monoSmall,
-            descriptionActions: [Action] = []
-        ) {
-            self.separatorTitle = separatorTitle
-            self.descriptionStyle = descriptionStyle
-            self.descriptionActions = descriptionActions
         }
     }
 }

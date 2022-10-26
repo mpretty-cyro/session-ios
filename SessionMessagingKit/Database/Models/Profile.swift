@@ -348,7 +348,7 @@ public extension Profile {
     ) -> String {
         if let nickname: String = nickname { return nickname }
         
-        guard let name: String = name, name != id else {
+        guard let name: String = name, !name.isEmpty, name != id else {
             return (customFallback ?? Profile.truncated(id: id, threadVariant: threadVariant))
         }
         

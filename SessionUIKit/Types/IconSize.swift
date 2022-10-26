@@ -4,6 +4,7 @@ import Foundation
 import DifferenceKit
 
 public enum IconSize: Differentiable {
+    case verySmall
     case small
     case medium
     case large
@@ -13,6 +14,7 @@ public enum IconSize: Differentiable {
     
     public var size: CGFloat {
         switch self {
+            case .verySmall: return 12
             case .small: return 20
             case .medium: return 24
             case .large: return 32

@@ -26,12 +26,33 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     
     public enum Section: SessionTableSection {
         case profileInfo
+        case sessionId
         case menus
         case footer
+        
+        var title: String? {
+            switch self {
+                case .sessionId: return "your_session_id".localized()
+                default: return nil
+            }
+        }
+        
+        var style: SessionTableSectionStyle {
+            switch self {
+                case .sessionId: return .titleSeparator
+                case .menus: return .padding
+                default: return .none
+            }
+        }
     }
     
     public enum Item: Differentiable {
-        case profileInfo
+        case avatar
+        case profileName
+        
+        case sessionId
+        case idActions
+        
         case path
         case privacy
         case notifications
@@ -176,10 +197,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     
     override var title: String { "vc_settings_title".localized() }
     
-    private var _settingsData: [SectionModel] = []
-    public override var settingsData: [SectionModel] { _settingsData }
-    
-    public override var observableSettingsData: ObservableData { _observableSettingsData }
+    public override var observableTableData: ObservableData { _observableTableData }
     
     /// This is all the data the screen needs to populate itself, please see the following link for tips to help optimise
     /// performance https://github.com/groue/GRDB.swift#valueobservation-performance
@@ -188,7 +206,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     /// this is due to the behaviour of `ValueConcurrentObserver.asyncStartObservation` which triggers it's own
     /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
-    private lazy var _observableSettingsData: ObservableData = ValueObservation
+    private lazy var _observableTableData: ObservableData = ValueObservation
         .trackingConstantRegion { db -> [SectionModel] in
             let userPublicKey: String = getUserHexEncodedPublicKey(db)
             let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
@@ -198,37 +216,76 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                     model: .profileInfo,
                     elements: [
                         SessionCell.Info(
-                            id: .profileInfo,
-                            leftAccessory: .threadInfo(
-                                threadViewModel: SessionThreadViewModel(
-                                    threadId: profile.id,
-                                    threadIsNoteToSelf: true,
-                                    contactProfile: profile
-                                ),
-                                style: SessionCell.Accessory.ThreadInfoStyle(
-                                    separatorTitle: "your_session_id".localized(),
-                                    descriptionStyle: .monoLarge,
-                                    descriptionActions: [
-                                        SessionCell.Accessory.ThreadInfoStyle.Action(
-                                            title: "copy".localized(),
-                                            run: { [weak self] button in
-                                                self?.copySessionId(profile.id, button: button)
-                                            }
-                                        ),
-                                        SessionCell.Accessory.ThreadInfoStyle.Action(
-                                            title: "share".localized(),
-                                            run: { [weak self] _ in
-                                                self?.shareSessionId(profile.id)
-                                            }
-                                        )
-                                    ]
-                                ),
-                                avatarTapped: { [weak self] in self?.updateProfilePicture() },
-                                titleTapped: { [weak self] in self?.setIsEditing(true) },
-                                titleChanged: { [weak self] text in self?.editedDisplayName = text }
+                            id: .avatar,
+                            accessory: .profile(
+                                id: profile.id,
+                                size: .veryLarge,
+                                profile: profile
                             ),
-                            title: profile.displayName(),
-                            shouldHaveBackground: false
+                            styling: SessionCell.StyleInfo(
+                                alignment: .centerHugging,
+                                customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
+                                backgroundStyle: .noBackground
+                            ),
+                            onTap: { [weak self] in self?.updateProfilePicture() }
+                        ),
+                        SessionCell.Info(
+                            id: .profileName,
+                            title: SessionCell.TextInfo(
+                                profile.displayName(),
+                                font: .titleLarge,
+                                alignment: .center,
+                                interaction: .edit
+                            ),
+                            styling: SessionCell.StyleInfo(
+                                alignment: .centerHugging,
+                                customPadding: SessionCell.Padding(top: Values.smallSpacing),
+                                backgroundStyle: .noBackground
+                            ),
+                            onTap: { [weak self] in self?.setIsEditing(true) }
+                        )
+                    ]
+                ),
+                SectionModel(
+                    model: .sessionId,
+                    elements: [
+                        SessionCell.Info(
+                            id: .sessionId,
+                            subtitle: SessionCell.TextInfo(
+                                profile.id,
+                                font: .monoLarge,
+                                alignment: .center,
+                                interaction: .copy
+                            ),
+                            styling: SessionCell.StyleInfo(
+                                customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
+                                backgroundStyle: .noBackground
+                            )
+                        ),
+                        SessionCell.Info(
+                            id: .idActions,
+                            leftAccessory: .button(
+                                style: .bordered,
+                                title: "copy".localized(),
+                                run: { [weak self] button in
+                                    self?.copySessionId(profile.id, button: button)
+                                }
+                            ),
+                            rightAccessory: .button(
+                                style: .bordered,
+                                title: "share".localized(),
+                                run: { [weak self] _ in
+                                    self?.shareSessionId(profile.id)
+                                }
+                            ),
+                            styling: SessionCell.StyleInfo(
+                                customPadding: SessionCell.Padding(
+                                    top: Values.smallSpacing,
+                                    leading: 0,
+                                    trailing: 0
+                                ),
+                                backgroundStyle: .noBackground
+                            )
                         )
                     ]
                 ),
@@ -364,7 +421,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "vc_settings_clear_all_data_button_title".localized(),
-                            tintColor: .danger,
+                            styling: SessionCell.StyleInfo(tintColor: .danger),
                             onTap: { [weak self] in
                                 self?.transitionToScreen(NukeDataModal(), transitionType: .present)
                             }
@@ -375,6 +432,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
         }
         .removeDuplicates()
         .publisher(in: Storage.shared)
+        .mapToSessionTableViewData(for: self)
     
     public override var footerView: AnyPublisher<UIView?, Never> {
         Just(VersionFooterView())
@@ -382,10 +440,6 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     }
     
     // MARK: - Functions
-
-    public override func updateSettings(_ updatedSettings: [SectionModel]) {
-        self._settingsData = updatedSettings
-    }
     
     private func updateProfilePicture() {
         let actionSheet: UIAlertController = UIAlertController(

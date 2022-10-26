@@ -209,7 +209,8 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
         cell.update(
             with: SessionCell.Info(
                 id: displayInfo,
-                leftAccessory: .profile(displayInfo.profileId, displayInfo.profile),
+                position: Position.with(indexPath.row, count: membersAndZombies.count),
+                leftAccessory: .profile(id: displayInfo.profileId, profile: displayInfo.profile),
                 title: (
                     displayInfo.profile?.displayName() ??
                     Profile.truncated(id: displayInfo.profileId, threadVariant: .contact)
@@ -220,10 +221,9 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
                             .withRenderingMode(.alwaysTemplate),
                         customTint: .textSecondary
                     )
-                 )
-            ),
-            style: .edgeToEdge,
-            position: Position.with(indexPath.row, count: membersAndZombies.count)
+                ),
+                styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge)
+            )
         )
         
         return cell

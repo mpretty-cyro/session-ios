@@ -38,7 +38,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
         
         var style: SessionTableSectionStyle {
             switch self {
-                case .admin: return .title
+                case .admin: return .titleRoundedContent
                 case .destructive: return .padding
                 default: return .none
             }
@@ -47,6 +47,10 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
     
     public enum Setting: Differentiable {
         case threadInfo
+        
+        case avatar
+        case nickname
+        case sessionId
         
         case copyThreadId
         case searchConversation
@@ -102,8 +106,20 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
     // MARK: - Navigation
     
     lazy var navState: AnyPublisher<NavState, Never> = {
-        isEditing
-            .map { isEditing in (isEditing ? .editing : .standard) }
+        Publishers
+            .CombineLatest(
+                isEditing
+                    .map { isEditing in isEditing },
+                textChanged
+                    .handleEvents(
+                        receiveOutput: { [weak self] value, _ in
+                            self?.editedDisplayName = value
+                        }
+                    )
+                    .filter { _ in false }
+                    .prepend((nil, .nickname))
+            )
+            .map { isEditing, _ -> NavState in (isEditing ? .editing : .standard) }
             .removeDuplicates()
             .prepend(.standard)     // Initial value
             .eraseToAnyPublisher()
@@ -123,7 +139,6 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                        accessibilityIdentifier: "Cancel button"
                    ) { [weak self] in
                        self?.setIsEditing(false)
-                       self?.editedDisplayName = self?.oldDisplayName
                    }
                ]
            }
@@ -174,7 +189,10 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                id: .edit,
                                systemItem: .edit,
                                accessibilityIdentifier: "Edit button"
-                           ) { [weak self] in self?.setIsEditing(true) }
+                           ) { [weak self] in
+                               self?.textChanged(self?.oldDisplayName, for: .nickname)
+                               self?.setIsEditing(true)
+                           }
                        ]
                }
            }
@@ -190,10 +208,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
         }
     }
     
-    private var _settingsData: [SectionModel] = []
-    public override var settingsData: [SectionModel] { _settingsData }
-    
-    public override var observableSettingsData: ObservableData { _observableSettingsData }
+    public override var observableTableData: ObservableData { _observableTableData }
     
     /// This is all the data the screen needs to populate itself, please see the following link for tips to help optimise
     /// performance https://github.com/groue/GRDB.swift#valueobservation-performance
@@ -202,7 +217,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
     /// this is due to the behaviour of `ValueConcurrentObserver.asyncStartObservation` which triggers it's own
     /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
-    private lazy var _observableSettingsData: ObservableData = ValueObservation
+    private lazy var _observableTableData: ObservableData = ValueObservation
         .trackingConstantRegion { [weak self, dependencies, threadId = self.threadId, threadVariant = self.threadVariant] db -> [SectionModel] in
             let userPublicKey: String = getUserHexEncodedPublicKey(db, dependencies: dependencies)
             let maybeThreadViewModel: SessionThreadViewModel? = try SessionThreadViewModel
@@ -231,25 +246,88 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                 threadVariant == .closedGroup &&
                 threadViewModel.currentUserIsClosedGroupAdmin == true
             )
+            let editIcon: UIImage? = UIImage(named: "icon_edit")
             
             return [
                 SectionModel(
                     model: .conversationInfo,
                     elements: [
                         SessionCell.Info(
-                            id: .threadInfo,
-                            leftAccessory: .threadInfo(
-                                threadViewModel: threadViewModel,
-                                avatarTapped: { [weak self] in
-                                    self?.updateProfilePicture(threadViewModel: threadViewModel)
-                                },
-                                titleTapped: { [weak self] in self?.setIsEditing(true) },
-                                titleChanged: { [weak self] text in self?.editedDisplayName = text }
+                            id: .avatar,
+                            leftAccessory: .profile(
+                                id: threadViewModel.id,
+                                size: .veryLarge,
+                                profile: threadViewModel.profile,
+                                additionalProfile: threadViewModel.additionalProfile,
+                                threadVariant: threadVariant,
+                                openGroupProfilePictureData: threadViewModel.openGroupProfilePictureData,
+                                useFallbackPicture: (
+                                    threadVariant == .openGroup &&
+                                    threadViewModel.openGroupProfilePictureData == nil
+                                ),
+                                showMultiAvatarForClosedGroup: true
                             ),
-                            title: threadViewModel.displayName,
-                            shouldHaveBackground: false
-                        )
+                            styling: SessionCell.StyleInfo(
+                                alignment: .centerHugging,
+                                customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
+                                backgroundStyle: .noBackground
+                            )
+                        ),
+                        SessionCell.Info(
+                            id: .nickname,
+                            leftAccessory: (threadVariant != .contact ? nil :
+                                .icon(
+                                    editIcon?.withRenderingMode(.alwaysTemplate),
+                                    size: .fit,
+                                    customTint: .textSecondary
+                                )
+                            ),
+                            title: SessionCell.TextInfo(
+                                threadViewModel.displayName,
+                                font: .titleLarge,
+                                alignment: .center,
+                                editingPlaceholder: "CONTACT_NICKNAME_PLACEHOLDER".localized(),
+                                interaction: (threadVariant == .contact ? .edit : .none)
+                            ),
+                            styling: SessionCell.StyleInfo(
+                                alignment: .centerHugging,
+                                customPadding: SessionCell.Padding(
+                                    top: Values.smallSpacing,
+                                    trailing: (threadVariant != .contact ?
+                                        nil :
+                                        -(((editIcon?.size.width ?? 0) + (Values.smallSpacing * 2)) / 2)
+                                    ),
+                                    bottom: (threadVariant != .contact ? nil : Values.smallSpacing),
+                                    interItem: 0
+                                ),
+                                backgroundStyle: .noBackground
+                            ),
+                            onTap: { [weak self] in
+                                self?.textChanged(self?.oldDisplayName, for: .nickname)
+                                self?.setIsEditing(true)
+                            }
+                        ),
+                        
+                        (threadVariant != .contact ? nil :
+                            SessionCell.Info(
+                                id: .sessionId,
+                                subtitle: SessionCell.TextInfo(
+                                    threadViewModel.id,
+                                    font: .monoSmall,
+                                    alignment: .center,
+                                    interaction: .copy
+                                ),
+                                styling: SessionCell.StyleInfo(
+                                    customPadding: SessionCell.Padding(
+                                        top: Values.smallSpacing,
+                                        bottom: Values.largeSpacing
+                                    ),
+                                    backgroundStyle: .noBackground
+                                )
+                            )
+                         )
                     ]
+                    .compactMap { $0 }
                 ),
                 SectionModel(
                     model: .content,
@@ -275,7 +353,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 }
                             )
                         ),
-                        
+
                         SessionCell.Info(
                             id: .searchConversation,
                             leftAccessory: .icon(
@@ -288,7 +366,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 self?.didTriggerSearch()
                             }
                         ),
-                        
+
                         (threadVariant != .openGroup ? nil :
                             SessionCell.Info(
                                 id: .addToOpenGroup,
@@ -310,7 +388,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 }
                             )
                         ),
-                        
+
                         (!currentUserIsClosedGroupMember || currentUserIsClosedGroupAdmin ? nil :
                             SessionCell.Info(
                                 id: .groupMembers,
@@ -324,7 +402,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 }
                             )
                         ),
-                        
+
                         SessionCell.Info(
                             id: .allMedia,
                             leftAccessory: .icon(
@@ -343,7 +421,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 )
                             }
                         ),
-                        
+
                         SessionCell.Info(
                             id: .pinConversation,
                             leftAccessory: .icon(
@@ -370,7 +448,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 }
                             }
                         ),
-                        
+
                         (threadViewModel.threadIsNoteToSelf ? nil :
                             SessionCell.Info(
                                 id: .notifications,
@@ -400,7 +478,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 }
                             )
                         ),
-                        
+
                         (threadVariant != .contact || threadViewModel.threadIsBlocked == true ? nil :
                             SessionCell.Info(
                                 id: .disappearingMessages,
@@ -431,13 +509,13 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                         )
                     ].compactMap { $0 }
                 ),
-                
+
                 (threadVariant != .closedGroup || !currentUserIsClosedGroupAdmin ? nil :
                     SectionModel(
                         model: .admin,
                         elements: [
                             SessionCell.Info(
-                                id: .groupMembers,
+                                id: .editGroup,
                                 leftAccessory: .icon(
                                     UIImage(named: "icon_group")?
                                         .withRenderingMode(.alwaysTemplate)
@@ -445,10 +523,14 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 title: "EDIT_GROUP_ACTION".localized(),
                                 accessibilityIdentifier: "\(ThreadSettingsViewModel.self).edit_group",
                                 onTap: { [weak self] in
-                                    self?.transitionToScreen(EditClosedGroupVC(threadId: threadId))
+                                    self?.transitionToScreen(
+                                        SessionTableViewController(
+                                            viewModel: EditClosedGroupViewModel(threadId: threadId)
+                                        )
+                                    )
                                 }
                             ),
-                            
+
                             SessionCell.Info(
                                 id: .addAdmins,
                                 leftAccessory: .icon(
@@ -460,7 +542,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 onTap: { [weak self] in
                                 }
                             ),
-                            
+
                             SessionCell.Info(
                                 id: .disappearingMessages,
                                 leftAccessory: .icon(
@@ -501,7 +583,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "CLEAR_MESSAGES".localized(),
-                            tintColor: .danger,
+                            styling: SessionCell.StyleInfo(tintColor: .danger),
                             accessibilityIdentifier: "\(ThreadSettingsViewModel.self).leave_group",
                             confirmationInfo: ConfirmationModal.Info(
                                 title: "CLEAR_ALL_MESSAGES_TITLE".localized(),
@@ -547,7 +629,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                         .withRenderingMode(.alwaysTemplate)
                                 ),
                                 title: "LEAVE_GROUP_ACTION".localized(),
-                                tintColor: .danger,
+                                styling: SessionCell.StyleInfo(tintColor: .danger),
                                 accessibilityIdentifier: "\(ThreadSettingsViewModel.self).leave_group",
                                 confirmationInfo: ConfirmationModal.Info(
                                     title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
@@ -574,7 +656,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                     .boolValue(threadViewModel.threadIsBlocked == true)
                                 ),
                                 title: "CONVERSATION_SETTINGS_BLOCK_THIS_USER".localized(),
-                                tintColor: .danger,
+                                styling: SessionCell.StyleInfo(tintColor: .danger),
                                 accessibilityIdentifier: "\(ThreadSettingsViewModel.self).block",
                                 confirmationInfo: ConfirmationModal.Info(
                                     title: {
@@ -627,7 +709,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                     case .openGroup: return "DELETE_COMMUNITY".localized()
                                 }
                             }(),
-                            tintColor: .danger,
+                            styling: SessionCell.StyleInfo(tintColor: .danger),
                             accessibilityIdentifier: "\(ThreadSettingsViewModel.self).delete",
                             confirmationInfo: ConfirmationModal.Info(
                                 title: {
@@ -673,13 +755,10 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
         }
         .removeDuplicates()
         .publisher(in: dependencies.storage, scheduling: dependencies.scheduler)
+        .mapToSessionTableViewData(for: self)
     
     // MARK: - Functions
 
-    public override func updateSettings(_ updatedSettings: [SectionModel]) {
-        self._settingsData = updatedSettings
-    }
-    
     private func updateProfilePicture(threadViewModel: SessionThreadViewModel) {
         guard
             threadViewModel.threadVariant == .contact,

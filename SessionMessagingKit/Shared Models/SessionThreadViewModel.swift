@@ -34,6 +34,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let threadUnreadMentionCountKey: SQL = SQL(stringLiteral: CodingKeys.threadUnreadMentionCount.stringValue)
     public static let contactProfileKey: SQL = SQL(stringLiteral: CodingKeys.contactProfile.stringValue)
     public static let closedGroupNameKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupName.stringValue)
+    public static let closedGroupDescriptionKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupDescription.stringValue)
     public static let closedGroupUserCountKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupUserCount.stringValue)
     public static let currentUserIsClosedGroupMemberKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupMember.stringValue)
     public static let currentUserIsClosedGroupAdminKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupAdmin.stringValue)
@@ -129,6 +130,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     private let closedGroupProfileBack: Profile?
     private let closedGroupProfileBackFallback: Profile?
     public let closedGroupName: String?
+    public let closedGroupDescription: String?
     private let closedGroupUserCount: Int?
     public let currentUserIsClosedGroupMember: Bool?
     public let currentUserIsClosedGroupAdmin: Bool?
@@ -293,6 +295,7 @@ public extension SessionThreadViewModel {
         self.closedGroupProfileBack = nil
         self.closedGroupProfileBackFallback = nil
         self.closedGroupName = nil
+        self.closedGroupDescription = nil
         self.closedGroupUserCount = nil
         self.currentUserIsClosedGroupMember = currentUserIsClosedGroupMember
         self.currentUserIsClosedGroupAdmin = nil
@@ -353,6 +356,7 @@ public extension SessionThreadViewModel {
             closedGroupProfileBack: self.closedGroupProfileBack,
             closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
             closedGroupName: self.closedGroupName,
+            closedGroupDescription: self.closedGroupDescription,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
@@ -406,6 +410,7 @@ public extension SessionThreadViewModel {
             closedGroupProfileBack: self.closedGroupProfileBack,
             closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
             closedGroupName: self.closedGroupName,
+            closedGroupDescription: self.closedGroupDescription,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
@@ -874,6 +879,7 @@ public extension SessionThreadViewModel {
                 \(ViewModel.closedGroupProfileBackFallbackKey).*,
                 
                 \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                \(closedGroup[.groupDescription]) AS \(ViewModel.closedGroupDescriptionKey),
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
                 (\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
         

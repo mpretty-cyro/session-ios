@@ -51,6 +51,7 @@ public final class ProfilePictureView: UIView {
         result.clipsToBounds = true
         result.themeBackgroundColor = .primary
         result.themeBorderColor = .backgroundPrimary
+        result.layer.borderWidth = 1
         result.layer.cornerRadius = (Values.smallProfilePictureSize / 2)
         result.isHidden = true
         
@@ -205,6 +206,9 @@ public final class ProfilePictureView: UIView {
             case (.closedGroup, true):
                 if self.size == 40 {
                     targetSize = 32
+                }
+                else if self.size == 80 {
+                    targetSize = 64
                 }
                 else if self.size == Values.largeProfilePictureSize {
                     targetSize = 56

@@ -17,6 +17,25 @@ public final class SessionButton: UIButton {
         case large
     }
     
+    public struct Info {
+        public let style: Style
+        public let title: String
+        public let isEnabled: Bool
+        public let onTap: () -> ()
+        
+        public init(
+            style: Style,
+            title: String,
+            isEnabled: Bool,
+            onTap: @escaping () -> ()
+        ) {
+            self.style = style
+            self.title = title
+            self.isEnabled = isEnabled
+            self.onTap = onTap
+        }
+    }
+    
     private let style: Style
     
     public override var isEnabled: Bool {
@@ -85,9 +104,9 @@ public final class SessionButton: UIButton {
         clipsToBounds = true
         contentEdgeInsets = UIEdgeInsets(
             top: 0,
-            left: Values.smallSpacing,
+            left: Values.largeSpacing,
             bottom: 0,
-            right: Values.smallSpacing
+            right: Values.largeSpacing
         )
         titleLabel?.font = .boldSystemFont(ofSize: (size == .small ?
             Values.smallFontSize :
@@ -120,6 +139,16 @@ public final class SessionButton: UIButton {
                 }
             }(),
             for: .normal
+        )
+        setThemeTitleColor(
+            {
+                switch style {
+                    case .borderless: return .highlighted(.sessionButton_text)
+                    case .destructiveBorderless: return .highlighted(.sessionButton_destructiveText)
+                    case .bordered, .destructive, .filled: return nil
+                }
+            }(),
+            for: .highlighted
         )
         
         setThemeBackgroundColor(
@@ -158,5 +187,11 @@ public final class SessionButton: UIButton {
                 case .filled, .borderless, .destructiveBorderless: return nil
             }
         }()
+    }
+    
+    // MARK: - Functions
+    
+    public func setStyle(_ style: Style) {
+        setup(style: style)
     }
 }

@@ -3,7 +3,7 @@
 import UIKit
 
 public final class Separator: UIView {
-    private static let height: CGFloat = 24
+    public static let height: CGFloat = 24
     
     // MARK: - Components
     

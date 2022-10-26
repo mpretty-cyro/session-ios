@@ -1,18 +1,24 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
 
-public class BlockedContactsViewModel {
-    public typealias SectionModel = ArraySection<Section, SessionCell.Info<Profile>>
-    
+class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsViewModel.Section, Profile> {
     // MARK: - Section
     
-    public enum Section: Differentiable {
+    public enum Section: SessionTableSection {
         case contacts
         case loadMore
+        
+        var style: SessionTableSectionStyle {
+            switch self {
+                case .contacts: return .none
+                case .loadMore: return .loadMore
+            }
+        }
     }
     
     // MARK: - Variables
@@ -21,14 +27,16 @@ public class BlockedContactsViewModel {
     
     // MARK: - Initialization
     
-    init() {
-        self.pagedDataObserver = nil
+    override init() {
+        _pagedDataObserver = nil
+        
+        super.init()
         
         // Note: Since this references self we need to finish initializing before setting it, we
         // also want to skip the initial query and trigger it async so that the push animation
         // doesn't stutter (it should load basically immediately but without this there is a
         // distinct stutter)
-        self.pagedDataObserver = PagedDatabaseObserver(
+        _pagedDataObserver = PagedDatabaseObserver(
             pagedTable: Profile.self,
             pageSize: BlockedContactsViewModel.pageSize,
             idColumn: .id,
@@ -62,91 +70,96 @@ public class BlockedContactsViewModel {
                 orderSQL: DataModel.orderSQL
             ),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                guard
-                    let currentData: [SectionModel] = self?.contactData,
-                    let updatedContactData: [SectionModel] = self?.process(data: updatedData, for: updatedPageInfo)
-                else { return }
-                
-                let changeset: StagedChangeset<[SectionModel]> = StagedChangeset(
-                    source: currentData,
-                    target: updatedContactData
-                )
-                
-                // No need to do anything if there were no changes
-                guard !changeset.isEmpty else { return }
-                
-                // Run any changes on the main thread (as they will generally trigger UI updates)
-                DispatchQueue.main.async {
-                    // If we have the callback then trigger it, otherwise just store the changes to be sent
-                    // to the callback if we ever start observing again (when we have the callback it needs
-                    // to do the data updating as it's tied to UI updates and can cause crashes if not updated
-                    // in the correct order)
-                    guard let onContactChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ()) = self?.onContactChange else {
-                        self?.unobservedContactDataChanges = (updatedContactData, changeset)
-                        return
-                    }
-                    
-                    onContactChange(updatedContactData, changeset)
-                }
+                self?.contactDataSubject.send((updatedData, updatedPageInfo))
             }
         )
         
         // Run the initial query on a background thread so we don't block the push transition
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             // The `.pageBefore` will query from a `0` offset loading the first page
-            self?.pagedDataObserver?.load(.pageBefore)
+            self?._pagedDataObserver?.load(.pageBefore)
         }
     }
     
     // MARK: - Contact Data
     
-    public private(set) var selectedContactIds: Set<String> = []
-    public private(set) var unobservedContactDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
-    public private(set) var contactData: [SectionModel] = []
-    public private(set) var pagedDataObserver: PagedDatabaseObserver<Profile, DataModel>?
-    
-    public var onContactChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? {
-        didSet {
-            // When starting to observe interaction changes we want to trigger a UI update just in case the
-            // data was changed while we weren't observing
-            if let unobservedContactDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedContactDataChanges {
-                onContactChange?(unobservedContactDataChanges.0 , unobservedContactDataChanges.1)
-                self.unobservedContactDataChanges = nil
-            }
-        }
+    override var title: String { "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_TITLE".localized() }
+    override var emptyStateTextPublisher: AnyPublisher<String?, Never> {
+        Just("CONVERSATION_SETTINGS_BLOCKED_CONTACTS_EMPTY_STATE".localized())
+            .eraseToAnyPublisher()
     }
     
-    private func process(data: [DataModel], for pageInfo: PagedData.PageInfo) -> [SectionModel] {
-        // Update the 'selectedContactIds' to only include selected contacts which are within the
-        // data (ie. handle profile deletions)
-        let profileIds: Set<String> = data.map { $0.id }.asSet()
-        selectedContactIds = selectedContactIds.intersection(profileIds)
-        
+    private let contactDataSubject: CurrentValueSubject<(contacts: [DataModel], pageInfo: PagedData.PageInfo), Never> = CurrentValueSubject(([], PagedData.PageInfo(pageSize: 0)))
+    private let selectedContactIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
+    private var _pagedDataObserver: PagedDatabaseObserver<Profile, DataModel>?
+    public override var pagedDataObserver: TransactionObserver? { _pagedDataObserver }
+    
+    public override var observableTableData: ObservableData { _observableTableData }
+
+    private lazy var _observableTableData: ObservableData = Publishers
+        .CombineLatest(
+            selectedContactIdsSubject,
+            contactDataSubject
+        )
+        .map { [weak self] selectedContactIds, contactData -> [SectionModel] in
+            (self?.process(data: contactData.contacts, for: contactData.pageInfo))
+                .defaulting(to: [])
+        }
+        .setFailureType(to: Error.self)
+        .eraseToAnyPublisher()
+        .mapToSessionTableViewData(for: self)
+    
+    override var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> {
+        selectedContactIdsSubject
+            .prepend([])
+            .map { selectedContactIds in
+                SessionButton.Info(
+                    style: .destructive,
+                    title: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK".localized(),
+                    isEnabled: !selectedContactIds.isEmpty,
+                    onTap: { [weak self] in self?.unblockTapped() }
+                )
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Functions
+    
+    override func loadPageAfter() { _pagedDataObserver?.load(.pageAfter) }
+    
+    private func process(
+        data: [DataModel],
+        for pageInfo: PagedData.PageInfo
+    ) -> [SectionModel] {
         return [
             [
                 SectionModel(
                     section: .contacts,
                     elements: data
                         .sorted { lhs, rhs -> Bool in
-                            lhs.profile.displayName() > rhs.profile.displayName()
+                            lhs.profile.displayName() < rhs.profile.displayName()
                         }
                         .map { model -> SessionCell.Info<Profile> in
                             SessionCell.Info(
                                 id: model.profile,
-                                leftAccessory: .profile(model.profile.id, model.profile),
+                                leftAccessory: .profile(id: model.profile.id, profile: model.profile),
                                 title: model.profile.displayName(),
                                 rightAccessory: .radio(
                                     isSelected: { [weak self] in
-                                        self?.selectedContactIds.contains(model.profile.id) == true
+                                        self?.selectedContactIdsSubject.value.contains(model.profile.id) == true
                                     }
                                 ),
                                 onTap: { [weak self] in
-                                    guard self?.selectedContactIds.contains(model.profile.id) == true else {
-                                        self?.selectedContactIds.insert(model.profile.id)
-                                        return
+                                    var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
+                                    
+                                    if !updatedSelectedIds.contains(model.profile.id) {
+                                        updatedSelectedIds.insert(model.profile.id)
+                                    }
+                                    else {
+                                        updatedSelectedIds.remove(model.profile.id)
                                     }
                                     
-                                    self?.selectedContactIds.remove(model.profile.id)
+                                    self?.selectedContactIdsSubject.send(updatedSelectedIds)
                                 }
                             )
                         }
@@ -159,8 +172,88 @@ public class BlockedContactsViewModel {
         ].flatMap { $0 }
     }
     
-    public func updateContactData(_ updatedData: [SectionModel]) {
-        self.contactData = updatedData
+    private func unblockTapped() {
+        guard !selectedContactIdsSubject.value.isEmpty else { return }
+        
+        let contactIds: Set<String> = selectedContactIdsSubject.value
+        let contactNames: [String] = contactIds
+            .compactMap { contactId in
+                guard
+                    let section: BlockedContactsViewModel.SectionModel = self.tableData
+                        .first(where: { section in section.model == .contacts }),
+                    let info: SessionCell.Info<Profile> = section.elements
+                        .first(where: { info in info.id.id == contactId })
+                else { return contactId }
+                
+                return info.title.text
+            }
+        let confirmationTitle: String = {
+            guard contactNames.count > 1 else {
+                // Show a single users name
+                return String(
+                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_SINGLE".localized(),
+                    (
+                        contactNames.first ??
+                        "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_FALLBACK".localized()
+                    )
+                )
+            }
+            guard contactNames.count > 3 else {
+                // Show up to three users names
+                let initialNames: [String] = Array(contactNames.prefix(upTo: (contactNames.count - 1)))
+                let lastName: String = contactNames[contactNames.count - 1]
+                
+                return [
+                    String(
+                        format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_1".localized(),
+                        initialNames.joined(separator: ", ")
+                    ),
+                    String(
+                        format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_2_SINGLE".localized(),
+                        lastName
+                    )
+                ]
+                .reversed(if: CurrentAppContext().isRTL)
+                .joined(separator: " ")
+            }
+            
+            // If we have exactly 4 users, show the first two names followed by 'and X others', for
+            // more than 4 users, show the first 3 names followed by 'and X others'
+            let numNamesToShow: Int = (contactNames.count == 4 ? 2 : 3)
+            let initialNames: [String] = Array(contactNames.prefix(upTo: numNamesToShow))
+            
+            return [
+                String(
+                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_1".localized(),
+                    initialNames.joined(separator: ", ")
+                ),
+                String(
+                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_3".localized(),
+                    (contactNames.count - numNamesToShow)
+                )
+            ]
+            .reversed(if: CurrentAppContext().isRTL)
+            .joined(separator: " ")
+        }()
+        let confirmationModal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: confirmationTitle,
+                confirmTitle: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_ACTON".localized(),
+                confirmStyle: .danger,
+                cancelStyle: .alert_text
+            ) { _ in
+                // Unblock the contacts
+                Storage.shared.write { db in
+                    _ = try Contact
+                        .filter(ids: contactIds)
+                        .updateAll(db, Contact.Columns.isBlocked.set(to: false))
+                    
+                    // Force a config sync
+                    try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
+                }
+            }
+        )
+        self.transitionToScreen(confirmationModal, transitionType: .present)
     }
     
     // MARK: - DataModel

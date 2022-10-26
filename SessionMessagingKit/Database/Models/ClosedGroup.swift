@@ -14,6 +14,7 @@ public struct ClosedGroup: Codable, Identifiable, FetchableRecord, PersistableRe
         using: ClosedGroupKeyPair.closedGroupForeignKey
     )
     public static let members = hasMany(GroupMember.self, using: GroupMember.closedGroupForeignKey)
+    public static let maxNameLength: Int = 30
     
     public typealias Columns = CodingKeys
     public enum CodingKeys: String, CodingKey, ColumnExpression {

@@ -200,14 +200,14 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
         cell.update(
             with: SessionCell.Info(
                 id: profile,
-                leftAccessory: .profile(profile.id, profile),
+                position: Position.with(indexPath.row, count: data[indexPath.section].elements.count),
+                leftAccessory: .profile(id: profile.id, profile: profile),
                 title: profile.displayName(),
                 rightAccessory: .radio(isSelected: { [weak self] in
                     self?.selectedContacts.contains(profile.id) == true
-                })
-            ),
-            style: .edgeToEdge,
-            position: Position.with(indexPath.row, count: data[indexPath.section].elements.count)
+                }),
+                styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge)
+            )
         )
         
         return cell
@@ -296,7 +296,7 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
         else {
             return showError(title: "vc_create_closed_group_group_name_missing_error".localized())
         }
-        guard name.count < 30 else {
+        guard name.count < ClosedGroup.maxNameLength else {
             return showError(title: "vc_create_closed_group_group_name_too_long_error".localized())
         }
         guard selectedContacts.count >= 1 else {

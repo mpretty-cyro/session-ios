@@ -2,7 +2,7 @@
 
 import Foundation
 
-public enum TransitionType {
+public enum TransitionType: Equatable {
     case push
     case present
 }
