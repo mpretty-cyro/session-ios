@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import SessionUIKit
 
 // MARK: - Main Types
 
@@ -8,8 +9,9 @@ public extension SessionCell {
     struct TextInfo: Hashable, Equatable {
         public enum Interaction: Hashable, Equatable {
             case none
-            case edit
+            case editable
             case copy
+            case alwaysEditing
         }
         
         let text: String?
@@ -157,11 +159,7 @@ public extension SessionCell {
 
 // MARK: - ExpressibleByStringLiteral
 
-extension SessionCell.TextInfo: ExpressibleByNilLiteral, ExpressibleByStringLiteral, ExpressibleByExtendedGraphemeClusterLiteral, ExpressibleByUnicodeScalarLiteral {
-    public init(nilLiteral: ()) {
-        self = SessionCell.TextInfo(nil, font: .title)
-    }
-    
+extension SessionCell.TextInfo: ExpressibleByStringLiteral, ExpressibleByExtendedGraphemeClusterLiteral, ExpressibleByUnicodeScalarLiteral {
     public init(stringLiteral value: String) {
         self = SessionCell.TextInfo(value, font: .title)
     }

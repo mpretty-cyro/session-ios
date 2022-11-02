@@ -255,9 +255,9 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
             deleteSectionsAnimation: .none,
             insertSectionsAnimation: .none,
             reloadSectionsAnimation: .none,
-            deleteRowsAnimation: .bottom,
-            insertRowsAnimation: .none,
-            reloadRowsAnimation: .none,
+            deleteRowsAnimation: .fade,
+            insertRowsAnimation: .fade,
+            reloadRowsAnimation: .fade,
             interrupt: { $0.changeCount > 100 }    // Prevent too many changes from causing performance issues
         ) { [weak self] updatedData in
             self?.viewModel.updateTableData(updatedData)
@@ -309,12 +309,16 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
                     
                     self?.tableView.visibleCells
                         .compactMap { $0 as? SessionCell }
-                        .filter { $0.supportsEditMode }
+                        .filter { $0.interactionMode == .editable || $0.interactionMode == .alwaysEditing }
                         .enumerated()
                         .forEach { index, cell in
                             cell.update(
-                                isEditing: isEditing,
-                                becomeFirstResponder: (index == 0),
+                                isEditing: (isEditing || cell.interactionMode == .alwaysEditing),
+                                becomeFirstResponder: (
+                                    isEditing &&
+                                    index == 0 &&
+                                    cell.interactionMode != .alwaysEditing
+                                ),
                                 animated: true
                             )
                         }
@@ -485,7 +489,11 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
         let info: SessionCell.Info<SettingItem> = section.elements[indexPath.row]
         let cell: SessionCell = tableView.dequeue(type: SessionCell.self, for: indexPath)
         cell.update(with: info)
-        cell.update(isEditing: self.isEditing, becomeFirstResponder: false, animated: false)
+        cell.update(
+            isEditing: (self.isEditing || (info.title?.interaction == .alwaysEditing)),
+            becomeFirstResponder: false,
+            animated: false
+        )
         cell.textPublisher
             .sink(receiveValue: { [weak self] text in
                 self?.viewModel.textChanged(text, for: info.id)
@@ -574,7 +582,8 @@ class SessionTableViewController<NavItemId: Equatable, Section: SessionTableSect
             })
         
         let performAction: () -> Void = { [weak self, weak tappedView] in
-            info.onTap?(tappedView)
+            info.onTap?()
+            info.onTapView?(tappedView)
             self?.manuallyReload(indexPath: indexPath, section: section, info: info)
             
             // Update the old selection as well

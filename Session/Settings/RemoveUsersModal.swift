@@ -44,54 +44,12 @@ final class RemoveUsersModal: Modal {
     private lazy var explanationLabel: UILabel = {
         let result = UILabel()
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = {
-            guard contactNames.count > 1 else {
-                // Show a single users name
-                return String(
-                    format: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_SINGLE".localized(),
-                    (
-                        contactNames.first ??
-                        "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_FALLBACK".localized()
-                    )
-                )
-            }
-            guard contactNames.count > 3 else {
-                // Show up to three users names
-                let initialNames: [String] = Array(contactNames.prefix(upTo: (contactNames.count - 1)))
-                let lastName: String = contactNames[contactNames.count - 1]
-                
-                return [
-                    String(
-                        format: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MULTIPLE_1".localized(),
-                        initialNames.joined(separator: ", ")
-                    ),
-                    String(
-                        format: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MULTIPLE_2_SINGLE".localized(),
-                        lastName
-                    )
-                ]
-                .reversed(if: CurrentAppContext().isRTL)
-                .joined(separator: " ")
-            }
-            
-            // If we have exactly 4 users, show the first two names followed by 'and X others', for
-            // more than 4 users, show the first 3 names followed by 'and X others'
-            let numNamesToShow: Int = (contactNames.count == 4 ? 2 : 3)
-            let initialNames: [String] = Array(contactNames.prefix(upTo: numNamesToShow))
-            
-            return [
-                String(
-                    format: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MULTIPLE_1".localized(),
-                    initialNames.joined(separator: ", ")
-                ),
-                String(
-                    format: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MULTIPLE_3".localized(),
-                    (contactNames.count - numNamesToShow)
-                )
-            ]
-            .reversed(if: CurrentAppContext().isRTL)
-            .joined(separator: " ")
-        }()
+        result.attributedText = ConfirmationModal.boldedUserString(
+            contactNames: contactNames,
+            singleUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_SINGLE".localized(),
+            twoUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_TWO".localized(),
+            manyUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MANY".localized()
+        )
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping

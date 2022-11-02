@@ -7,12 +7,13 @@ import SessionUtilitiesKit
 import SignalUtilitiesKit
 
 extension SessionCell {
-    public class AccessoryView: UIView {
+    public class AccessoryView: UIView, UISearchBarDelegate {
         // Note: We set a minimum width for the 'AccessoryView' so that the titles line up
         // nicely when we have a mix of icons and switches
         private static let minWidth: CGFloat = 50
         
         private var onTap: ((SessionButton?) -> Void)?
+        private var searchTermChanged: ((String?) -> Void)?
         
         // MARK: - UI
         
@@ -62,6 +63,12 @@ extension SessionCell {
         ]
         private lazy var profilePictureViewWidthConstraint: NSLayoutConstraint = profilePictureView.set(.width, to: 0)
         private lazy var profilePictureViewHeightConstraint: NSLayoutConstraint = profilePictureView.set(.height, to: 0)
+        private lazy var searchBarConstraints: [NSLayoutConstraint] = [
+            searchBar.pin(.top, to: .top, of: self),
+            searchBar.pin(.leading, to: .leading, of: self, withInset: -8),  // Removing default inset
+            searchBar.pin(.trailing, to: .trailing, of: self, withInset: 8), // Removing default inset
+            searchBar.pin(.bottom, to: .bottom, of: self)
+        ]
         private lazy var buttonConstraints: [NSLayoutConstraint] = [
             button.pin(.top, to: .top, of: self),
             button.pin(.leading, to: .leading, of: self),
@@ -164,6 +171,16 @@ extension SessionCell {
             return result
         }()
         
+        private lazy var searchBar: UISearchBar = {
+            let result: ContactsSearchBar = ContactsSearchBar()
+            result.themeTintColor = .textPrimary
+            result.themeBackgroundColor = .clear
+            result.searchTextField.themeBackgroundColor = .backgroundSecondary
+            result.delegate = self
+            
+            return result
+        }()
+        
         private lazy var button: SessionButton = {
             let result: SessionButton = SessionButton(style: .bordered, size: .medium)
             result.translatesAutoresizingMaskIntoConstraints = false
@@ -197,6 +214,7 @@ extension SessionCell {
             addSubview(highlightingBackgroundLabel)
             addSubview(profilePictureView)
             addSubview(button)
+            addSubview(searchBar)
             
             dropDownStackView.addArrangedSubview(dropDownImageView)
             dropDownStackView.addArrangedSubview(dropDownLabel)
@@ -210,6 +228,7 @@ extension SessionCell {
         func prepareForReuse() {
             isHidden = true
             onTap = nil
+            searchTermChanged = nil
             
             imageView.image = nil
             imageView.themeTintColor = .textPrimary
@@ -232,6 +251,7 @@ extension SessionCell {
             highlightingBackgroundLabel.isHidden = true
             profilePictureView.isHidden = true
             button.isHidden = true
+            searchBar.isHidden = true
             
             minWidthConstraint.constant = AccessoryView.minWidth
             minWidthConstraint.isActive = false
@@ -255,6 +275,7 @@ extension SessionCell {
             profilePictureViewWidthConstraint.isActive = false
             profilePictureViewHeightConstraint.isActive = false
             profilePictureViewConstraints.forEach { $0.isActive = false }
+            searchBarConstraints.forEach { $0.isActive = false }
             buttonConstraints.forEach { $0.isActive = false }
         }
         
@@ -429,6 +450,12 @@ extension SessionCell {
                     profilePictureViewHeightConstraint.isActive = true
                     profilePictureViewConstraints.forEach { $0.isActive = true }
                     
+                case .search(let placeholder, let searchTermChanged):
+                    self.searchTermChanged = searchTermChanged
+                    searchBar.placeholder = placeholder
+                    searchBar.isHidden = false
+                    searchBarConstraints.forEach { $0.isActive = true }
+                    
                 case .button(let style, let title, let onTap):
                     self.onTap = onTap
                     button.setTitle(title, for: .normal)
@@ -464,6 +491,24 @@ extension SessionCell {
         
         @objc private func buttonTapped() {
             onTap?(button)
+        }
+        
+        // MARK: - UISearchBarDelegate
+        
+        public func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+            searchTermChanged?(searchText)
+        }
+        
+        public func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
+            searchBar.setShowsCancelButton(true, animated: true)
+        }
+        
+        public func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
+            searchBar.setShowsCancelButton(false, animated: true)
+        }
+        
+        public func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+            searchBar.endEditing(true)
         }
     }
 }

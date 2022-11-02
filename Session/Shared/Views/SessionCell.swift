@@ -11,7 +11,7 @@ public class SessionCell: UITableViewCell {
     public static let cornerRadius: CGFloat = 17
     
     private var isEditingTitle = false
-    public private(set) var supportsEditMode: Bool = false
+    public private(set) var interactionMode: SessionCell.TextInfo.Interaction = .none
     private var shouldHighlightTitle: Bool = true
     private var originalInputValue: String?
     private var titleExtraView: UIView?
@@ -271,7 +271,7 @@ public class SessionCell: UITableViewCell {
         super.prepareForReuse()
         
         isEditingTitle = false
-        supportsEditMode = false
+        interactionMode = .none
         shouldHighlightTitle = true
         accessibilityIdentifier = nil
         originalInputValue = nil
@@ -287,17 +287,22 @@ public class SessionCell: UITableViewCell {
         contentStackViewHorizontalCenterConstraint.isActive = false
         titleMinHeightConstraint.isActive = false
         leftAccessoryView.prepareForReuse()
+        leftAccessoryView.alpha = 1
         leftAccessoryFillConstraint.isActive = false
         titleLabel.text = ""
+        titleLabel.textAlignment = .left
         titleLabel.themeTextColor = .textPrimary
-        titleTextField.isUserInteractionEnabled = false
+        titleLabel.alpha = 1
         titleTextField.text = ""
+        titleTextField.textAlignment = .center
         titleTextField.themeTextColor = .textPrimary
         titleTextField.isHidden = true
+        titleTextField.alpha = 0
         subtitleLabel.isUserInteractionEnabled = false
         subtitleLabel.text = ""
         subtitleLabel.themeTextColor = .textPrimary
         rightAccessoryView.prepareForReuse()
+        rightAccessoryView.alpha = 1
         rightAccessoryFillConstraint.isActive = false
         accessoryWidthMatchConstraint.isActive = false
         
@@ -307,12 +312,12 @@ public class SessionCell: UITableViewCell {
     }
     
     public func update<ID: Hashable & Differentiable>(with info: Info<ID>) {
-        supportsEditMode = (info.title.interaction == .edit)
-        shouldHighlightTitle = (info.title.interaction != .copy)
-        titleExtraView = info.title.extraViewGenerator?()
-        subtitleExtraView = info.subtitle.extraViewGenerator?()
+        interactionMode = (info.title?.interaction ?? .none)
+        shouldHighlightTitle = (info.title?.interaction != .copy)
+        titleExtraView = info.title?.extraViewGenerator?()
+        subtitleExtraView = info.subtitle?.extraViewGenerator?()
         accessibilityIdentifier = info.accessibilityIdentifier
-        originalInputValue = info.title.text
+        originalInputValue = info.title?.text
         
         // Convenience Flags
         let leftFitToEdge: Bool = (info.leftAccessory?.shouldFitToEdge == true)
@@ -326,20 +331,21 @@ public class SessionCell: UITableViewCell {
             isEnabled: info.isEnabled
         )
         titleStackView.isHidden = (info.title == nil && info.subtitle == nil)
-        titleLabel.isUserInteractionEnabled = (info.title.interaction == .copy)
-        titleLabel.font = info.title.font
-        titleLabel.text = info.title.text
+        titleLabel.isUserInteractionEnabled = (info.title?.interaction == .copy)
+        titleLabel.font = info.title?.font
+        titleLabel.text = info.title?.text
         titleLabel.themeTextColor = info.styling.tintColor
-        titleLabel.textAlignment = info.title.textAlignment
+        titleLabel.textAlignment = (info.title?.textAlignment ?? .left)
         titleLabel.isHidden = (info.title == nil)
-        titleTextField.text = info.title.text
-        titleTextField.placeholder = info.title.editingPlaceholder
+        titleTextField.text = info.title?.text
+        titleTextField.textAlignment = (info.title?.textAlignment ?? .left)
+        titleTextField.placeholder = info.title?.editingPlaceholder
         titleTextField.isHidden = (info.title == nil)
-        subtitleLabel.isUserInteractionEnabled = (info.subtitle.interaction == .copy)
-        subtitleLabel.font = info.subtitle.font
-        subtitleLabel.text = info.subtitle.text
+        subtitleLabel.isUserInteractionEnabled = (info.subtitle?.interaction == .copy)
+        subtitleLabel.font = info.subtitle?.font
+        subtitleLabel.text = info.subtitle?.text
         subtitleLabel.themeTextColor = info.styling.tintColor
-        subtitleLabel.textAlignment = info.subtitle.textAlignment
+        subtitleLabel.textAlignment = (info.subtitle?.textAlignment ?? .left)
         subtitleLabel.isHidden = (info.subtitle == nil)
         rightAccessoryView.update(
             with: info.rightAccessory,
@@ -395,8 +401,16 @@ public class SessionCell: UITableViewCell {
             
             return -(leftFitToEdge || rightFitToEdge ? 0 : Values.mediumSpacing)
         }()
-        titleTextFieldLeadingConstraint.constant = (leftFitToEdge ? 0 : Values.mediumSpacing)
-        titleTextFieldTrailingConstraint.constant = -(rightFitToEdge ? 0 : Values.mediumSpacing)
+        titleTextFieldLeadingConstraint.constant = {
+            guard info.styling.backgroundStyle != .noBackground else { return 0 }
+            
+            return (leftFitToEdge ? 0 : Values.mediumSpacing)
+        }()
+        titleTextFieldTrailingConstraint.constant = {
+            guard info.styling.backgroundStyle != .noBackground else { return 0 }
+            
+            return -(rightFitToEdge ? 0 : Values.mediumSpacing)
+        }()
         
         // Styling and positioning
         let defaultEdgePadding: CGFloat
@@ -498,7 +512,7 @@ public class SessionCell: UITableViewCell {
     public func update(isEditing: Bool, becomeFirstResponder: Bool, animated: Bool) {
         // Note: We set 'isUserInteractionEnabled' based on the 'info.isEditable' flag
         // so can use that to determine whether this element can become editable
-        guard supportsEditMode else { return }
+        guard interactionMode == .editable || interactionMode == .alwaysEditing else { return }
         
         self.isEditingTitle = isEditing
         

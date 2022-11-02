@@ -1,8 +1,12 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUtilitiesKit
 
 public class ConfirmationModal: Modal {
+    fileprivate static let explanationFont: UIFont = .systemFont(ofSize: Values.smallFontSize)
+    fileprivate static let explanationFontFocus: UIFont = .boldSystemFont(ofSize: Values.smallFontSize)
+    
     public struct Info: Equatable, Hashable {
         public enum State {
             case whenEnabled
@@ -24,7 +28,7 @@ public class ConfirmationModal: Modal {
         public let stateToShow: State
         let confirmTitle: String?
         let confirmStyle: ThemeValue
-        let cancelTitle: String
+        let cancelTitle: String?
         let cancelStyle: ThemeValue
         let showCloseButton: Bool
         let dismissOnConfirm: Bool
@@ -42,7 +46,7 @@ public class ConfirmationModal: Modal {
             stateToShow: State = .always,
             confirmTitle: String? = nil,
             confirmStyle: ThemeValue = .alert_text,
-            cancelTitle: String = "TXT_CANCEL_TITLE".localized(),
+            cancelTitle: String? = "TXT_CANCEL_TITLE".localized(),
             cancelStyle: ThemeValue = .danger,
             showCloseButton: Bool = false,
             dismissOnConfirm: Bool = true,
@@ -143,6 +147,8 @@ public class ConfirmationModal: Modal {
     
     // MARK: - Components
     
+    private lazy var mainStackViewBottomConstraint: NSLayoutConstraint = mainStackView.pin(.bottom, to: .bottom, of: contentView)
+    
     private lazy var closeButton: UIButton = {
         let result: UIButton = UIButton()
         result.setImage(
@@ -176,12 +182,12 @@ public class ConfirmationModal: Modal {
     
     private lazy var explanationLabel: UILabel = {
         let result: UILabel = UILabel()
-        result.font = .systemFont(ofSize: Values.smallFontSize)
+        result.font = ConfirmationModal.explanationFont
         result.themeTextColor = .alert_text
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
         result.numberOfLines = 0
-        
+
         return result
     }()
     
@@ -193,7 +199,7 @@ public class ConfirmationModal: Modal {
         result.layoutMargins = UIEdgeInsets(
             top: Values.largeSpacing,
             left: Values.largeSpacing,
-            bottom: Values.verySmallSpacing,
+            bottom: 0,
             right: Values.largeSpacing
         )
         
@@ -259,6 +265,13 @@ public class ConfirmationModal: Modal {
         confirmButton.isHidden = (info.confirmTitle == nil)
         cancelButton.setTitle(info.cancelTitle, for: .normal)
         cancelButton.setThemeTitleColor(info.cancelStyle, for: .normal)
+        cancelButton.isHidden = (info.cancelTitle == nil)
+        buttonStackView.isHidden = (confirmButton.isHidden && cancelButton.isHidden)
+        
+        mainStackViewBottomConstraint.constant = (buttonStackView.isHidden ?
+            -Values.largeSpacing :
+            -Values.verySmallSpacing
+        )
     }
     
     required init?(coder: NSCoder) {
@@ -269,7 +282,10 @@ public class ConfirmationModal: Modal {
         contentView.addSubview(mainStackView)
         contentView.addSubview(closeButton)
         
-        mainStackView.pin(to: contentView)
+        mainStackView.pin(.top, to: .top, of: contentView)
+        mainStackView.pin(.leading, to: .leading, of: contentView)
+        mainStackView.pin(.trailing, to: .trailing, of: contentView)
+        mainStackViewBottomConstraint.isActive = true
         closeButton.pin(.top, to: .top, of: contentView, withInset: Values.smallSpacing)
         closeButton.pin(.trailing, to: .trailing, of: contentView, withInset: -Values.smallSpacing)
     }
@@ -284,5 +300,78 @@ public class ConfirmationModal: Modal {
         // Note: We intentionally don't call `super.cancelPressed` as that would trigger
         // the `close` function regardless of the `dismissOnCancel` flag
         self.internalOnCancel(self)
+    }
+}
+// MARK: - Convenience
+
+public extension ConfirmationModal {
+    static func boldedUserString(
+        contactNames: [String],
+        singleUserString: String,
+        twoUserString: String,
+        manyUserString: String
+    ) -> NSAttributedString {
+        // Note: We are doing the string formatting manually because it's less likely to break
+        // due to users having odd names
+        func manuallyBolding(
+            names: [String],
+            inFormatString formatString: String,
+            collapseNamesIntoCount: Bool = false
+        ) -> NSMutableAttributedString {
+            let formatStringParts: [String] = formatString.components(separatedBy: "%@")
+            let finalNames: [String] = (collapseNamesIntoCount ? [names[0], "\(names.count - 1)"] : names)
+                .reversed(if: CurrentAppContext().isRTL)
+            let commonLength = min(formatStringParts.count, finalNames.count)
+            
+            return zip(formatStringParts, finalNames)
+                .flatMap { [$0, $1] }
+                .appending(contentsOf: Array(formatStringParts.suffix(from: commonLength)))
+                .appending(contentsOf: Array(finalNames.suffix(from: commonLength)))
+                .enumerated()
+                .reduce(into: NSMutableAttributedString()) { result, next in
+                    result.append(
+                        NSAttributedString(
+                            string: next.element,
+                            attributes: [
+                                .font: (next.offset % 2 == 0 ?
+                                    ConfirmationModal.explanationFont :
+                                    ConfirmationModal.explanationFontFocus
+                                )
+                            ]
+                        )
+                    )
+                }
+        }
+        
+        let finalContactNames: [String] = contactNames.filter { !$0.isEmpty }
+        switch finalContactNames.count {
+            case 0:
+                return NSAttributedString(
+                    string: String(
+                        format: singleUserString,
+                        "MODAL_MULTI_USER_EXPLANATION_NAME_FALLBACK".localized()
+                    ),
+                    attributes: [.font: ConfirmationModal.explanationFont]
+                )
+                
+            case 1:
+                return manuallyBolding(
+                    names: finalContactNames,
+                    inFormatString: singleUserString
+                )
+                
+            case 2:
+                return manuallyBolding(
+                    names: finalContactNames,
+                    inFormatString: twoUserString
+                )
+                
+            default:
+                return manuallyBolding(
+                    names: finalContactNames,
+                    inFormatString: manyUserString,
+                    collapseNamesIntoCount: true
+                )
+        }
     }
 }

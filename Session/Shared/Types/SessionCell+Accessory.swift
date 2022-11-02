@@ -40,10 +40,14 @@ extension SessionCell {
             showMultiAvatarForClosedGroup: Bool
         )
         
+        case search(
+            placeholder: String,
+            searchTermChanged: (String?) -> Void
+        )
         case button(
             style: SessionButton.Style,
             title: String,
-            run: (SessionButton?) -> ()
+            run: (SessionButton?) -> Void
         )
         case customView(viewGenerator: () -> UIView)
         
@@ -112,11 +116,14 @@ extension SessionCell {
                     useFallbackPicture.hash(into: &hasher)
                     showMultiAvatarForClosedGroup.hash(into: &hasher)
                     
-                case .customView: break
+                case .search(let placeholder, _):
+                    placeholder.hash(into: &hasher)
                     
                 case .button(let style, let title, _):
                     style.hash(into: &hasher)
                     title.hash(into: &hasher)
+                    
+                case .customView: break
             }
         }
         
@@ -186,13 +193,16 @@ extension SessionCell {
                         lhsShowMultiAvatarForClosedGroup == rhsShowMultiAvatarForClosedGroup
                     )
                     
-                case (.customView, .customView): return false
+                case (.search(let lhsPlaceholder, _), .search(let rhsPlaceholder, _)):
+                    return (lhsPlaceholder == rhsPlaceholder)
                     
                 case (.button(let lhsStyle, let lhsTitle, _), .button(let rhsStyle, let rhsTitle, _)):
                     return (
                         lhsStyle == rhsStyle &&
                         lhsTitle == rhsTitle
                     )
+                    
+                case (.customView, .customView): return false
                 
                 default: return false
             }

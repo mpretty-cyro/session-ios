@@ -636,6 +636,7 @@
 		FD37EA1728AC5605003AE748 /* NotificationContentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37EA1628AC5605003AE748 /* NotificationContentViewModel.swift */; };
 		FD37EA1928AC5CCA003AE748 /* NotificationSoundViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37EA1828AC5CCA003AE748 /* NotificationSoundViewModel.swift */; };
 		FD37F5582908F5C3005A5E92 /* RemoveUsersModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37F5572908F5C3005A5E92 /* RemoveUsersModal.swift */; };
+		FD37F55A290F9E9A005A5E92 /* GroupMembersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37F559290F9E9A005A5E92 /* GroupMembersViewModel.swift */; };
 		FD39352C28F382920084DADA /* VersionFooterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39352B28F382920084DADA /* VersionFooterView.swift */; };
 		FD39353428F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */; };
 		FD39353628F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39353528F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift */; };
@@ -834,7 +835,7 @@
 		FDF0B75A2807F3A3004C14C5 /* MessageSenderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B7592807F3A3004C14C5 /* MessageSenderError.swift */; };
 		FDF0B75C2807F41D004C14C5 /* MessageSender+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B75B2807F41D004C14C5 /* MessageSender+Convenience.swift */; };
 		FDF0B75E280AAF35004C14C5 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B75D280AAF35004C14C5 /* Preferences.swift */; };
-		FDF1AD5F28FF5F930080A701 /* EditClosedGroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */; };
+		FDF1AD5F28FF5F930080A701 /* EditGroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF1AD5E28FF5F930080A701 /* EditGroupViewModel.swift */; };
 		FDF1AD6128FF61110080A701 /* _011_AddClosedGroupInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF1AD6028FF61110080A701 /* _011_AddClosedGroupInfo.swift */; };
 		FDF222072818CECF000A4995 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF222062818CECF000A4995 /* ConversationViewModel.swift */; };
 		FDF222092818D2B0000A4995 /* NSAttributedString+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF222082818D2B0000A4995 /* NSAttributedString+Utilities.swift */; };
@@ -1721,6 +1722,7 @@
 		FD37EA1828AC5CCA003AE748 /* NotificationSoundViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundViewModel.swift; sourceTree = "<group>"; };
 		FD37EA1A28ACB51F003AE748 /* _007_HomeQueryOptimisationIndexes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _007_HomeQueryOptimisationIndexes.swift; sourceTree = "<group>"; };
 		FD37F5572908F5C3005A5E92 /* RemoveUsersModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveUsersModal.swift; sourceTree = "<group>"; };
+		FD37F559290F9E9A005A5E92 /* GroupMembersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMembersViewModel.swift; sourceTree = "<group>"; };
 		FD39352B28F382920084DADA /* VersionFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionFooterView.swift; sourceTree = "<group>"; };
 		FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD39353528F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _004_FlagMessageHashAsDeletedOrInvalid.swift; sourceTree = "<group>"; };
@@ -1915,7 +1917,7 @@
 		FDF0B7592807F3A3004C14C5 /* MessageSenderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSenderError.swift; sourceTree = "<group>"; };
 		FDF0B75B2807F41D004C14C5 /* MessageSender+Convenience.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "MessageSender+Convenience.swift"; sourceTree = "<group>"; };
 		FDF0B75D280AAF35004C14C5 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
-		FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditClosedGroupViewModel.swift; sourceTree = "<group>"; };
+		FDF1AD5E28FF5F930080A701 /* EditGroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditGroupViewModel.swift; sourceTree = "<group>"; };
 		FDF1AD6028FF61110080A701 /* _011_AddClosedGroupInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _011_AddClosedGroupInfo.swift; sourceTree = "<group>"; };
 		FDF222062818CECF000A4995 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		FDF222082818D2B0000A4995 /* NSAttributedString+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSAttributedString+Utilities.swift"; sourceTree = "<group>"; };
@@ -2945,8 +2947,9 @@
 			isa = PBXGroup;
 			children = (
 				B80A579E23DFF1F300876683 /* NewClosedGroupVC.swift */,
-				FDF1AD5E28FF5F930080A701 /* EditClosedGroupViewModel.swift */,
+				FDF1AD5E28FF5F930080A701 /* EditGroupViewModel.swift */,
 				C3E5C2F9251DBABB0040DFFC /* EditClosedGroupVC.swift */,
+				FD37F559290F9E9A005A5E92 /* GroupMembersViewModel.swift */,
 			);
 			path = "Closed Groups";
 			sourceTree = "<group>";
@@ -5701,7 +5704,7 @@
 				45F32C232057297A00A300D5 /* MediaPageViewController.swift in Sources */,
 				7B9F71D42852EEE2006DFE7B /* Emoji+Name.swift in Sources */,
 				4CA46F4C219CCC630038ABDE /* CaptionView.swift in Sources */,
-				FDF1AD5F28FF5F930080A701 /* EditClosedGroupViewModel.swift in Sources */,
+				FDF1AD5F28FF5F930080A701 /* EditGroupViewModel.swift in Sources */,
 				C328253025CA55370062D0A7 /* ContextMenuWindow.swift in Sources */,
 				34BECE2E1F7ABCE000D7438D /* GifPickerViewController.swift in Sources */,
 				B84664F5235022F30083A1CD /* MentionUtilities.swift in Sources */,
@@ -5733,6 +5736,7 @@
 				7BFD1A8A2745C4F000FB91B9 /* Permissions.swift in Sources */,
 				B85357BF23A1AE0800AAF6CD /* SeedReminderView.swift in Sources */,
 				FD716E6C28505E1C00C96BF4 /* MessageRequestsViewModel.swift in Sources */,
+				FD37F55A290F9E9A005A5E92 /* GroupMembersViewModel.swift in Sources */,
 				C35E8AAE2485E51D00ACB629 /* IP2Country.swift in Sources */,
 				B835249B25C3AB650089A44F /* VisibleMessageCell.swift in Sources */,
 				B8D0A25025E3678700C1835E /* LinkDeviceVC.swift in Sources */,

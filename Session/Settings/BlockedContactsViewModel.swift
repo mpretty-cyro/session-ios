@@ -4,6 +4,7 @@ import Foundation
 import Combine
 import GRDB
 import DifferenceKit
+import SessionUIKit
 import SignalUtilitiesKit
 
 class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsViewModel.Section, Profile> {
@@ -96,12 +97,8 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
     
     public override var observableTableData: ObservableData { _observableTableData }
 
-    private lazy var _observableTableData: ObservableData = Publishers
-        .CombineLatest(
-            selectedContactIdsSubject,
-            contactDataSubject
-        )
-        .map { [weak self] selectedContactIds, contactData -> [SectionModel] in
+    private lazy var _observableTableData: ObservableData = contactDataSubject
+        .map { [weak self] contactData -> [SectionModel] in
             (self?.process(data: contactData.contacts, for: contactData.pageInfo))
                 .defaulting(to: [])
         }
@@ -139,17 +136,17 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
                         .sorted { lhs, rhs -> Bool in
                             lhs.profile.displayName() < rhs.profile.displayName()
                         }
-                        .map { model -> SessionCell.Info<Profile> in
+                        .map { [weak self] model -> SessionCell.Info<Profile> in
                             SessionCell.Info(
                                 id: model.profile,
                                 leftAccessory: .profile(id: model.profile.id, profile: model.profile),
                                 title: model.profile.displayName(),
                                 rightAccessory: .radio(
-                                    isSelected: { [weak self] in
+                                    isSelected: {
                                         self?.selectedContactIdsSubject.value.contains(model.profile.id) == true
                                     }
                                 ),
-                                onTap: { [weak self] in
+                                onTap: {
                                     var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
                                     
                                     if !updatedSelectedIds.contains(model.profile.id) {
@@ -185,7 +182,7 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
                         .first(where: { info in info.id.id == contactId })
                 else { return contactId }
                 
-                return info.title.text
+                return info.title?.text
             }
         let confirmationTitle: String = {
             guard contactNames.count > 1 else {

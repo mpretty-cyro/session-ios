@@ -207,7 +207,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
     private lazy var _observableTableData: ObservableData = ValueObservation
-        .trackingConstantRegion { db -> [SectionModel] in
+        .trackingConstantRegion { [weak self] db -> [SectionModel] in
             let userPublicKey: String = getUserHexEncodedPublicKey(db)
             let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
             
@@ -227,7 +227,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                 customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
                                 backgroundStyle: .noBackground
                             ),
-                            onTap: { [weak self] in self?.updateProfilePicture() }
+                            onTap: { self?.updateProfilePicture() }
                         ),
                         SessionCell.Info(
                             id: .profileName,
@@ -235,14 +235,14 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                 profile.displayName(),
                                 font: .titleLarge,
                                 alignment: .center,
-                                interaction: .edit
+                                interaction: .editable
                             ),
                             styling: SessionCell.StyleInfo(
                                 alignment: .centerHugging,
                                 customPadding: SessionCell.Padding(top: Values.smallSpacing),
                                 backgroundStyle: .noBackground
                             ),
-                            onTap: { [weak self] in self?.setIsEditing(true) }
+                            onTap: { self?.setIsEditing(true) }
                         )
                     ]
                 ),
@@ -251,7 +251,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                     elements: [
                         SessionCell.Info(
                             id: .sessionId,
-                            subtitle: SessionCell.TextInfo(
+                            title: SessionCell.TextInfo(
                                 profile.id,
                                 font: .monoLarge,
                                 alignment: .center,
@@ -267,14 +267,14 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                             leftAccessory: .button(
                                 style: .bordered,
                                 title: "copy".localized(),
-                                run: { [weak self] button in
+                                run: { button in
                                     self?.copySessionId(profile.id, button: button)
                                 }
                             ),
                             rightAccessory: .button(
                                 style: .bordered,
                                 title: "share".localized(),
-                                run: { [weak self] _ in
+                                run: { _ in
                                     self?.shareSessionId(profile.id)
                                 }
                             ),
@@ -308,7 +308,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                 return result
                             },
                             title: "vc_path_title".localized(),
-                            onTap: { [weak self] in self?.transitionToScreen(PathVC()) }
+                            onTap: { self?.transitionToScreen(PathVC()) }
                         ),
                         SessionCell.Info(
                             id: .privacy,
@@ -317,7 +317,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "vc_settings_privacy_button_title".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(
                                     SessionTableViewController(viewModel: PrivacySettingsViewModel())
                                 )
@@ -330,7 +330,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "vc_settings_notifications_button_title".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(
                                     SessionTableViewController(viewModel: NotificationSettingsViewModel())
                                 )
@@ -343,7 +343,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "CONVERSATION_SETTINGS_TITLE".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(
                                     SessionTableViewController(viewModel: ConversationSettingsViewModel())
                                 )
@@ -356,7 +356,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "MESSAGE_REQUESTS_TITLE".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(MessageRequestsViewController())
                             }
                         ),
@@ -367,7 +367,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "APPEARANCE_TITLE".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(AppearanceViewController())
                             }
                         ),
@@ -378,7 +378,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "vc_settings_invite_a_friend_button_title".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 let invitation: String = "Hey, I've been using Session to chat with complete privacy and security. Come join me! Download it at https://getsession.org/. My Session ID is \(profile.id) !"
                                 
                                 self?.transitionToScreen(
@@ -397,7 +397,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "vc_settings_recovery_phrase_button_title".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(SeedModal(), transitionType: .present)
                             }
                         ),
@@ -408,7 +408,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "HELP_TITLE".localized(),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(
                                     SessionTableViewController(viewModel: HelpViewModel())
                                 )
@@ -422,7 +422,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                             ),
                             title: "vc_settings_clear_all_data_button_title".localized(),
                             styling: SessionCell.StyleInfo(tintColor: .danger),
-                            onTap: { [weak self] in
+                            onTap: {
                                 self?.transitionToScreen(NukeDataModal(), transitionType: .present)
                             }
                         )

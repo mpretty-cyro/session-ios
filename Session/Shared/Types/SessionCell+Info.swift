@@ -9,14 +9,15 @@ extension SessionCell {
         let id: ID
         let position: Position
         let leftAccessory: SessionCell.Accessory?
-        let title: TextInfo
-        let subtitle: TextInfo
+        let title: TextInfo?
+        let subtitle: TextInfo?
         let rightAccessory: SessionCell.Accessory?
         let styling: StyleInfo
         let isEnabled: Bool
         let accessibilityIdentifier: String?
         let confirmationInfo: ConfirmationModal.Info?
-        let onTap: ((UIView?) -> Void)?
+        let onTap: (() -> Void)?
+        let onTapView: ((UIView?) -> Void)?
         
         var currentBoolValue: Bool {
             return (
@@ -31,14 +32,15 @@ extension SessionCell {
             id: ID,
             position: Position = .individual,
             leftAccessory: SessionCell.Accessory? = nil,
-            title: SessionCell.TextInfo = nil,
-            subtitle: SessionCell.TextInfo = nil,
+            title: SessionCell.TextInfo? = nil,
+            subtitle: SessionCell.TextInfo? = nil,
             rightAccessory: SessionCell.Accessory? = nil,
             styling: StyleInfo = StyleInfo(),
             isEnabled: Bool = true,
             accessibilityIdentifier: String? = nil,
             confirmationInfo: ConfirmationModal.Info? = nil,
-            onTap: ((UIView?) -> Void)?
+            onTap: (() -> Void)? = nil,
+            onTapView: ((UIView?) -> Void)? = nil
         ) {
             self.id = id
             self.position = position
@@ -51,6 +53,7 @@ extension SessionCell {
             self.accessibilityIdentifier = accessibilityIdentifier
             self.confirmationInfo = confirmationInfo
             self.onTap = onTap
+            self.onTapView = onTapView
         }
         
         // MARK: - Conformance
@@ -107,37 +110,12 @@ extension SessionCell {
 // MARK: - Convenience Initializers
 
 public extension SessionCell.Info {
-    // Accessory, (UIView?) -> Void
-    
-    init(
-        id: ID,
-        position: Position = .individual,
-        accessory: SessionCell.Accessory? = nil,
-        styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
-        isEnabled: Bool = true,
-        accessibilityIdentifier: String? = nil,
-        confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: ((UIView?) -> Void)? = nil
-    ) {
-        self.id = id
-        self.position = position
-        self.leftAccessory = accessory
-        self.title = nil
-        self.subtitle = nil
-        self.rightAccessory = nil
-        self.styling = styling
-        self.isEnabled = isEnabled
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.confirmationInfo = confirmationInfo
-        self.onTap = onTap
-    }
-    
     // Accessory, () -> Void
-    
+
     init(
         id: ID,
         position: Position = .individual,
-        accessory: SessionCell.Accessory? = nil,
+        accessory: SessionCell.Accessory,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibilityIdentifier: String? = nil,
@@ -154,71 +132,17 @@ public extension SessionCell.Info {
         self.isEnabled = isEnabled
         self.accessibilityIdentifier = accessibilityIdentifier
         self.confirmationInfo = confirmationInfo
-        self.onTap = (onTap != nil ? { _ in onTap?() } : nil)
-    }
-    
-    // String?, (UIView) -> Void
-    
-    init(
-        id: ID,
-        position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
-        title: String? = nil,
-        rightAccessory: SessionCell.Accessory? = nil,
-        styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
-        isEnabled: Bool = true,
-        accessibilityIdentifier: String? = nil,
-        confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: ((UIView?) -> Void)? = nil
-    ) {
-        self.id = id
-        self.position = position
-        self.leftAccessory = leftAccessory
-        self.title = SessionCell.TextInfo(title, font: .title)
-        self.subtitle = nil
-        self.rightAccessory = rightAccessory
-        self.styling = styling
-        self.isEnabled = isEnabled
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.confirmationInfo = confirmationInfo
         self.onTap = onTap
+        self.onTapView = nil
     }
-    
-    // String?, () -> Void
-    
+
+    // leftAccessory, rightAccessory
+
     init(
         id: ID,
         position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
-        title: String? = nil,
-        rightAccessory: SessionCell.Accessory? = nil,
-        styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
-        isEnabled: Bool = true,
-        accessibilityIdentifier: String? = nil,
-        confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: (() -> Void)? = nil
-    ) {
-        self.id = id
-        self.position = position
-        self.leftAccessory = leftAccessory
-        self.title = SessionCell.TextInfo(title, font: .title)
-        self.subtitle = nil
-        self.rightAccessory = rightAccessory
-        self.styling = styling
-        self.isEnabled = isEnabled
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.confirmationInfo = confirmationInfo
-        self.onTap = (onTap != nil ? { _ in onTap?() } : nil)
-    }
-    
-    // String?
-    
-    init(
-        id: ID,
-        position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
-        title: String? = nil,
-        rightAccessory: SessionCell.Accessory? = nil,
+        leftAccessory: SessionCell.Accessory,
+        rightAccessory: SessionCell.Accessory,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibilityIdentifier: String? = nil,
@@ -227,7 +151,7 @@ public extension SessionCell.Info {
         self.id = id
         self.position = position
         self.leftAccessory = leftAccessory
-        self.title = SessionCell.TextInfo(title, font: .title)
+        self.title = nil
         self.subtitle = nil
         self.rightAccessory = rightAccessory
         self.styling = styling
@@ -235,26 +159,27 @@ public extension SessionCell.Info {
         self.accessibilityIdentifier = accessibilityIdentifier
         self.confirmationInfo = confirmationInfo
         self.onTap = nil
+        self.onTapView = nil
     }
-    
-    // TextInfo, (UIView) -> Void
-    
+
+    // String, () -> Void
+
     init(
         id: ID,
         position: Position = .individual,
         leftAccessory: SessionCell.Accessory? = nil,
-        title: SessionCell.TextInfo = nil,
+        title: String,
         rightAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibilityIdentifier: String? = nil,
         confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: ((UIView?) -> Void)? = nil
+        onTap: (() -> Void)? = nil
     ) {
         self.id = id
         self.position = position
         self.leftAccessory = leftAccessory
-        self.title = title
+        self.title = SessionCell.TextInfo(title, font: .title)
         self.subtitle = nil
         self.rightAccessory = rightAccessory
         self.styling = styling
@@ -262,15 +187,16 @@ public extension SessionCell.Info {
         self.accessibilityIdentifier = accessibilityIdentifier
         self.confirmationInfo = confirmationInfo
         self.onTap = onTap
+        self.onTapView = nil
     }
-    
+
     // TextInfo, () -> Void
-    
+
     init(
         id: ID,
         position: Position = .individual,
         leftAccessory: SessionCell.Accessory? = nil,
-        title: SessionCell.TextInfo = nil,
+        title: SessionCell.TextInfo,
         rightAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
@@ -288,23 +214,25 @@ public extension SessionCell.Info {
         self.isEnabled = isEnabled
         self.accessibilityIdentifier = accessibilityIdentifier
         self.confirmationInfo = confirmationInfo
-        self.onTap = (onTap != nil ? { _ in onTap?() } : nil)
+        self.onTap = onTap
+        self.onTapView = nil
     }
-    
-    // String?, String?, (UIView) -> Void
-    
+
+    // String, String?, () -> Void
+
     init(
         id: ID,
         position: Position = .individual,
         leftAccessory: SessionCell.Accessory? = nil,
-        title: String?,
+        title: String,
         subtitle: String?,
         rightAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibilityIdentifier: String? = nil,
         confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: ((UIView?) -> Void)? = nil
+        onTap: (() -> Void)? = nil,
+        onTapView: ((UIView?) -> Void)? = nil
     ) {
         self.id = id
         self.position = position
@@ -317,61 +245,6 @@ public extension SessionCell.Info {
         self.accessibilityIdentifier = accessibilityIdentifier
         self.confirmationInfo = confirmationInfo
         self.onTap = onTap
-    }
-    
-    // String?, String?, () -> Void
-    
-    init(
-        id: ID,
-        position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
-        title: String?,
-        subtitle: String?,
-        rightAccessory: SessionCell.Accessory? = nil,
-        styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
-        isEnabled: Bool = true,
-        accessibilityIdentifier: String? = nil,
-        confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: (() -> Void)? = nil
-    ) {
-        self.id = id
-        self.position = position
-        self.leftAccessory = leftAccessory
-        self.title = SessionCell.TextInfo(title, font: .title)
-        self.subtitle = SessionCell.TextInfo(subtitle, font: .subtitle)
-        self.rightAccessory = rightAccessory
-        self.styling = styling
-        self.isEnabled = isEnabled
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.confirmationInfo = confirmationInfo
-        self.onTap = (onTap != nil ? { _ in onTap?() } : nil)
-    }
-    
-    // TextInfo, TextInfo, () -> Void
-    
-    init(
-        id: ID,
-        position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
-        title: SessionCell.TextInfo = nil,
-        subtitle: SessionCell.TextInfo = nil,
-        rightAccessory: SessionCell.Accessory? = nil,
-        styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
-        isEnabled: Bool = true,
-        accessibilityIdentifier: String? = nil,
-        confirmationInfo: ConfirmationModal.Info? = nil,
-        onTap: (() -> Void)? = nil
-    ) {
-        self.id = id
-        self.position = position
-        self.leftAccessory = leftAccessory
-        self.title = title
-        self.subtitle = subtitle
-        self.rightAccessory = rightAccessory
-        self.styling = styling
-        self.isEnabled = isEnabled
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.confirmationInfo = confirmationInfo
-        self.onTap = (onTap != nil ? { _ in onTap?() } : nil)
+        self.onTapView = onTapView
     }
 }

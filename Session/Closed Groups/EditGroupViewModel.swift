@@ -9,7 +9,7 @@ import SessionMessagingKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
-class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.NavButton, EditClosedGroupViewModel.Section, EditClosedGroupViewModel.Setting> {
+class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, EditGroupViewModel.Section, EditGroupViewModel.Setting> {
     // MARK: - Config
     
     enum NavState {
@@ -144,6 +144,65 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                accessibilityIdentifier: "Done button"
                            ) { [weak self] in
                                self?.setIsEditing(false)
+                               
+                               // Sanitise the values
+                               let updatedGroupName: String = (self?.editedGroupName ?? self?.oldGroupName)
+                                   .defaulting(to: "")
+                                   .trimmingCharacters(in: .whitespacesAndNewlines)
+                               let updatedGroupDescription: String = (self?.editedGroupDescription ?? self?.oldGroupDescription)
+                                   .defaulting(to: "")
+                                   .trimmingCharacters(in: .whitespacesAndNewlines)
+                               
+                               guard
+                                   let threadId: String = self?.threadId,
+                                   let oldGroupName: String = self?.oldGroupName,
+                                   (
+                                       oldGroupName != updatedGroupName ||
+                                       self?.oldGroupDescription != self?.editedGroupDescription
+                                   )
+                               else { return }
+                               
+                               // A group must always have a group name
+                               guard !updatedGroupName.isEmpty else {
+                                   self?.transitionToScreen(
+                                       ConfirmationModal(
+                                           info: ConfirmationModal.Info(
+                                               title: "vc_create_closed_group_group_name_missing_error".localized(),
+                                               cancelTitle: "BUTTON_OK".localized(),
+                                               cancelStyle: .alert_text
+                                           )
+                                       ),
+                                       transitionType: .present
+                                   )
+                                   return
+                               }
+                               guard updatedGroupName.count <= ClosedGroup.maxNameLength else {
+                                   self?.transitionToScreen(
+                                       ConfirmationModal(
+                                           info: ConfirmationModal.Info(
+                                               title: "vc_create_closed_group_group_name_too_long_error".localized(),
+                                               cancelTitle: "BUTTON_OK".localized(),
+                                               cancelStyle: .alert_text
+                                           )
+                                       ),
+                                       transitionType: .present
+                                   )
+                                   return
+                               }
+                               
+                               self?.oldGroupName = updatedGroupName
+                               self?.oldGroupDescription = updatedGroupDescription
+                               
+                               dependencies.storage.writeAsync { db in
+                                   try ClosedGroup
+                                       .filter(id: threadId)
+                                       .updateAll(
+                                           db,
+                                           ClosedGroup.Columns.name.set(to: updatedGroupName),
+                                           ClosedGroup.Columns.groupDescription
+                                               .set(to: (updatedGroupDescription.isEmpty ? nil : updatedGroupDescription))
+                                       )
+                               }
                            }
                        ]
                }
@@ -227,6 +286,7 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                 backgroundStyle: .noBackground
                             ),
                             onTap: {
+                                // TODO: avatarTapped
                             }
                         ),
                         SessionCell.Info(
@@ -241,7 +301,7 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                 font: .titleLarge,
                                 alignment: .center,
                                 editingPlaceholder: "vc_create_closed_group_text_field_hint".localized(),
-                                interaction: .edit
+                                interaction: .editable
                             ),
                             styling: SessionCell.StyleInfo(
                                 alignment: .centerHugging,
@@ -262,7 +322,7 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                 font: .subtitle,
                                 alignment: .center,
                                 editingPlaceholder: "GROUP_DESCRIPTION_PLACEHOLDER".localized(),
-                                interaction: .edit
+                                interaction: .editable
                             ),
                             styling: SessionCell.StyleInfo(
                                 tintColor: .textSecondary,
@@ -283,8 +343,17 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                     .withRenderingMode(.alwaysTemplate)
                             ),
                             title: "GROUP_INVITE_ACTION".localized(),
-                            accessibilityIdentifier: "\(EditClosedGroupViewModel.self).invite_contacts",
+                            accessibilityIdentifier: "\(EditGroupViewModel.self).invite_contacts",
                             onTap: {
+                                self?.transitionToScreen(
+                                    SessionTableViewController(
+                                        viewModel: GroupMembersViewModel(
+                                            dependencies: dependencies,
+                                            threadId: threadId,
+                                            variant: .invite
+                                        )
+                                    )
+                                )
                             }
                         )
                     ]
@@ -305,7 +374,7 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                     self?.selectedContactIdsSubject.value.contains(profile.id) == true
                                 }
                             ),
-                            accessibilityIdentifier: "\(EditClosedGroupViewModel.self).\(profile.id)",
+                            accessibilityIdentifier: "\(EditGroupViewModel.self).\(profile.id)",
                             onTap: { [weak self] in
                                 var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
                                 
@@ -330,13 +399,13 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
     override var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> {
         selectedContactIdsSubject
             .prepend([])
-            .map { selectedContactIds in
+            .map { [weak self] selectedContactIds in
                 let contactNames: [String] = selectedContactIds
                     .compactMap { contactId in
                         guard
-                            let section: EditClosedGroupViewModel.SectionModel = self.tableData
+                            let section: EditGroupViewModel.SectionModel = self?.tableData
                                 .first(where: { section in section.model == .members }),
-                            let info: SessionCell.Info<EditClosedGroupViewModel.Setting> = section.elements
+                            let info: SessionCell.Info<EditGroupViewModel.Setting> = section.elements
                                 .first(where: { info in
                                     switch info.id {
                                         case .member(let profile): return (profile.id == contactId)
@@ -345,7 +414,7 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                                 })
                         else { return contactId }
                         
-                        return info.title.text
+                        return info.title?.text
                     }
                 
                 return SessionButton.Info(
@@ -355,11 +424,9 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
                         "GROUP_REMOVE_USERS_ACTION".localized()
                     ),
                     isEnabled: !selectedContactIds.isEmpty,
-                    onTap: { [weak self] in
+                    onTap: {
                         self?.transitionToScreen(
-                            RemoveUsersModal(
-                                contactNames: contactNames
-                            ),
+                            RemoveUsersModal(contactNames: contactNames),
                             transitionType: .present
                         )
                     }
@@ -370,4 +437,143 @@ class EditClosedGroupViewModel: SessionTableViewModel<EditClosedGroupViewModel.N
     
     // MARK: - Functions
     
+    private func updateProfilePicture(threadViewModel: SessionThreadViewModel) {
+        guard
+            threadViewModel.threadVariant == .contact,
+            let profile: Profile = threadViewModel.profile,
+            let profileData: Data = ProfileManager.profileAvatar(profile: profile)
+        else { return }
+        
+        let format: ImageFormat = profileData.guessedImageFormat
+        let navController: UINavigationController = StyledNavigationController(
+            rootViewController: ProfilePictureVC(
+                image: (format == .gif || format == .webp ?
+                    nil :
+                    UIImage(data: profileData)
+                ),
+                animatedImage: (format != .gif && format != .webp ?
+                    nil :
+                    YYImage(data: profileData)
+                ),
+                title: threadViewModel.displayName
+            )
+        )
+        navController.modalPresentationStyle = .fullScreen
+        
+        self.transitionToScreen(navController, transitionType: .present)
+    }
+    
+    private func addUsersToOpenGoup(selectedUsers: Set<String>) {
+        let threadId: String = self.threadId
+        
+        dependencies.storage.writeAsync { db in
+            guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else { return }
+            
+            let urlString: String = "\(openGroup.server)/\(openGroup.roomToken)?public_key=\(openGroup.publicKey)"
+            
+            try selectedUsers.forEach { userId in
+                let thread: SessionThread = try SessionThread.fetchOrCreate(db, id: userId, variant: .contact)
+                
+                try LinkPreview(
+                    url: urlString,
+                    variant: .openGroupInvitation,
+                    title: openGroup.name
+                )
+                .save(db)
+                
+                let interaction: Interaction = try Interaction(
+                    threadId: thread.id,
+                    authorId: userId,
+                    variant: .standardOutgoing,
+                    timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000)),
+                    expiresInSeconds: try? DisappearingMessagesConfiguration
+                        .select(.durationSeconds)
+                        .filter(id: userId)
+                        .filter(DisappearingMessagesConfiguration.Columns.isEnabled == true)
+                        .asRequest(of: TimeInterval.self)
+                        .fetchOne(db),
+                    linkPreviewUrl: urlString
+                )
+                .inserted(db)
+                
+                try MessageSender.send(
+                    db,
+                    interaction: interaction,
+                    in: thread
+                )
+            }
+        }
+    }
+    
+    private func updateBlockedState(
+        from oldBlockedState: Bool,
+        isBlocked: Bool,
+        threadId: String,
+        displayName: String
+    ) {
+        guard oldBlockedState != isBlocked else { return }
+        
+        dependencies.storage.writeAsync(
+            updates: { db in
+                try Contact
+                    .fetchOrCreate(db, id: threadId)
+                    .with(isBlocked: .updateTo(isBlocked))
+                    .save(db)
+            },
+            completion: { [weak self] db, _ in
+                try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
+                
+                DispatchQueue.main.async {
+                    let modal: ConfirmationModal = ConfirmationModal(
+                        info: ConfirmationModal.Info(
+                            title: (oldBlockedState == false ?
+                                "BLOCK_LIST_VIEW_BLOCKED_ALERT_TITLE".localized() :
+                                String(
+                                    format: "BLOCK_LIST_VIEW_UNBLOCKED_ALERT_TITLE_FORMAT".localized(),
+                                    displayName
+                                )
+                            ),
+                            explanation: (oldBlockedState == false ?
+                                String(
+                                    format: "BLOCK_LIST_VIEW_BLOCKED_ALERT_MESSAGE_FORMAT".localized(),
+                                    displayName
+                                ) :
+                                nil
+                            ),
+                            cancelTitle: "BUTTON_OK".localized(),
+                            cancelStyle: .alert_text
+                        )
+                    )
+                    
+                    self?.transitionToScreen(modal, transitionType: .present)
+                }
+            }
+        )
+    }
+                    
+    private func clearConversationMessagesForEveryone(threadId: String) {
+        // TODO: Send the 'DELETE_MESSAGES' message
+        self.clearConversationMessages(threadId: threadId)
+    }
+                    
+    private func clearConversationMessages(threadId: String) {
+        dependencies.storage.writeAsync { db in
+            try Interaction
+                .filter(Interaction.Columns.threadId == threadId)
+                .deleteAll(db)
+        }
+    }
+                    
+    private func deleteConversationForEveryone(threadId: String) {
+        // TODO: Send the 'DELETE_GROUP' message with `members: '*'`
+        self.deleteConversation(threadId: threadId)
+    }
+                    
+    private func deleteConversation(threadId: String) {
+        dependencies.storage.writeAsync { db in
+            try SessionThread
+                .filter(id: threadId)
+                .deleteAll(db)
+        }
+    }
 }

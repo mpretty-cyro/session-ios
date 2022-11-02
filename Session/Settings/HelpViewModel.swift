@@ -46,7 +46,7 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
                             rightAccessory: .highlightingBackgroundLabel(
                                 title: "HELP_REPORT_BUG_ACTION_TITLE".localized()
                             ),
-                            onTap: { HelpViewModel.shareLogs(targetView: $0) }
+                            onTapView: { HelpViewModel.shareLogs(targetView: $0) }
                         )
                     ]
                 ),
