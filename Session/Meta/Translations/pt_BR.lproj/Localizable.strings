@@ -594,6 +594,7 @@
 "MESSAGE_STATE_READ" = "Read";
 "MESSAGE_STATE_SENT" = "Sent";
 "GROUP_MEMBERS" = "Group Members";
+"GROUP_MEMBERS_NO_CONTACTS" = "This group has no members.";
 "PIN_CONVERSATION" = "Pin Conversation";
 "UNPIN_CONVERSATION" = "Unpin Conversation";
 "NOTIFICATIONS_SUBTITLE" = "Notifications set to: %@";
@@ -634,7 +635,10 @@
 "GROUP_INVITE_SENT_EXPLANATION_TWO" = "A message request has been sent to %@ and %@.";
 "GROUP_INVITE_SENT_EXPLANATION_MANY" = "A message request has been sent to %@ and %@ others.";
 "GROUP_INVITE_ERROR_BLINDED_ID" = "You can only invite users to groups if you know them outside a Community";
+"GROUP_INVITE_NO_OTHER_CONTACTS" = "You have no contacts that are not part of this group.";
 "MODAL_MULTI_USER_EXPLANATION_NAME_FALLBACK" = "this user";
 "ADD_ADMIN_EXPLANATION_SINGLE" = "Are you sure you want to add %@ as an admin? This cannot be undone.";
 "ADD_ADMIN_EXPLANATION_TWO" = "Are you sure you want to add %@ and %@ as admins? This cannot be undone.";
 "ADD_ADMIN_EXPLANATION_MANY" = "Are you sure you want to add %@ and %@ others as admins? This cannot be undone.";
+"ADD_ADMIN_NO_NON_ADMINS" = "There are no users without admin permissions in this group.";
+"REMOVE_AVATAR" = "Remove";

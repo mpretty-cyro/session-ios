@@ -33,8 +33,6 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let threadUnreadCountKey: SQL = SQL(stringLiteral: CodingKeys.threadUnreadCount.stringValue)
     public static let threadUnreadMentionCountKey: SQL = SQL(stringLiteral: CodingKeys.threadUnreadMentionCount.stringValue)
     public static let contactProfileKey: SQL = SQL(stringLiteral: CodingKeys.contactProfile.stringValue)
-    public static let closedGroupNameKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupName.stringValue)
-    public static let closedGroupDescriptionKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupDescription.stringValue)
     public static let closedGroupUserCountKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupUserCount.stringValue)
     public static let currentUserIsClosedGroupMemberKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupMember.stringValue)
     public static let currentUserIsClosedGroupAdminKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupAdmin.stringValue)
@@ -68,6 +66,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let closedGroupProfileFrontString: String = CodingKeys.closedGroupProfileFront.stringValue
     public static let closedGroupProfileBackString: String = CodingKeys.closedGroupProfileBack.stringValue
     public static let closedGroupProfileBackFallbackString: String = CodingKeys.closedGroupProfileBackFallback.stringValue
+    public static let closedGroupString: String = CodingKeys.closedGroup.stringValue
     public static let interactionAttachmentDescriptionInfoString: String = CodingKeys.interactionAttachmentDescriptionInfo.stringValue
     
     // MARK: - NotificationOption
@@ -129,8 +128,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     private let closedGroupProfileFront: Profile?
     private let closedGroupProfileBack: Profile?
     private let closedGroupProfileBackFallback: Profile?
-    public let closedGroupName: String?
-    public let closedGroupDescription: String?
+    public let closedGroup: ClosedGroup?
     private let closedGroupUserCount: Int?
     public let currentUserIsClosedGroupMember: Bool?
     public let currentUserIsClosedGroupAdmin: Bool?
@@ -166,7 +164,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
         return SessionThread.displayName(
             threadId: threadId,
             variant: threadVariant,
-            closedGroupName: closedGroupName,
+            closedGroupName: closedGroup?.name,
             openGroupName: openGroupName,
             isNoteToSelf: threadIsNoteToSelf,
             profile: profile
@@ -176,7 +174,13 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public var profile: Profile? {
         switch threadVariant {
             case .contact: return contactProfile
-            case .closedGroup: return (closedGroupProfileBack ?? closedGroupProfileBackFallback)
+            case .closedGroup:
+                guard ProfileManager.hasProfileImageData(with: closedGroup?.groupImageFileName) else {
+                    return (closedGroupProfileBack ?? closedGroupProfileBackFallback)
+                }
+                
+                return closedGroup?.asProfile()
+            
             case .openGroup: return nil
         }
     }
@@ -294,8 +298,7 @@ public extension SessionThreadViewModel {
         self.closedGroupProfileFront = nil
         self.closedGroupProfileBack = nil
         self.closedGroupProfileBackFallback = nil
-        self.closedGroupName = nil
-        self.closedGroupDescription = nil
+        self.closedGroup = nil
         self.closedGroupUserCount = nil
         self.currentUserIsClosedGroupMember = currentUserIsClosedGroupMember
         self.currentUserIsClosedGroupAdmin = nil
@@ -355,8 +358,7 @@ public extension SessionThreadViewModel {
             closedGroupProfileFront: self.closedGroupProfileFront,
             closedGroupProfileBack: self.closedGroupProfileBack,
             closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
-            closedGroupName: self.closedGroupName,
-            closedGroupDescription: self.closedGroupDescription,
+            closedGroup: self.closedGroup,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
@@ -409,8 +411,7 @@ public extension SessionThreadViewModel {
             closedGroupProfileFront: self.closedGroupProfileFront,
             closedGroupProfileBack: self.closedGroupProfileBack,
             closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
-            closedGroupName: self.closedGroupName,
-            closedGroupDescription: self.closedGroupDescription,
+            closedGroup: self.closedGroup,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
@@ -489,7 +490,7 @@ public extension SessionThreadViewModel {
             ///
             /// Explicitly set default values for the fields ignored for search results
             let numColumnsBeforeProfiles: Int = 12
-            let numColumnsBetweenProfilesAndAttachmentInfo: Int = 11 // The attachment info columns will be combined
+            let numColumnsBetweenProfilesAndAttachmentInfo: Int = 10 // The attachment info columns will be combined
             
             let request: SQLRequest<ViewModel> = """
                 SELECT
@@ -512,7 +513,7 @@ public extension SessionThreadViewModel {
                     \(ViewModel.closedGroupProfileFrontKey).*,
                     \(ViewModel.closedGroupProfileBackKey).*,
                     \(ViewModel.closedGroupProfileBackFallbackKey).*,
-                    \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                    \(ClosedGroup.self).*,
                     (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
                     \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                     \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
@@ -637,6 +638,7 @@ public extension SessionThreadViewModel {
                     Profile.numberOfSelectedColumns(db),
                     Profile.numberOfSelectedColumns(db),
                     Profile.numberOfSelectedColumns(db),
+                    ClosedGroup.numberOfSelectedColumns(db),
                     numColumnsBetweenProfilesAndAttachmentInfo,
                     Attachment.DescriptionInfo.numberOfSelectedColumns()
                 ])
@@ -646,7 +648,8 @@ public extension SessionThreadViewModel {
                     ViewModel.closedGroupProfileFrontString: adapters[2],
                     ViewModel.closedGroupProfileBackString: adapters[3],
                     ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                    ViewModel.interactionAttachmentDescriptionInfoString: adapters[6]
+                    ViewModel.closedGroupString: adapters[5],
+                    ViewModel.interactionAttachmentDescriptionInfoString: adapters[7]
                 ])
             }
         }
@@ -777,7 +780,7 @@ public extension SessionThreadViewModel {
                 \(Interaction.self).\(ViewModel.threadUnreadCountKey),
             
                 \(ViewModel.contactProfileKey).*,
-                \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                \(ClosedGroup.self).*,
                 \(closedGroupUserCountTableLiteral).\(ViewModel.closedGroupUserCountKey) AS \(ViewModel.closedGroupUserCountKey),
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
@@ -830,11 +833,13 @@ public extension SessionThreadViewModel {
         return request.adapted { db in
             let adapters = try splittingRowAdapters(columnCounts: [
                 numColumnsBeforeProfiles,
-                Profile.numberOfSelectedColumns(db)
+                Profile.numberOfSelectedColumns(db),
+                ClosedGroup.numberOfSelectedColumns(db)
             ])
             
             return ScopeAdapter([
-                ViewModel.contactProfileString: adapters[1]
+                ViewModel.contactProfileString: adapters[1],
+                ViewModel.closedGroupString: adapters[2]
             ])
         }
     }
@@ -877,9 +882,8 @@ public extension SessionThreadViewModel {
                 \(ViewModel.closedGroupProfileFrontKey).*,
                 \(ViewModel.closedGroupProfileBackKey).*,
                 \(ViewModel.closedGroupProfileBackFallbackKey).*,
+                \(ClosedGroup.self).*,
                 
-                \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
-                \(closedGroup[.groupDescription]) AS \(ViewModel.closedGroupDescriptionKey),
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
                 (\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
         
@@ -944,14 +948,16 @@ public extension SessionThreadViewModel {
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db)
+                Profile.numberOfSelectedColumns(db),
+                ClosedGroup.numberOfSelectedColumns(db)
             ])
             
             return ScopeAdapter([
                 ViewModel.contactProfileString: adapters[1],
                 ViewModel.closedGroupProfileFrontString: adapters[2],
                 ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4]
+                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
+                ViewModel.closedGroupString: adapters[5]
             ])
         }
     }
@@ -1047,7 +1053,7 @@ public extension SessionThreadViewModel {
                 \(ViewModel.closedGroupProfileFrontKey).*,
                 \(ViewModel.closedGroupProfileBackKey).*,
                 \(ViewModel.closedGroupProfileBackFallbackKey).*,
-                \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                \(ClosedGroup.self).*,
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
             
@@ -1112,14 +1118,16 @@ public extension SessionThreadViewModel {
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db)
+                Profile.numberOfSelectedColumns(db),
+                ClosedGroup.numberOfSelectedColumns(db)
             ])
             
             return ScopeAdapter([
                 ViewModel.contactProfileString: adapters[1],
                 ViewModel.closedGroupProfileFrontString: adapters[2],
                 ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4]
+                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
+                ViewModel.closedGroupString: adapters[5]
             ])
         }
     }
@@ -1145,7 +1153,9 @@ public extension SessionThreadViewModel {
         let profileNicknameColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.nickname.name)
         let profileNameColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.name.name)
         
+        let closedGroupNameString: String = "closedGroupName"
         let profileFullTextSearch: SQL = SQL(stringLiteral: Profile.fullTextSearchTableName)
+        let closedGroupNameKey: SQL = SQL(stringLiteral: closedGroupNameString)
         let closedGroupNameColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.name.name)
         let closedGroupLiteral: SQL = SQL(stringLiteral: ClosedGroup.databaseTableName)
         let closedGroupFullTextSearch: SQL = SQL(stringLiteral: ClosedGroup.fullTextSearchTableName)
@@ -1184,7 +1194,8 @@ public extension SessionThreadViewModel {
                 \(ViewModel.closedGroupProfileFrontKey).*,
                 \(ViewModel.closedGroupProfileBackKey).*,
                 \(ViewModel.closedGroupProfileBackFallbackKey).*,
-                \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                \(ClosedGroup.self).*,
+                \(closedGroup[.name]) AS \(closedGroupNameKey),
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
                 
@@ -1462,7 +1473,7 @@ public extension SessionThreadViewModel {
             ORDER BY
                 \(Column.rank),
                 \(ViewModel.threadIsNoteToSelfKey),
-                \(ViewModel.closedGroupNameKey),
+                \(closedGroupNameKey),
                 \(ViewModel.openGroupNameKey),
                 \(ViewModel.threadIdKey)
             LIMIT \(SQL("\(SessionThreadViewModel.searchResultsLimit)"))
@@ -1490,14 +1501,16 @@ public extension SessionThreadViewModel {
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db)
+                Profile.numberOfSelectedColumns(db),
+                ClosedGroup.numberOfSelectedColumns(db)
             ])
 
             return ScopeAdapter([
                 ViewModel.contactProfileString: adapters[1],
                 ViewModel.closedGroupProfileFrontString: adapters[2],
                 ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4]
+                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
+                ViewModel.closedGroupString: adapters[5]
             ])
         }
     }
@@ -1586,7 +1599,7 @@ public extension SessionThreadViewModel {
                 \(ViewModel.closedGroupProfileFrontKey).*,
                 \(ViewModel.closedGroupProfileBackKey).*,
                 \(ViewModel.closedGroupProfileBackFallbackKey).*,
-                \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
+                \(ClosedGroup.self).*,
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
         
@@ -1657,14 +1670,16 @@ public extension SessionThreadViewModel {
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
                 Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db)
+                Profile.numberOfSelectedColumns(db),
+                ClosedGroup.numberOfSelectedColumns(db)
             ])
             
             return ScopeAdapter([
                 ViewModel.contactProfileString: adapters[1],
                 ViewModel.closedGroupProfileFrontString: adapters[2],
                 ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4]
+                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
+                ViewModel.closedGroupString: adapters[5]
             ])
         }
     }

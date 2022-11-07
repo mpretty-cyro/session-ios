@@ -68,7 +68,18 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     // MARK: - Variables
     
     private let userSessionId: String
-    private lazy var imagePickerHandler: ImagePickerHandler = ImagePickerHandler(viewModel: self)
+    private lazy var imagePickerHandler: ImagePickerHandler = ImagePickerHandler(
+        onTransition: { [weak self] in self?.transitionToScreen($0, transitionType: $1) },
+        onImagePicked: { [weak self] resultImage, resultImagePath in
+            self?.updateProfile(
+                name: (self?.oldDisplayName ?? ""),
+                profilePicture: resultImage,
+                profilePictureFilePath: resultImagePath,
+                isUpdatingDisplayName: false,
+                isUpdatingProfilePicture: true
+            )
+        }
+    )
     fileprivate var oldDisplayName: String
     private var editedDisplayName: String?
     
@@ -219,7 +230,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                             id: .avatar,
                             accessory: .profile(
                                 id: profile.id,
-                                size: .veryLarge,
+                                size: .extraLarge,
                                 profile: profile
                             ),
                             styling: SessionCell.StyleInfo(
@@ -227,7 +238,13 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                 customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
                                 backgroundStyle: .noBackground
                             ),
-                            onTap: { self?.updateProfilePicture() }
+                            onTap: {
+                                self?.updateProfilePicture(
+                                    hasCustomImage: ProfileManager.hasProfileImageData(
+                                        with: profile.profilePictureFileName
+                                    )
+                                )
+                            }
                         ),
                         SessionCell.Info(
                             id: .profileName,
@@ -441,7 +458,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     
     // MARK: - Functions
     
-    private func updateProfilePicture() {
+    private func updateProfilePicture(hasCustomImage: Bool) {
         let actionSheet: UIAlertController = UIAlertController(
             title: "Update Profile Picture",
             message: nil,
@@ -454,6 +471,16 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                 self?.showPhotoLibraryForAvatar()
             }
         ))
+        
+        // Only have the 'remove' button if there is a custom avatar set
+        if hasCustomImage {
+            actionSheet.addAction(UIAlertAction(
+                title: "REMOVE_AVATAR".localized(),
+                style: .destructive,
+                handler: { [weak self] _ in self?.removeProfileImage() }
+            ))
+        }
+        
         actionSheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel, handler: nil))
         
         self.transitionToScreen(actionSheet, transitionType: .present)
@@ -468,6 +495,47 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
             
             self?.transitionToScreen(picker, transitionType: .present)
         }
+    }
+    
+    private func removeProfileImage() {
+        let viewController = ModalActivityIndicatorViewController(canCancel: false) { [weak self] modalActivityIndicator in
+            ProfileManager.updateLocal(
+                queue: DispatchQueue.global(qos: .default),
+                profileName: (self?.oldDisplayName ?? ""),
+                image: nil,
+                imageFilePath: nil,
+                success: { db, updatedProfile in
+                    UserDefaults.standard[.lastProfilePictureUpdate] = Date()
+                    
+                    try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
+
+                    // Wait for the database transaction to complete before updating the UI
+                    db.afterNextTransactionCommit { _ in
+                        DispatchQueue.main.async {
+                            modalActivityIndicator.dismiss(completion: {})
+                        }
+                    }
+                },
+                failure: { [weak self] _ in
+                    DispatchQueue.main.async {
+                        modalActivityIndicator.dismiss {
+                            self?.transitionToScreen(
+                                ConfirmationModal(
+                                    info: ConfirmationModal.Info(
+                                        title: "Unable to remove avatar image",
+                                        cancelTitle: "BUTTON_OK".localized(),
+                                        cancelStyle: .alert_text
+                                    )
+                                ),
+                                transitionType: .present
+                            )
+                        }
+                    }
+                }
+            )
+        }
+        
+        self.transitionToScreen(viewController, transitionType: .present)
     }
     
     fileprivate func updateProfile(
@@ -579,69 +647,5 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
         )
         
         self.transitionToScreen(shareVC, transitionType: .present)
-    }
-}
-
-// MARK: - ImagePickerHandler
-
-class ImagePickerHandler: NSObject, UIImagePickerControllerDelegate & UINavigationControllerDelegate {
-    private let viewModel: SettingsViewModel
-    
-    // MARK: - Initialization
-    
-    init(viewModel: SettingsViewModel) {
-        self.viewModel = viewModel
-    }
-    
-    // MARK: - UIImagePickerControllerDelegate
-    
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true)
-    }
-    
-    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-        guard
-            let imageUrl: URL = info[.imageURL] as? URL,
-            let rawAvatar: UIImage = info[.originalImage] as? UIImage
-        else {
-            picker.presentingViewController?.dismiss(animated: true)
-            return
-        }
-        let name: String = self.viewModel.oldDisplayName
-        
-        picker.presentingViewController?.dismiss(animated: true) { [weak self] in
-            // Check if the user selected an animated image (if so then don't crop, just
-            // set the avatar directly
-            guard
-                let type: Any = try? imageUrl.resourceValues(forKeys: [.typeIdentifierKey])
-                    .allValues
-                    .first,
-                let typeString: String = type as? String,
-                MIMETypeUtil.supportedAnimatedImageUTITypes().contains(typeString)
-            else {
-                let viewController: CropScaleImageViewController = CropScaleImageViewController(
-                    srcImage: rawAvatar,
-                    successCompletion: { resultImage in
-                        self?.viewModel.updateProfile(
-                            name: name,
-                            profilePicture: resultImage,
-                            profilePictureFilePath: nil,
-                            isUpdatingDisplayName: false,
-                            isUpdatingProfilePicture: true
-                        )
-                    }
-                )
-                self?.viewModel.transitionToScreen(viewController, transitionType: .present)
-                return
-            }
-            
-            self?.viewModel.updateProfile(
-                name: name,
-                profilePicture: nil,
-                profilePictureFilePath: imageUrl.path,
-                isUpdatingDisplayName: false,
-                isUpdatingProfilePicture: true
-            )
-        }
     }
 }

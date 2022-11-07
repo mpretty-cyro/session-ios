@@ -439,6 +439,7 @@ public class SessionCell: UITableViewCell {
                 backgroundLeftConstraint.constant = Values.largeSpacing
                 backgroundRightConstraint.constant = -Values.largeSpacing
                 cellBackgroundView.themeBackgroundColor = nil
+                cellBackgroundView.layer.cornerRadius = 0
                 cellSelectedBackgroundView.isHidden = true
         }
         

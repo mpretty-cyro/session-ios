@@ -1026,9 +1026,12 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
                     profilePictureView.size = Values.verySmallProfilePictureSize
                     profilePictureView.update(
                         publicKey: threadData.threadId,  // Contact thread uses the contactId
+                        threadVariant: threadData.threadVariant,
+                        customImageData: nil,
                         profile: threadData.profile,
-                        threadVariant: threadData.threadVariant
+                        additionalProfile: nil
                     )
+                    
                     profilePictureView.set(.width, to: (44 - 16))   // Width of the standard back button
                     profilePictureView.set(.height, to: Values.verySmallProfilePictureSize)
 

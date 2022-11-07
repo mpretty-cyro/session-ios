@@ -46,15 +46,15 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel<NoNav, PhotoCollecti
                             let contents: PhotoCollectionContents = collection.contents()
                             let photoMediaSize: PhotoMediaSize = PhotoMediaSize(
                                 thumbnailSize: CGSize(
-                                    width: IconSize.veryLarge.size,
-                                    height: IconSize.veryLarge.size
+                                    width: IconSize.extraLarge.size,
+                                    height: IconSize.extraLarge.size
                                 )
                             )
                             let lastAssetItem: PhotoPickerAssetItem? = contents.lastAssetItem(photoMediaSize: photoMediaSize)
                             
                             return SessionCell.Info(
                                 id: Item(id: collection.id),
-                                leftAccessory: .iconAsync(size: .veryLarge, shouldFill: true) { imageView in
+                                leftAccessory: .iconAsync(size: .extraLarge, shouldFill: true) { imageView in
                                     // Note: We need to capture 'lastAssetItem' otherwise it'll be released and we won't
                                     // be able to load the thumbnail
                                     lastAssetItem?.asyncThumbnail { [weak imageView] image in

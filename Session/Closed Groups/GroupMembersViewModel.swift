@@ -44,6 +44,7 @@ class GroupMembersViewModel: SessionTableViewModel<NoNav, GroupMembersViewModel.
         case sessionId
         case search
         case member(Profile)
+        case emptyState
     }
     
     // MARK: - Variables
@@ -200,47 +201,97 @@ class GroupMembersViewModel: SessionTableViewModel<NoNav, GroupMembersViewModel.
         }
         .combineLatest(allProfilesSubject, searchTermPublisher)
         .map { [weak self] initialSections, allProfiles, searchTerm -> [SectionModel] in
-            initialSections
-                .appending(
-                    SectionModel(
-                        model: .members,
-                        elements: allProfiles
-                            .filter {
-                                searchTerm.isEmpty ||
-                                $0.displayName().lowercased().contains(searchTerm.lowercased())
-                            }
-                            .map { profile in
+            guard !allProfiles.isEmpty else {
+                return initialSections
+                    .appending(
+                        SectionModel(
+                            model: .members,
+                            elements: [
                                 SessionCell.Info(
-                                    id: .member(profile),
-                                    leftAccessory: .profile(
-                                        id: profile.id,
-                                        profile: profile
-                                    ),
-                                    title: profile.displayName(),
-                                    rightAccessory: (self?.variant == .list ? nil :
-                                        .radio(
-                                            isSelected: {
-                                                self?.selectedContactIdsSubject.value.contains(profile.id) == true
+                                    id: .emptyState,
+                                    title: SessionCell.TextInfo(
+                                        {
+                                            switch self?.variant {
+                                                case .promote: return "ADD_ADMIN_NO_NON_ADMINS".localized()
+                                                case .invite: return "GROUP_INVITE_NO_OTHER_CONTACTS".localized()
+                                                default: return "GROUP_MEMBERS_NO_CONTACTS".localized()
                                             }
-                                        )
+                                        }(),
+                                        font: .subtitle,
+                                        alignment: .center
                                     ),
-                                    accessibilityIdentifier: "\(GroupMembersViewModel.self).\(profile.id)",
-                                    onTap: {
-                                        var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
-
-                                        if !updatedSelectedIds.contains(profile.id) {
-                                            updatedSelectedIds.insert(profile.id)
-                                        }
-                                        else {
-                                            updatedSelectedIds.remove(profile.id)
-                                        }
-
-                                        self?.selectedContactIdsSubject.send(updatedSelectedIds)
-                                    }
+                                    styling: SessionCell.StyleInfo(
+                                        tintColor: .textSecondary,
+                                        backgroundStyle: .noBackground
+                                    )
                                 )
-                            }
+                            ]
+                        )
                     )
-                )
+            }
+            
+            // Filter the profiles based on the search term
+            let filteredProfileInfo: [SessionCell.Info<Setting>] = allProfiles
+                .filter {
+                    searchTerm.isEmpty ||
+                    $0.displayName().lowercased().contains(searchTerm.lowercased())
+                }
+                .map { profile -> SessionCell.Info<Setting> in
+                    SessionCell.Info(
+                        id: .member(profile),
+                        leftAccessory: .profile(
+                            id: profile.id,
+                            profile: profile
+                        ),
+                        title: profile.displayName(),
+                        rightAccessory: (self?.variant == .list ? nil :
+                            .radio(
+                                isSelected: {
+                                    self?.selectedContactIdsSubject.value.contains(profile.id) == true
+                                }
+                            )
+                        ),
+                        accessibilityIdentifier: "\(GroupMembersViewModel.self).\(profile.id)",
+                        onTap: {
+                            var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
+
+                            if !updatedSelectedIds.contains(profile.id) {
+                                updatedSelectedIds.insert(profile.id)
+                            }
+                            else {
+                                updatedSelectedIds.remove(profile.id)
+                            }
+
+                            self?.selectedContactIdsSubject.send(updatedSelectedIds)
+                        }
+                    )
+                }
+            
+            guard !filteredProfileInfo.isEmpty else {
+                return initialSections
+                    .appending(
+                        SectionModel(
+                            model: .members,
+                            elements: [
+                                SessionCell.Info(
+                                    id: .emptyState,
+                                    title: SessionCell.TextInfo(
+                                        "CONVERSATION_SEARCH_NO_RESULTS".localized(),
+                                        font: .subtitle,
+                                        alignment: .center
+                                    ),
+                                    styling: SessionCell.StyleInfo(
+                                        tintColor: .textSecondary,
+                                        backgroundStyle: .noBackground
+                                    )
+                                )
+                            ]
+                        )
+                    )
+            }
+            
+            return initialSections
+                .appending(SectionModel(model: .members, elements: filteredProfileInfo))
         }
         .removeDuplicates()
         .setFailureType(to: Error.self)

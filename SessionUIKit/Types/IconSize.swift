@@ -9,6 +9,7 @@ public enum IconSize: Differentiable {
     case medium
     case large
     case veryLarge
+    case extraLarge
     
     case fit
     
@@ -18,7 +19,8 @@ public enum IconSize: Differentiable {
             case .small: return 20
             case .medium: return 24
             case .large: return 32
-            case .veryLarge: return 80
+            case .veryLarge: return 40
+            case .extraLarge: return 80
             case .fit: return 0
         }
     }

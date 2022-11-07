@@ -74,6 +74,13 @@ public struct ProfileManager {
         return data
     }
     
+    public static func hasProfileImageData(with fileName: String?) -> Bool {
+        guard let fileName: String = fileName, !fileName.isEmpty else { return false }
+        
+        return FileManager.default
+            .fileExists(atPath: ProfileManager.profileAvatarFilepath(filename: fileName))
+    }
+    
     private static func loadProfileData(with fileName: String) -> Data? {
         let filePath: String = ProfileManager.profileAvatarFilepath(filename: fileName)
         
@@ -82,13 +89,13 @@ public struct ProfileManager {
     
     // MARK: - Profile Encryption
     
-    private static func encryptProfileData(data: Data, key: OWSAES256Key) -> Data? {
+    private static func encryptData(data: Data, key: OWSAES256Key) -> Data? {
         guard key.keyData.count == kAES256_KeyByteLength else { return nil }
         
         return Cryptography.encryptAESGCMProfileData(plainTextData: data, key: key)
     }
     
-    private static func decryptProfileData(data: Data, key: OWSAES256Key) -> Data? {
+    private static func decryptData(data: Data, key: OWSAES256Key) -> Data? {
         guard key.keyData.count == kAES256_KeyByteLength else { return nil }
         
         return Cryptography.decryptAESGCMProfileData(encryptedData: data, key: key)
@@ -195,7 +202,7 @@ public struct ProfileManager {
                         return
                     }
                     
-                    guard let decryptedData: Data = decryptProfileData(data: data, key: profileKeyAtStart) else {
+                    guard let decryptedData: Data = decryptData(data: data, key: profileKeyAtStart) else {
                         OWSLogger.warn("Avatar data for \(profile.id) could not be decrypted.")
                         return
                     }
@@ -238,6 +245,69 @@ public struct ProfileManager {
         image: UIImage?,
         imageFilePath: String?,
         success: ((Database, Profile) throws -> ())? = nil,
+        failure: ((ProfileManagerError) -> ())? = nil
+    ) {
+        prepareAndUploadAvatarImage(
+            queue: queue,
+            image: image,
+            imageFilePath: imageFilePath,
+            success: { fileInfo, newProfileKey in
+                // If we have no download url the we are removing the profile image
+                guard let (downloadUrl, fileName): (String, String) = fileInfo else {
+                    Storage.shared.writeAsync { db in
+                        let existingProfile: Profile = Profile.fetchOrCreateCurrentUser(db)
+                        
+                        OWSLogger.verbose(existingProfile.profilePictureUrl != nil ?
+                            "Updating local profile on service with cleared avatar." :
+                            "Updating local profile on service with no avatar."
+                        )
+                        
+                        let updatedProfile: Profile = try existingProfile
+                            .with(
+                                name: profileName,
+                                profilePictureUrl: nil,
+                                profilePictureFileName: nil,
+                                profileEncryptionKey: (existingProfile.profilePictureUrl != nil ?
+                                    .update(newProfileKey) :
+                                    .existing
+                                )
+                            )
+                            .saved(db)
+                        
+                        SNLog("Successfully updated service with profile.")
+                        try success?(db, updatedProfile)
+                    }
+                    return
+                }
+                
+                // Update user defaults
+                UserDefaults.standard[.lastProfilePictureUpload] = Date()
+                
+                // Update the profile
+                Storage.shared.writeAsync { db in
+                    let profile: Profile = try Profile
+                        .fetchOrCreateCurrentUser(db)
+                        .with(
+                            name: profileName,
+                            profilePictureUrl: .update(downloadUrl),
+                            profilePictureFileName: .update(fileName),
+                            profileEncryptionKey: .update(newProfileKey)
+                        )
+                        .saved(db)
+                    
+                    SNLog("Successfully updated service with profile.")
+                    try success?(db, profile)
+                }
+            },
+            failure: failure
+        )
+    }
+    
+    public static func prepareAndUploadAvatarImage(
+        queue: DispatchQueue,
+        image: UIImage?,
+        imageFilePath: String?,
+        success: @escaping ((downloadUrl: String, fileName: String)?, OWSAES256Key) -> (),
         failure: ((ProfileManagerError) -> ())? = nil
     ) {
         queue.async {
@@ -295,49 +365,33 @@ public struct ProfileManager {
                     failure?(profileManagerError)
                 }
                 return
-            } 
-            
-            guard let data: Data = avatarImageData else {
-                // If we have no image then we need to make sure to remove it from the profile
-                Storage.shared.writeAsync { db in
-                    let existingProfile: Profile = Profile.fetchOrCreateCurrentUser(db)
-                    
-                    OWSLogger.verbose(existingProfile.profilePictureUrl != nil ?
-                        "Updating local profile on service with cleared avatar." :
-                        "Updating local profile on service with no avatar."
-                    )
-                    
-                    let updatedProfile: Profile = try existingProfile
-                        .with(
-                            name: profileName,
-                            profilePictureUrl: nil,
-                            profilePictureFileName: nil,
-                            profileEncryptionKey: (existingProfile.profilePictureUrl != nil ?
-                                .update(newProfileKey) :
-                                .existing
-                            )
-                        )
-                        .saved(db)
-                    
-                    // Remove any cached avatar image value
-                    if let fileName: String = existingProfile.profilePictureFileName {
-                        profileAvatarCache.mutate { $0[fileName] = nil }
-                    }
-                    
-                    SNLog("Successfully updated service with profile.")
-                    
-                    try success?(db, updatedProfile)
-                }
-                return
             }
-
+            
+            // If we have no image then we should succeed (database changes happen in the callback)
+            guard let data: Data = avatarImageData else {
+                // Remove any cached avatar image value
+                let maybeExistingFileName: String? = Storage.shared
+                    .read { db in
+                        try Profile
+                            .select(.profilePictureFileName)
+                            .asRequest(of: String.self)
+                            .fetchOne(db)
+                    }
+                
+                if let fileName: String = maybeExistingFileName {
+                    profileAvatarCache.mutate { $0[fileName] = nil }
+                }
+                
+                return success(nil, newProfileKey)
+            }
+            
             // If we have a new avatar image, we must first:
             //
             // * Write it to disk.
             // * Encrypt it
             // * Upload it to asset service
             // * Send asset service info to Signal Service
-            OWSLogger.verbose("Updating local profile on service with new avatar.")
+            OWSLogger.verbose("Updating new avatar.")
             
             let fileName: String = UUID().uuidString
                 .appendingFileExtension(
@@ -350,14 +404,14 @@ public struct ProfileManager {
             // Write the avatar to disk
             do { try data.write(to: URL(fileURLWithPath: filePath), options: [.atomic]) }
             catch {
-                SNLog("Updating service with profile failed.")
+                SNLog("Updating avatar failed.")
                 failure?(.avatarWriteFailed)
                 return
             }
             
             // Encrypt the avatar for upload
-            guard let encryptedAvatarData: Data = encryptProfileData(data: data, key: newProfileKey) else {
-                SNLog("Updating service with profile failed.")
+            guard let encryptedAvatarData: Data = encryptData(data: data, key: newProfileKey) else {
+                SNLog("Updating avatar failed.")
                 failure?(.avatarEncryptionFailed)
                 return
             }
@@ -367,25 +421,12 @@ public struct ProfileManager {
                 .upload(encryptedAvatarData)
                 .done(on: queue) { fileUploadResponse in
                     let downloadUrl: String = "\(FileServerAPI.server)/files/\(fileUploadResponse.id)"
-                    UserDefaults.standard[.lastProfilePictureUpload] = Date()
                     
-                    Storage.shared.writeAsync { db in
-                        let profile: Profile = try Profile
-                            .fetchOrCreateCurrentUser(db)
-                            .with(
-                                name: profileName,
-                                profilePictureUrl: .update(downloadUrl),
-                                profilePictureFileName: .update(fileName),
-                                profileEncryptionKey: .update(newProfileKey)
-                            )
-                            .saved(db)
-                        
-                        // Update the cached avatar image value
-                        profileAvatarCache.mutate { $0[fileName] = data }
-                        
-                        SNLog("Successfully updated service with profile.")
-                        try success?(db, profile)
-                    }
+                    // Update the cached avatar image value
+                    profileAvatarCache.mutate { $0[fileName] = data }
+                    
+                    SNLog("Successfully uploaded avatar image.")
+                    success((downloadUrl, fileName), newProfileKey)
                 }
                 .recover(on: queue) { error in
                     SNLog("Updating service with profile failed.")

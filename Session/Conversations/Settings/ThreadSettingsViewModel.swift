@@ -239,6 +239,10 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
             let disappearingMessagesConfig: DisappearingMessagesConfiguration = try DisappearingMessagesConfiguration
                 .fetchOne(db, id: threadId)
                 .defaulting(to: DisappearingMessagesConfiguration.defaultWith(threadId))
+            let numGroupAdmins: Int = try GroupMember
+                .filter(GroupMember.Columns.profileId == threadId)
+                .filter(GroupMember.Columns.role == GroupMember.Role.admin)
+                .fetchCount(db)
             let currentUserIsClosedGroupMember: Bool = (
                 threadVariant == .closedGroup &&
                 threadViewModel.currentUserIsClosedGroupMember == true
@@ -249,7 +253,11 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
             )
             let hasClosedGroupDescription: Bool = (
                 threadVariant == .closedGroup &&
-                !(threadViewModel.closedGroupDescription ?? "").isEmpty
+                !(threadViewModel.closedGroup?.groupDescription ?? "").isEmpty
+            )
+            let canLeaveGroup: Bool = (
+                !currentUserIsClosedGroupMember ||
+                (currentUserIsClosedGroupAdmin && numGroupAdmins <= 1)
             )
             let editIcon: UIImage? = UIImage(named: "icon_edit")
             
@@ -261,22 +269,19 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                             id: .avatar,
                             accessory: .profile(
                                 id: threadViewModel.id,
-                                size: .veryLarge,
+                                size: .extraLarge,
+                                threadVariant: threadVariant,
+                                customImageData: threadViewModel.openGroupProfilePictureData,
                                 profile: threadViewModel.profile,
                                 additionalProfile: threadViewModel.additionalProfile,
-                                threadVariant: threadVariant,
-                                openGroupProfilePictureData: threadViewModel.openGroupProfilePictureData,
-                                useFallbackPicture: (
-                                    threadVariant == .openGroup &&
-                                    threadViewModel.openGroupProfilePictureData == nil
-                                ),
-                                showMultiAvatarForClosedGroup: true
+                                cornerIcon: nil
                             ),
                             styling: SessionCell.StyleInfo(
                                 alignment: .centerHugging,
                                 customPadding: SessionCell.Padding(bottom: Values.smallSpacing),
                                 backgroundStyle: .noBackground
-                            )
+                            ),
+                            onTap: { self?.viewProfilePicture(threadViewModel: threadViewModel) }
                         ),
                         SessionCell.Info(
                             id: .nickname,
@@ -339,7 +344,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                             SessionCell.Info(
                                 id: Setting.groupDescription,
                                 title: SessionCell.TextInfo(
-                                    (threadViewModel.closedGroupDescription ?? ""),
+                                    (threadViewModel.closedGroup?.groupDescription ?? ""),
                                     font: .subtitle,
                                     alignment: .center
                                 ),
@@ -666,7 +671,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                             )
                         ),
                         
-                        (!currentUserIsClosedGroupMember ? nil :
+                        (canLeaveGroup ? nil :
                             SessionCell.Info(
                                 id: .leaveGroup,
                                 leftAccessory: .icon(
@@ -804,7 +809,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
     
     // MARK: - Functions
 
-    private func updateProfilePicture(threadViewModel: SessionThreadViewModel) {
+    private func viewProfilePicture(threadViewModel: SessionThreadViewModel) {
         guard
             threadViewModel.threadVariant == .contact,
             let profile: Profile = threadViewModel.profile,

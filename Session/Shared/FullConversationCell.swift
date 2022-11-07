@@ -238,11 +238,10 @@ public final class FullConversationCell: UITableViewCell {
     public func updateForMessageSearchResult(with cellViewModel: SessionThreadViewModel, searchText: String) {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
-            profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile,
             threadVariant: cellViewModel.threadVariant,
-            openGroupProfilePictureData: cellViewModel.openGroupProfilePictureData,
-            useFallbackPicture: (cellViewModel.threadVariant == .openGroup && cellViewModel.openGroupProfilePictureData == nil)
+            customImageData: cellViewModel.openGroupProfilePictureData,
+            profile: cellViewModel.profile,
+            additionalProfile: cellViewModel.additionalProfile
         )
         
         isPinnedIcon.isHidden = true
@@ -289,11 +288,10 @@ public final class FullConversationCell: UITableViewCell {
     public func updateForContactAndGroupSearchResult(with cellViewModel: SessionThreadViewModel, searchText: String) {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
-            profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile,
             threadVariant: cellViewModel.threadVariant,
-            openGroupProfilePictureData: cellViewModel.openGroupProfilePictureData,
-            useFallbackPicture: (cellViewModel.threadVariant == .openGroup && cellViewModel.openGroupProfilePictureData == nil)
+            customImageData: cellViewModel.openGroupProfilePictureData,
+            profile: cellViewModel.profile,
+            additionalProfile: cellViewModel.additionalProfile
         )
         
         isPinnedIcon.isHidden = true
@@ -368,15 +366,10 @@ public final class FullConversationCell: UITableViewCell {
         )
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
-            profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile,
             threadVariant: cellViewModel.threadVariant,
-            openGroupProfilePictureData: cellViewModel.openGroupProfilePictureData,
-            useFallbackPicture: (
-                cellViewModel.threadVariant == .openGroup &&
-                cellViewModel.openGroupProfilePictureData == nil
-            ),
-            showMultiAvatarForClosedGroup: true
+            customImageData: cellViewModel.openGroupProfilePictureData,
+            profile: cellViewModel.profile,
+            additionalProfile: cellViewModel.additionalProfile
         )
         displayNameLabel.text = cellViewModel.displayName
         timestampLabel.text = cellViewModel.lastInteractionDate.formattedForDisplay

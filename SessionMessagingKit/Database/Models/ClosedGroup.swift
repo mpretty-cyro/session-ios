@@ -2,10 +2,11 @@
 
 import Foundation
 import GRDB
+import DifferenceKit
 import SignalCoreKit
 import SessionUtilitiesKit
 
-public struct ClosedGroup: Codable, Identifiable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
+public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Differentiable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
     public static var databaseTableName: String { "closedGroup" }
     internal static let threadForeignKey = ForeignKey([Columns.threadId], to: [SessionThread.Columns.id])
     private static let thread = belongsTo(SessionThread.self, using: threadForeignKey)
@@ -95,7 +96,7 @@ public struct ClosedGroup: Codable, Identifiable, FetchableRecord, PersistableRe
         groupImageUrl: String? = nil,
         groupImageFileName: String? = nil,
         groupImageEncryptionKey: OWSAES256Key? = nil,
-        groupDescription: String? = nil,// TODO: Remove default values?
+        groupDescription: String? = nil,
         formationTimestamp: TimeInterval
     ) {
         self.threadId = threadId
@@ -157,6 +158,28 @@ public extension ClosedGroup {
     }
 }
 
+// MARK: - Mutation
+
+public extension ClosedGroup {
+    func with(
+        name: String? = nil,
+        groupImageUrl: Updatable<String?> = .existing,
+        groupImageFileName: Updatable<String?> = .existing,
+        groupImageEncryptionKey: Updatable<OWSAES256Key?> = .existing,
+        groupDescription: Updatable<String?> = .existing
+    ) -> ClosedGroup {
+        return ClosedGroup(
+            threadId: threadId,
+            name: (name ?? self.name),
+            groupImageUrl: (groupImageUrl ?? self.groupImageUrl),
+            groupImageFileName: (groupImageFileName ?? self.groupImageFileName),
+            groupImageEncryptionKey: (groupImageEncryptionKey ?? self.groupImageEncryptionKey),
+            groupDescription: (groupDescription ?? self.groupDescription),
+            formationTimestamp: formationTimestamp
+        )
+    }
+}
+
 // MARK: - GRDB Interactions
 
 public extension ClosedGroup {
@@ -164,5 +187,19 @@ public extension ClosedGroup {
         return try keyPairs
             .order(ClosedGroupKeyPair.Columns.receivedTimestamp.desc)
             .fetchOne(db)
+    }
+}
+
+// MARK: - Convenience
+
+public extension ClosedGroup {
+    func asProfile() -> Profile {
+        return Profile(
+            id: threadId,
+            name: name,
+            profilePictureUrl: groupImageUrl,
+            profilePictureFileName: groupImageFileName,
+            profileEncryptionKey: groupImageEncryptionKey
+        )
     }
 }

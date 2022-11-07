@@ -171,6 +171,25 @@ extension SessionCell {
             return result
         }()
         
+        private lazy var profileIconContainerView: UIView = {
+            let result: UIView = UIView()
+            result.translatesAutoresizingMaskIntoConstraints = false
+            result.themeBackgroundColor = .primary
+            result.isHidden = true
+            result.set(.width, to: 26)
+            result.set(.height, to: 26)
+            result.layer.cornerRadius = (26 / 2)
+            
+            return result
+        }()
+        
+        private lazy var profileIconImageView: UIImageView = {
+            let result: UIImageView = UIImageView()
+            result.translatesAutoresizingMaskIntoConstraints = false
+            
+            return result
+        }()
+        
         private lazy var searchBar: UISearchBar = {
             let result: ContactsSearchBar = ContactsSearchBar()
             result.themeTintColor = .textPrimary
@@ -213,6 +232,7 @@ extension SessionCell {
             addSubview(radioBorderView)
             addSubview(highlightingBackgroundLabel)
             addSubview(profilePictureView)
+            addSubview(profileIconContainerView)
             addSubview(button)
             addSubview(searchBar)
             
@@ -221,6 +241,12 @@ extension SessionCell {
             
             radioBorderView.addSubview(radioView)
             radioView.center(in: radioBorderView)
+            
+            profileIconContainerView.addSubview(profileIconImageView)
+            
+            profileIconContainerView.pin(.bottom, to: .bottom, of: profilePictureView)
+            profileIconContainerView.pin(.trailing, to: .trailing, of: profilePictureView)
+            profileIconImageView.pin(to: profileIconContainerView, withInset: Values.verySmallSpacing)
         }
         
         // MARK: - Content
@@ -250,6 +276,7 @@ extension SessionCell {
             radioView.isHidden = true
             highlightingBackgroundLabel.isHidden = true
             profilePictureView.isHidden = true
+            profileIconContainerView.isHidden = true
             button.isHidden = true
             searchBar.isHidden = true
             
@@ -408,12 +435,11 @@ extension SessionCell {
                 case .profile(
                     let profileId,
                     let profileSize,
+                    let threadVariant,
+                    let customImageData,
                     let profile,
                     let additionalProfile,
-                    let threadVariant,
-                    let openGroupProfilePictureData,
-                    let useFallbackPicture,
-                    let showMultiAvatarForClosedGroup
+                    let cornerIcon
                 ):
                     // Note: We MUST set the 'size' property before triggering the 'update'
                     // function or the profile picture won't layout correctly
@@ -431,14 +457,14 @@ extension SessionCell {
                     
                     profilePictureView.update(
                         publicKey: profileId,
-                        profile: profile,
-                        additionalProfile: additionalProfile,
                         threadVariant: threadVariant,
-                        openGroupProfilePictureData: openGroupProfilePictureData,
-                        useFallbackPicture: useFallbackPicture,
-                        showMultiAvatarForClosedGroup: showMultiAvatarForClosedGroup
+                        customImageData: customImageData,
+                        profile: profile,
+                        additionalProfile: additionalProfile
                     )
                     profilePictureView.isHidden = false
+                    profileIconContainerView.isHidden = (cornerIcon == nil)
+                    profileIconImageView.image = cornerIcon
                     
                     fixedWidthConstraint.constant = profilePictureViewWidthConstraint.constant
                     fixedWidthConstraint.isActive = true

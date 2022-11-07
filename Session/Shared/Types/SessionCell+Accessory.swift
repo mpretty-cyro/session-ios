@@ -32,12 +32,11 @@ extension SessionCell {
         case profile(
             id: String,
             size: IconSize,
+            threadVariant: SessionThread.Variant,
+            customImageData: Data?,
             profile: Profile?,
             additionalProfile: Profile?,
-            threadVariant: SessionThread.Variant,
-            openGroupProfilePictureData: Data?,
-            useFallbackPicture: Bool,
-            showMultiAvatarForClosedGroup: Bool
+            cornerIcon: UIImage?
         )
         
         case search(
@@ -100,21 +99,19 @@ extension SessionCell {
                 case .profile(
                     let profileId,
                     let size,
+                    let threadVariant,
+                    let customImageData,
                     let profile,
                     let additionalProfile,
-                    let threadVariant,
-                    let openGroupProfilePictureData,
-                    let useFallbackPicture,
-                    let showMultiAvatarForClosedGroup
+                    let cornerIcon
                 ):
                     profileId.hash(into: &hasher)
                     size.hash(into: &hasher)
+                    threadVariant.hash(into: &hasher)
+                    customImageData.hash(into: &hasher)
                     profile.hash(into: &hasher)
                     additionalProfile.hash(into: &hasher)
-                    threadVariant.hash(into: &hasher)
-                    openGroupProfilePictureData.hash(into: &hasher)
-                    useFallbackPicture.hash(into: &hasher)
-                    showMultiAvatarForClosedGroup.hash(into: &hasher)
+                    cornerIcon.hash(into: &hasher)
                     
                 case .search(let placeholder, _):
                     placeholder.hash(into: &hasher)
@@ -164,33 +161,30 @@ extension SessionCell {
                     .profile(
                         let lhsProfileId,
                         let lhsSize,
+                        let lhsThreadVariant,
                         let lhsProfile,
                         let lhsAdditionalProfile,
-                        let lhsThreadVariant,
-                        let lhsOpenGroupProfilePictureData,
-                        let lhsUseFallbackPicture,
-                        let lhsShowMultiAvatarForClosedGroup
+                        let lhsCustomImageData,
+                        let lhsCornerIcon
                     ),
                     .profile(
                         let rhsProfileId,
                         let rhsSize,
+                        let rhsThreadVariant,
                         let rhsProfile,
                         let rhsAdditionalProfile,
-                        let rhsThreadVariant,
-                        let rhsOpenGroupProfilePictureData,
-                        let rhsUseFallbackPicture,
-                        let rhsShowMultiAvatarForClosedGroup
+                        let rhsCustomImageData,
+                        let rhsCornerIcon
                     )
                 ):
                     return (
                         lhsProfileId == rhsProfileId &&
                         lhsSize == rhsSize &&
+                        lhsThreadVariant == rhsThreadVariant &&
                         lhsProfile == rhsProfile &&
                         lhsAdditionalProfile == rhsAdditionalProfile &&
-                        lhsThreadVariant == rhsThreadVariant &&
-                        lhsOpenGroupProfilePictureData == rhsOpenGroupProfilePictureData &&
-                        lhsUseFallbackPicture == rhsUseFallbackPicture &&
-                        lhsShowMultiAvatarForClosedGroup == rhsShowMultiAvatarForClosedGroup
+                        lhsCustomImageData == rhsCustomImageData &&
+                        lhsCornerIcon == rhsCornerIcon
                     )
                     
                 case (.search(let lhsPlaceholder, _), .search(let rhsPlaceholder, _)):
@@ -268,13 +262,12 @@ extension SessionCell.Accessory {
     public static func profile(id: String, profile: Profile?) -> SessionCell.Accessory {
         return .profile(
             id: id,
-            size: .large,
+            size: .veryLarge,
+            threadVariant: .contact,
+            customImageData: nil,
             profile: profile,
             additionalProfile: nil,
-            threadVariant: .contact,
-            openGroupProfilePictureData: nil,
-            useFallbackPicture: false,
-            showMultiAvatarForClosedGroup: false
+            cornerIcon: nil
         )
     }
     
@@ -282,12 +275,11 @@ extension SessionCell.Accessory {
         return .profile(
             id: id,
             size: size,
+            threadVariant: .contact,
+            customImageData: nil,
             profile: profile,
             additionalProfile: nil,
-            threadVariant: .contact,
-            openGroupProfilePictureData: nil,
-            useFallbackPicture: false,
-            showMultiAvatarForClosedGroup: false
+            cornerIcon: nil
         )
     }
     

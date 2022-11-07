@@ -637,6 +637,7 @@
 		FD37EA1928AC5CCA003AE748 /* NotificationSoundViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37EA1828AC5CCA003AE748 /* NotificationSoundViewModel.swift */; };
 		FD37F5582908F5C3005A5E92 /* RemoveUsersModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37F5572908F5C3005A5E92 /* RemoveUsersModal.swift */; };
 		FD37F55A290F9E9A005A5E92 /* GroupMembersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37F559290F9E9A005A5E92 /* GroupMembersViewModel.swift */; };
+		FD37F560291867A8005A5E92 /* ImagePickerHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD37F55F291867A8005A5E92 /* ImagePickerHandler.swift */; };
 		FD39352C28F382920084DADA /* VersionFooterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39352B28F382920084DADA /* VersionFooterView.swift */; };
 		FD39353428F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */; };
 		FD39353628F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD39353528F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift */; };
@@ -1723,6 +1724,7 @@
 		FD37EA1A28ACB51F003AE748 /* _007_HomeQueryOptimisationIndexes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _007_HomeQueryOptimisationIndexes.swift; sourceTree = "<group>"; };
 		FD37F5572908F5C3005A5E92 /* RemoveUsersModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveUsersModal.swift; sourceTree = "<group>"; };
 		FD37F559290F9E9A005A5E92 /* GroupMembersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMembersViewModel.swift; sourceTree = "<group>"; };
+		FD37F55F291867A8005A5E92 /* ImagePickerHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePickerHandler.swift; sourceTree = "<group>"; };
 		FD39352B28F382920084DADA /* VersionFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionFooterView.swift; sourceTree = "<group>"; };
 		FD39353328F52A5C0084DADA /* ThreadNotificationSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadNotificationSettingsViewModel.swift; sourceTree = "<group>"; };
 		FD39353528F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _004_FlagMessageHashAsDeletedOrInvalid.swift; sourceTree = "<group>"; };
@@ -2921,6 +2923,7 @@
 				B86BD08523399CEF000F5AE3 /* SeedModal.swift */,
 				B894D0742339EDCF00B4D94D /* NukeDataModal.swift */,
 				FD37F5572908F5C3005A5E92 /* RemoveUsersModal.swift */,
+				FD37F55F291867A8005A5E92 /* ImagePickerHandler.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -5607,6 +5610,7 @@
 				4C090A1B210FD9C7001FD7F9 /* HapticFeedback.swift in Sources */,
 				7B9F71D12852EEE2006DFE7B /* EmojiWithSkinTones+String.swift in Sources */,
 				34F308A21ECB469700BB7697 /* OWSBezierPathView.m in Sources */,
+				FD37F560291867A8005A5E92 /* ImagePickerHandler.swift in Sources */,
 				B886B4A92398BA1500211ABE /* QRCode.swift in Sources */,
 				34B0796D1FCF46B100E248C2 /* MainAppContext.m in Sources */,
 				34A8B3512190A40E00218A25 /* MediaAlbumView.swift in Sources */,

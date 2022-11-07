@@ -198,8 +198,10 @@ private extension MentionSelectionView {
             displayNameLabel.text = profile.displayName(for: threadVariant)
             profilePictureView.update(
                 publicKey: profile.id,
+                threadVariant: threadVariant,
+                customImageData: nil,
                 profile: profile,
-                threadVariant: threadVariant
+                additionalProfile: nil
             )
             moderatorIconImageView.isHidden = !isUserModeratorOrAdmin
             separator.isHidden = isLast

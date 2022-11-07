@@ -59,6 +59,15 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
     private var editedGroupName: String?
     private var oldGroupDescription: String?
     private var editedGroupDescription: String?
+    private lazy var imagePickerHandler: ImagePickerHandler = ImagePickerHandler(
+        onTransition: { [weak self] in self?.transitionToScreen($0, transitionType: $1) },
+        onImagePicked: { [weak self] resultImage, resultImagePath in
+            self?.updateGroupImage(
+                profilePicture: resultImage,
+                profilePictureFilePath: resultImagePath
+            )
+        }
+    )
     
     // MARK: - Initialization
     
@@ -272,13 +281,13 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                             id: .avatar,
                             accessory: .profile(
                                 id: threadViewModel.id,
-                                size: .veryLarge,
+                                size: .extraLarge,
+                                threadVariant: .closedGroup,
+                                customImageData: nil,
                                 profile: threadViewModel.profile,
                                 additionalProfile: threadViewModel.additionalProfile,
-                                threadVariant: .closedGroup,
-                                openGroupProfilePictureData: nil,
-                                useFallbackPicture: false,
-                                showMultiAvatarForClosedGroup: true
+                                cornerIcon: UIImage(systemName: "plus")?
+                                    .withRenderingMode(.alwaysTemplate)
                             ),
                             styling: SessionCell.StyleInfo(
                                 alignment: .centerHugging,
@@ -286,7 +295,11 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                                 backgroundStyle: .noBackground
                             ),
                             onTap: {
-                                // TODO: avatarTapped
+                                self?.updateGroupImage(
+                                    hasCustomImage: ProfileManager.hasProfileImageData(
+                                        with: threadViewModel.closedGroup?.groupImageFileName
+                                    )
+                                )
                             }
                         ),
                         SessionCell.Info(
@@ -318,7 +331,7 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                         SessionCell.Info(
                             id: .groupDescription,
                             title: SessionCell.TextInfo(
-                                (threadViewModel.closedGroupDescription ?? ""),
+                                (threadViewModel.closedGroup?.groupDescription ?? ""),
                                 font: .subtitle,
                                 alignment: .center,
                                 editingPlaceholder: "GROUP_DESCRIPTION_PLACEHOLDER".localized(),
@@ -437,118 +450,132 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
     
     // MARK: - Functions
     
-    private func updateProfilePicture(threadViewModel: SessionThreadViewModel) {
-        guard
-            threadViewModel.threadVariant == .contact,
-            let profile: Profile = threadViewModel.profile,
-            let profileData: Data = ProfileManager.profileAvatar(profile: profile)
-        else { return }
-        
-        let format: ImageFormat = profileData.guessedImageFormat
-        let navController: UINavigationController = StyledNavigationController(
-            rootViewController: ProfilePictureVC(
-                image: (format == .gif || format == .webp ?
-                    nil :
-                    UIImage(data: profileData)
-                ),
-                animatedImage: (format != .gif && format != .webp ?
-                    nil :
-                    YYImage(data: profileData)
-                ),
-                title: threadViewModel.displayName
-            )
+    private func updateGroupImage(hasCustomImage: Bool) {
+        let actionSheet: UIAlertController = UIAlertController(
+            title: "Update Profile Picture",
+            message: nil,
+            preferredStyle: .actionSheet
         )
-        navController.modalPresentationStyle = .fullScreen
+        actionSheet.addAction(UIAlertAction(
+            title: "MEDIA_FROM_LIBRARY_BUTTON".localized(),
+            style: .default,
+            handler: { [weak self] _ in
+                self?.showPhotoLibraryForAvatar()
+            }
+        ))
         
-        self.transitionToScreen(navController, transitionType: .present)
+        // Only have the 'remove' button if there is a custom avatar set
+        if hasCustomImage {
+            actionSheet.addAction(UIAlertAction(
+                title: "REMOVE_AVATAR".localized(),
+                style: .destructive,
+                handler: { [weak self] _ in self?.removeGroupImage() }
+            ))
+        }
+        
+        actionSheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel, handler: nil))
+        
+        self.transitionToScreen(actionSheet, transitionType: .present)
     }
     
-    private func addUsersToOpenGoup(selectedUsers: Set<String>) {
-        let threadId: String = self.threadId
-        
-        dependencies.storage.writeAsync { db in
-            guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else { return }
+    private func showPhotoLibraryForAvatar() {
+        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
+            let picker: UIImagePickerController = UIImagePickerController()
+            picker.sourceType = .photoLibrary
+            picker.mediaTypes = [ "public.image" ]
+            picker.delegate = self?.imagePickerHandler
             
-            let urlString: String = "\(openGroup.server)/\(openGroup.roomToken)?public_key=\(openGroup.publicKey)"
-            
-            try selectedUsers.forEach { userId in
-                let thread: SessionThread = try SessionThread.fetchOrCreate(db, id: userId, variant: .contact)
-                
-                try LinkPreview(
-                    url: urlString,
-                    variant: .openGroupInvitation,
-                    title: openGroup.name
-                )
-                .save(db)
-                
-                let interaction: Interaction = try Interaction(
-                    threadId: thread.id,
-                    authorId: userId,
-                    variant: .standardOutgoing,
-                    timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000)),
-                    expiresInSeconds: try? DisappearingMessagesConfiguration
-                        .select(.durationSeconds)
-                        .filter(id: userId)
-                        .filter(DisappearingMessagesConfiguration.Columns.isEnabled == true)
-                        .asRequest(of: TimeInterval.self)
-                        .fetchOne(db),
-                    linkPreviewUrl: urlString
-                )
-                .inserted(db)
-                
-                try MessageSender.send(
-                    db,
-                    interaction: interaction,
-                    in: thread
-                )
-            }
+            self?.transitionToScreen(picker, transitionType: .present)
         }
     }
     
-    private func updateBlockedState(
-        from oldBlockedState: Bool,
-        isBlocked: Bool,
-        threadId: String,
-        displayName: String
-    ) {
-        guard oldBlockedState != isBlocked else { return }
+    private func removeGroupImage() {
+        let threadId: String = self.threadId
         
-        dependencies.storage.writeAsync(
-            updates: { db in
-                try Contact
-                    .fetchOrCreate(db, id: threadId)
-                    .with(isBlocked: .updateTo(isBlocked))
-                    .save(db)
-            },
-            completion: { [weak self] db, _ in
-                try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
-                
-                DispatchQueue.main.async {
-                    let modal: ConfirmationModal = ConfirmationModal(
-                        info: ConfirmationModal.Info(
-                            title: (oldBlockedState == false ?
-                                "BLOCK_LIST_VIEW_BLOCKED_ALERT_TITLE".localized() :
-                                String(
-                                    format: "BLOCK_LIST_VIEW_UNBLOCKED_ALERT_TITLE_FORMAT".localized(),
-                                    displayName
-                                )
-                            ),
-                            explanation: (oldBlockedState == false ?
-                                String(
-                                    format: "BLOCK_LIST_VIEW_BLOCKED_ALERT_MESSAGE_FORMAT".localized(),
-                                    displayName
-                                ) :
-                                nil
-                            ),
-                            cancelTitle: "BUTTON_OK".localized(),
-                            cancelStyle: .alert_text
-                        )
+        let viewController = ModalActivityIndicatorViewController(canCancel: false) { modalActivityIndicator in
+            Storage.shared.writeAsync { db in
+                try ClosedGroup
+                    .filter(id: threadId)
+                    .updateAll(
+                        db,
+                        ClosedGroup.Columns.groupImageUrl.set(to: nil),
+                        ClosedGroup.Columns.groupImageFileName.set(to: nil),
+                        ClosedGroup.Columns.groupImageEncryptionKey.set(to: nil)
                     )
-                    
-                    self?.transitionToScreen(modal, transitionType: .present)
+                
+                // Wait for the database transaction to complete before updating the UI
+                db.afterNextTransactionCommit { _ in
+                    DispatchQueue.main.async {
+                        modalActivityIndicator.dismiss(completion: {})
+                    }
                 }
             }
+        }
+        
+        self.transitionToScreen(viewController, transitionType: .present)
+    }
+    
+    fileprivate func updateGroupImage(profilePicture: UIImage?, profilePictureFilePath: String?) {
+        let threadId: String = self.threadId
+        let imageFilePath: String? = (
+            profilePictureFilePath ??
+            ProfileManager.profileAvatarFilepath(id: threadId)
         )
+        
+        let viewController = ModalActivityIndicatorViewController(canCancel: false) { [weak self] modalActivityIndicator in
+            ProfileManager.prepareAndUploadAvatarImage(
+                queue: DispatchQueue.global(qos: .userInitiated),
+                image: profilePicture,
+                imageFilePath: imageFilePath,
+                success: { fileInfo, newEncryptionKey in
+                    Storage.shared.writeAsync { db in
+                        try ClosedGroup
+                            .fetchOne(db, id: threadId)?
+                            .with(
+                                groupImageUrl: .update(fileInfo?.downloadUrl),
+                                groupImageFileName: .update(fileInfo?.fileName),
+                                // If there is no 'fileInfo' then this will be set to nil
+                                groupImageEncryptionKey: .update(fileInfo.map { _ in newEncryptionKey })
+                            )
+                            .save(db)
+                        
+                        // Wait for the database transaction to complete before updating the UI
+                        db.afterNextTransactionCommit { _ in
+                            DispatchQueue.main.async {
+                                modalActivityIndicator.dismiss(completion: {})
+                            }
+                        }
+                    }
+                },
+                failure: { [weak self] error in
+                    DispatchQueue.main.async {
+                        modalActivityIndicator.dismiss {
+                            let isMaxFileSizeExceeded: Bool = (error == .avatarUploadMaxFileSizeExceeded)
+
+                            self?.transitionToScreen(
+                                ConfirmationModal(
+                                    info: ConfirmationModal.Info(
+                                        title: (isMaxFileSizeExceeded ?
+                                            "Maximum File Size Exceeded" :
+                                            "Couldn't Update Profile"
+                                        ),
+                                        explanation: (isMaxFileSizeExceeded ?
+                                            "Please select a smaller photo and try again" :
+                                            "Please check your internet connection and try again"
+                                        ),
+                                        cancelTitle: "BUTTON_OK".localized(),
+                                        cancelStyle: .alert_text
+                                    )
+                                ),
+                                transitionType: .present
+                            )
+                        }
+                    }
+                }
+            )
+        }
+        
+        self.transitionToScreen(viewController, transitionType: .present)
     }
                     
     private func clearConversationMessagesForEveryone(threadId: String) {

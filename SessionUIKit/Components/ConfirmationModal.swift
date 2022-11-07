@@ -267,11 +267,6 @@ public class ConfirmationModal: Modal {
         cancelButton.setThemeTitleColor(info.cancelStyle, for: .normal)
         cancelButton.isHidden = (info.cancelTitle == nil)
         buttonStackView.isHidden = (confirmButton.isHidden && cancelButton.isHidden)
-        
-        mainStackViewBottomConstraint.constant = (buttonStackView.isHidden ?
-            -Values.largeSpacing :
-            -Values.verySmallSpacing
-        )
     }
     
     required init?(coder: NSCoder) {
@@ -285,7 +280,11 @@ public class ConfirmationModal: Modal {
         mainStackView.pin(.top, to: .top, of: contentView)
         mainStackView.pin(.leading, to: .leading, of: contentView)
         mainStackView.pin(.trailing, to: .trailing, of: contentView)
-        mainStackViewBottomConstraint.isActive = true
+        mainStackViewBottomConstraint.constant = (buttonStackView.isHidden ?
+            -Values.largeSpacing :
+            -Values.verySmallSpacing
+        )
+        
         closeButton.pin(.top, to: .top, of: contentView, withInset: Values.smallSpacing)
         closeButton.pin(.trailing, to: .trailing, of: contentView, withInset: -Values.smallSpacing)
     }
