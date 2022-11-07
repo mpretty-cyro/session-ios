@@ -71,7 +71,15 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
                 orderSQL: DataModel.orderSQL
             ),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                self?.contactDataSubject.send((updatedData, updatedPageInfo))
+                PagedData.processAndTriggerUpdates(
+                    updatedData: self?.process(data: updatedData, for: updatedPageInfo)
+                        .mapToSessionTableViewData(for: self),
+                    currentDataRetriever: { self?.tableData },
+                    onDataChange: { updatedData, changeset in
+                        self?.contactDataSubject.send((updatedData, changeset))
+                    },
+                    onUnobservedDataChange: { _, _ in }
+                )
             }
         )
         
@@ -90,7 +98,7 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
             .eraseToAnyPublisher()
     }
     
-    private let contactDataSubject: CurrentValueSubject<(contacts: [DataModel], pageInfo: PagedData.PageInfo), Never> = CurrentValueSubject(([], PagedData.PageInfo(pageSize: 0)))
+    private let contactDataSubject: CurrentValueSubject<([SectionModel], StagedChangeset<[SectionModel]>), Never> = CurrentValueSubject(([], StagedChangeset()))
     private let selectedContactIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
     private var _pagedDataObserver: PagedDatabaseObserver<Profile, DataModel>?
     public override var pagedDataObserver: TransactionObserver? { _pagedDataObserver }
@@ -98,13 +106,8 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
     public override var observableTableData: ObservableData { _observableTableData }
 
     private lazy var _observableTableData: ObservableData = contactDataSubject
-        .map { [weak self] contactData -> [SectionModel] in
-            (self?.process(data: contactData.contacts, for: contactData.pageInfo))
-                .defaulting(to: [])
-        }
         .setFailureType(to: Error.self)
         .eraseToAnyPublisher()
-        .mapToSessionTableViewData(for: self)
     
     override var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> {
         selectedContactIdsSubject

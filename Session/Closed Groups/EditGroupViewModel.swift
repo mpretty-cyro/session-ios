@@ -504,7 +504,7 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                     )
                 
                 // Wait for the database transaction to complete before updating the UI
-                db.afterNextTransactionCommit { _ in
+                db.afterNextTransaction { _ in
                     DispatchQueue.main.async {
                         modalActivityIndicator.dismiss(completion: {})
                     }
@@ -540,7 +540,7 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                             .save(db)
                         
                         // Wait for the database transaction to complete before updating the UI
-                        db.afterNextTransactionCommit { _ in
+                        db.afterNextTransaction { _ in
                             DispatchQueue.main.async {
                                 modalActivityIndicator.dismiss(completion: {})
                             }

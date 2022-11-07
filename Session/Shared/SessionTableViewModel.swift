@@ -84,7 +84,23 @@ class SessionTableViewModel<NavItemId: Equatable, Section: SessionTableSection, 
     }
 }
 
-// MARK: - Combine Convenience
+// MARK: - Convenience
+
+extension Array {
+    func mapToSessionTableViewData<Nav, Section, Item>(
+        for viewModel: SessionTableViewModel<Nav, Section, Item>?
+    ) -> [ArraySection<Section, SessionCell.Info<Item>>] where Element == ArraySection<Section, SessionCell.Info<Item>> {
+        // Update the data to include the proper position for each element
+        return self.map { section in
+            ArraySection(
+                model: section.model,
+                elements: section.elements.enumerated().map { index, element in
+                    element.updatedPosition(for: index, count: section.elements.count)
+                }
+            )
+        }
+    }
+}
 
 extension AnyPublisher {
     func mapToSessionTableViewData<Nav, Section, Item>(
@@ -92,15 +108,8 @@ extension AnyPublisher {
     ) -> AnyPublisher<(Output, StagedChangeset<Output>), Failure> where Output == [ArraySection<Section, SessionCell.Info<Item>>] {
         return self
             .map { [weak viewModel] updatedData -> (Output, StagedChangeset<Output>) in
-                // Update the data to include the proper position for each element
-                let updatedDataWithPositions: Output = updatedData.map { section in
-                    ArraySection(
-                        model: section.model,
-                        elements: section.elements.enumerated().map { index, element in
-                            element.updatedPosition(for: index, count: section.elements.count)
-                        }
-                    )
-                }
+                let updatedDataWithPositions: Output = updatedData
+                    .mapToSessionTableViewData(for: viewModel)
                 
                 // Generate an updated changeset
                 let changeset = StagedChangeset(
@@ -108,7 +117,7 @@ extension AnyPublisher {
                     target: updatedDataWithPositions
                 )
                 
-                return (updatedData, changeset)
+                return (updatedDataWithPositions, changeset)
             }
             .filter { [weak viewModel] _, changeset in
                 viewModel?.hasEmittedInitialData == false ||    // Always emit at least once

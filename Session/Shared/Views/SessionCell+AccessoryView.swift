@@ -490,7 +490,7 @@ extension SessionCell {
                     minWidthConstraint.isActive = true
                     buttonConstraints.forEach { $0.isActive = true }
                     
-                case .customView(let viewGenerator):
+                case .customView(_, let viewGenerator):
                     let generatedView: UIView = viewGenerator()
                     addSubview(generatedView)
                     

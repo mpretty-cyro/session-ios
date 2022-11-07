@@ -48,7 +48,10 @@ extension SessionCell {
             title: String,
             run: (SessionButton?) -> Void
         )
-        case customView(viewGenerator: () -> UIView)
+        case customView(
+            hashValue: AnyHashable,
+            viewGenerator: () -> UIView
+        )
         
         // MARK: - Convenience Vatiables
         
@@ -120,7 +123,8 @@ extension SessionCell {
                     style.hash(into: &hasher)
                     title.hash(into: &hasher)
                     
-                case .customView: break
+                case .customView(let hashValue, _):
+                    hashValue.hash(into: &hasher)
             }
         }
         
@@ -196,7 +200,10 @@ extension SessionCell {
                         lhsTitle == rhsTitle
                     )
                     
-                case (.customView, .customView): return false
+                case (.customView(let lhsHashValue, _), .customView(let rhsHashValue, _)):
+                    return (
+                        lhsHashValue.hashValue == rhsHashValue.hashValue
+                    )
                 
                 default: return false
             }
