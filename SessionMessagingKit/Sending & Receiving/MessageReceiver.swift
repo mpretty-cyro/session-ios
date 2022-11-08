@@ -38,7 +38,7 @@ public enum MessageReceiver {
                 case .sessionMessage:
                     // Default to 'standard' as the old code didn't seem to require an `envelope.source`
                     switch (SessionId.Prefix(from: envelope.source) ?? .standard) {
-                        case .standard, .unblinded:
+                        case .standard, .unblinded, .closedGroup:
                             guard let userX25519KeyPair: Box.KeyPair = Identity.fetchUserKeyPair(db) else {
                                 throw MessageReceiverError.noUserX25519KeyPair
                             }
@@ -189,8 +189,8 @@ public enum MessageReceiver {
             case let message as TypingIndicator:
                 try MessageReceiver.handleTypingIndicator(db, message: message)
                 
-            case let message as ClosedGroupControlMessage:
-                try MessageReceiver.handleClosedGroupControlMessage(db, message)
+            case let message as LegacyClosedGroupControlMessage:
+                try MessageReceiver.handleLegacyClosedGroupControlMessage(db, message)
                 
             case let message as DataExtractionNotification:
                 try MessageReceiver.handleDataExtractionNotification(db, message: message)

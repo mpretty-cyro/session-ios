@@ -869,7 +869,7 @@ public final class OpenGroupManager: NSObject {
                 let userPublicKey: String = getUserHexEncodedPublicKey(db, dependencies: dependencies)
                 
                 switch sessionId.prefix {
-                    case .standard:
+                    case .standard, .closedGroup:
                         guard publicKey == userPublicKey else { return false }
                         fallthrough
                         

@@ -169,17 +169,32 @@ public extension SessionThread {
     }
     
     func isMessageRequest(_ db: Database, includeNonVisible: Bool = false) -> Bool {
-        return (
-            (includeNonVisible || shouldBeVisible) &&
-            variant == .contact &&
-            id != getUserHexEncodedPublicKey(db) && // Note to self
-            (try? Contact
-                .filter(id: id)
-                .select(.isApproved)
-                .asRequest(of: Bool.self)
-                .fetchOne(db))
-                .defaulting(to: false) == false
-        )
+        guard shouldBeVisible || includeNonVisible else { return false }
+        
+        switch variant {
+            case .contact:
+                return (
+                    id != getUserHexEncodedPublicKey(db) && // Note to self
+                    (try? Contact
+                        .filter(id: id)
+                        .select(.isApproved)
+                        .asRequest(of: Bool.self)
+                        .fetchOne(db))
+                        .defaulting(to: false) == false
+                )
+                
+            case .closedGroup:
+                return (
+                    (try? ClosedGroup
+                        .filter(id: id)
+                        .select(.isApproved)
+                        .asRequest(of: Bool.self)
+                        .fetchOne(db))
+                        .defaulting(to: false) == false
+                )
+                
+            case .openGroup: return false
+        }
     }
 }
 
@@ -189,11 +204,13 @@ public extension SessionThread {
     static func messageRequestsQuery(userPublicKey: String, includeNonVisible: Bool = false) -> SQLRequest<SessionThread> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
+        let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         
         return """
             SELECT \(thread.allColumns())
             FROM \(SessionThread.self)
             LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(thread[.id])
+            LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(thread[.id])
             WHERE (
                 \(SessionThread.isMessageRequest(userPublicKey: userPublicKey, includeNonVisible: includeNonVisible))
             )
@@ -204,6 +221,7 @@ public extension SessionThread {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
+        let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         
         return """
             SELECT COUNT(DISTINCT id) FROM (
@@ -214,6 +232,7 @@ public extension SessionThread {
                     \(interaction[.wasRead]) = false
                 )
                 LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(thread[.id])
+                LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(thread[.id])
                 WHERE (
                     \(SessionThread.isMessageRequest(userPublicKey: userPublicKey, includeNonVisible: includeNonVisible))
                 )
@@ -228,6 +247,7 @@ public extension SessionThread {
     static func isMessageRequest(userPublicKey: String, includeNonVisible: Bool = false) -> SQLSpecificExpressible {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
+        let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         let shouldBeVisibleSQL: SQL = (includeNonVisible ?
             SQL(stringLiteral: "true") :
             SQL("\(thread[.shouldBeVisible]) = true")
@@ -235,10 +255,47 @@ public extension SessionThread {
         
         return SQL(
             """
-                \(shouldBeVisibleSQL) AND
-                \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)")) AND
-                \(SQL("\(thread[.id]) != \(userPublicKey)")) AND
-                IFNULL(\(contact[.isApproved]), false) = false
+                \(shouldBeVisibleSQL) AND (
+                    (
+                        \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)")) AND
+                        \(SQL("\(thread[.id]) != \(userPublicKey)")) AND
+                        IFNULL(\(contact[.isApproved]), false) = false
+                    ) OR (
+                        \(SQL("\(thread[.variant]) = \(SessionThread.Variant.closedGroup)")) AND
+                        IFNULL(\(closedGroup[.isApproved]), false) = false
+                    )
+                )
+            """
+        )
+    }
+    
+    static func isNotMessageRequest(userPublicKey: String) -> SQLSpecificExpressible {
+        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
+        let contact: TypedTableAlias<Contact> = TypedTableAlias()
+        let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
+        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+        
+        return SQL(
+            """
+                \(thread[.shouldBeVisible]) = true AND (
+                    (
+                        -- Is not a one-to-one message request
+                        \(SQL("\(thread[.variant]) == \(SessionThread.Variant.contact)")) AND
+                        \(SQL("\(thread[.id]) != \(userPublicKey)")) AND
+                        \(contact[.isApproved]) = true
+                    ) OR (
+                        -- Is not a group message request
+                        \(SQL("\(thread[.variant]) == \(SessionThread.Variant.closedGroup)")) AND
+                        \(closedGroup[.isApproved]) = true
+                    ) OR (
+                        -- Only show the 'Note to Self' thread if it has an interaction
+                        \(SQL("\(thread[.id]) == \(userPublicKey)")) AND
+                        \(interaction[.timestampMs]) IS NOT NULL
+                    ) OR (
+                        -- All open groups are allowed
+                        \(SQL("\(thread[.variant]) == \(SessionThread.Variant.openGroup)"))
+                    )
+                )
             """
         )
     }

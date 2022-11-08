@@ -471,8 +471,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                                     )
                                     .filter(
                                         // Ignore message request threads
-                                        SessionThread.Columns.variant != SessionThread.Variant.contact ||
-                                        !SessionThread.isMessageRequest(userPublicKey: userPublicKey)
+                                        SessionThread.isNotMessageRequest(userPublicKey: userPublicKey)
                                     )
                             )
                             .fetchCount(db)

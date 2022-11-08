@@ -63,18 +63,6 @@ public class Message: Codable {
     public func toProto(_ db: Database) -> SNProtoContent? {
         preconditionFailure("toProto(_:) is abstract and must be overridden.")
     }
-
-    public func setGroupContextIfNeeded(_ db: Database, on dataMessage: SNProtoDataMessage.SNProtoDataMessageBuilder) throws {
-        guard
-            let threadId: String = threadId,
-            (try? ClosedGroup.exists(db, id: threadId)) == true,
-            let legacyGroupId: Data = "\(SMKLegacy.closedGroupIdPrefix)\(threadId)".data(using: .utf8)
-        else { return }
-        
-        // Android needs a group context or it'll interpret the message as a one-to-one message
-        let groupProto = SNProtoGroupContext.builder(id: legacyGroupId, type: .deliver)
-        dataMessage.setGroup(try groupProto.build())
-    }
 }
 
 // MARK: - Message Parsing/Processing
@@ -91,7 +79,7 @@ public extension Message {
     enum Variant: String, Codable {
         case readReceipt
         case typingIndicator
-        case closedGroupControlMessage
+        case closedGroupControlMessage  // Legacy version
         case dataExtractionNotification
         case expirationTimerUpdate
         case configurationMessage
@@ -104,7 +92,7 @@ public extension Message {
             switch type {
                 case is ReadReceipt: self = .readReceipt
                 case is TypingIndicator: self = .typingIndicator
-                case is ClosedGroupControlMessage: self = .closedGroupControlMessage
+                case is LegacyClosedGroupControlMessage: self = .closedGroupControlMessage
                 case is DataExtractionNotification: self = .dataExtractionNotification
                 case is ExpirationTimerUpdate: self = .expirationTimerUpdate
                 case is ConfigurationMessage: self = .configurationMessage
@@ -120,7 +108,7 @@ public extension Message {
             switch self {
                 case .readReceipt: return ReadReceipt.self
                 case .typingIndicator: return TypingIndicator.self
-                case .closedGroupControlMessage: return ClosedGroupControlMessage.self
+                case .closedGroupControlMessage: return LegacyClosedGroupControlMessage.self
                 case .dataExtractionNotification: return DataExtractionNotification.self
                 case .expirationTimerUpdate: return ExpirationTimerUpdate.self
                 case .configurationMessage: return ConfigurationMessage.self
@@ -137,7 +125,7 @@ public extension Message {
                 case .typingIndicator: return try container.decode(TypingIndicator.self, forKey: key)
                 
                 case .closedGroupControlMessage:
-                    return try container.decode(ClosedGroupControlMessage.self, forKey: key)
+                    return try container.decode(LegacyClosedGroupControlMessage.self, forKey: key)
                     
                 case .dataExtractionNotification:
                     return try container.decode(DataExtractionNotification.self, forKey: key)
@@ -178,7 +166,7 @@ public extension Message {
     
     static func shouldSync(message: Message) -> Bool {
         switch message {
-            case let controlMessage as ClosedGroupControlMessage:
+            case let controlMessage as LegacyClosedGroupControlMessage:
                 switch controlMessage.kind {
                     case .new: return true
                     default: return false
@@ -502,10 +490,10 @@ public extension Message {
         /// these as jobs as they will be fully handled in here)
         if handleClosedGroupKeyUpdateMessages {
             switch message {
-                case let closedGroupControlMessage as ClosedGroupControlMessage:
+                case let closedGroupControlMessage as LegacyClosedGroupControlMessage:
                     switch closedGroupControlMessage.kind {
                         case .encryptionKeyPair:
-                            try MessageReceiver.handleClosedGroupControlMessage(db, closedGroupControlMessage)
+                            try MessageReceiver.handleLegacyClosedGroupControlMessage(db, closedGroupControlMessage)
                             return nil
                             
                         default: break

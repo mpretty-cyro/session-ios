@@ -658,12 +658,14 @@ public extension SessionThreadViewModel {
     static var optimisedJoinSQL: SQL = {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
+        let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
         
         let interactionTimestampMsColumnLiteral: SQL = SQL(stringLiteral: Interaction.Columns.timestampMs.name)
         
         return """
             LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(thread[.id])
+            LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(thread[.id])
             LEFT JOIN (
                 SELECT
                     \(interaction[.threadId]),
@@ -676,36 +678,11 @@ public extension SessionThreadViewModel {
     }()
     
     static func homeFilterSQL(userPublicKey: String) -> SQL {
-        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
-        let contact: TypedTableAlias<Contact> = TypedTableAlias()
-        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-        
-        return """
-            \(thread[.shouldBeVisible]) = true AND (
-                -- Is not a message request
-                \(SQL("\(thread[.variant]) != \(SessionThread.Variant.contact)")) OR
-                \(SQL("\(thread[.id]) = \(userPublicKey)")) OR
-                \(contact[.isApproved]) = true
-            ) AND (
-                -- Only show the 'Note to Self' thread if it has an interaction
-                \(SQL("\(thread[.id]) != \(userPublicKey)")) OR
-                \(interaction[.timestampMs]) IS NOT NULL
-            )
-        """
+        return SQL(SessionThread.isNotMessageRequest(userPublicKey: userPublicKey))
     }
     
     static func messageRequestsFilterSQL(userPublicKey: String) -> SQL {
-        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
-        let contact: TypedTableAlias<Contact> = TypedTableAlias()
-        
-        return """
-            \(thread[.shouldBeVisible]) = true AND (
-                -- Is a message request
-                \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)")) AND
-                \(SQL("\(thread[.id]) != \(userPublicKey)")) AND
-                IFNULL(\(contact[.isApproved]), false) = false
-            )
-        """
+        return SQL(SessionThread.isMessageRequest(userPublicKey: userPublicKey))
     }
     
     static let groupSQL: SQL = {
@@ -760,11 +737,7 @@ public extension SessionThreadViewModel {
                 \(thread[.creationDateTimestamp]) AS \(ViewModel.threadCreationDateTimestampKey),
                 
                 (\(SQL("\(thread[.id]) = \(userPublicKey)"))) AS \(ViewModel.threadIsNoteToSelfKey),
-                (
-                    \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)")) AND
-                    \(SQL("\(thread[.id]) != \(userPublicKey)")) AND
-                    IFNULL(\(contact[.isApproved]), false) = false
-                ) AS \(ViewModel.threadIsMessageRequestKey),
+                (\(SessionThread.isMessageRequest(userPublicKey: userPublicKey))) AS \(ViewModel.threadIsMessageRequestKey),
                 (
                     \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)")) AND
                     IFNULL(\(contact[.didApproveMe]), false) = false
@@ -1648,16 +1621,7 @@ public extension SessionThreadViewModel {
             )
             
             WHERE (
-                \(thread[.shouldBeVisible]) = true AND (
-                    -- Is not a message request
-                    \(SQL("\(thread[.variant]) != \(SessionThread.Variant.contact)")) OR
-                    \(SQL("\(thread[.id]) = \(userPublicKey)")) OR
-                    \(contact[.isApproved]) = true
-                ) AND (
-                    -- Only show the 'Note to Self' thread if it has an interaction
-                    \(SQL("\(thread[.id]) != \(userPublicKey)")) OR
-                    \(interaction[.id]) IS NOT NULL
-                )
+                \(SessionThread.isNotMessageRequest(userPublicKey: userPublicKey))
             )
         
             GROUP BY \(thread[.id])

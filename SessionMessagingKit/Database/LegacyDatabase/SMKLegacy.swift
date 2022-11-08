@@ -11,7 +11,6 @@ public enum SMKLegacy {
     
     internal static let contactThreadPrefix = "c"
     internal static let groupThreadPrefix = "g"
-    internal static let closedGroupIdPrefix = "__textsecure_group__!"
     internal static let openGroupIdPrefix = "__loki_public_chat_group__!"
     internal static let closedGroupKeyPairPrefix = "SNClosedGroupEncryptionKeyPairCollection-"
     
@@ -473,7 +472,7 @@ public enum SMKLegacy {
         
         override internal func toNonLegacy(_ instance: Message? = nil) throws -> Message {
             return try super.toNonLegacy(
-                ClosedGroupControlMessage(
+                LegacyClosedGroupControlMessage(
                     kind: try {
                         switch rawKind {
                             case "new":
@@ -517,7 +516,7 @@ public enum SMKLegacy {
                                             throw StorageError.migrationFailed
                                         }
 
-                                        return SessionMessagingKit.ClosedGroupControlMessage.KeyPairWrapper(
+                                        return SessionMessagingKit.LegacyClosedGroupControlMessage.KeyPairWrapper(
                                             publicKey: publicKey,
                                             encryptedKeyPair: encryptedKeyPair
                                         )

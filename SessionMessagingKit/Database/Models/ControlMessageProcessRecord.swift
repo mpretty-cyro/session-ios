@@ -33,7 +33,7 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
         
         case readReceipt = 1
         case typingIndicator = 2
-        case closedGroupControlMessage = 3
+        case legacyClosedGroupControlMessage = 3
         case dataExtractionNotification = 4
         case expirationTimerUpdate = 5
         case configurationMessage = 6
@@ -88,8 +88,8 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
         // • This method was invoked and the received message timestamps table was updated
         // • Processing wasn't finished
         // • The user doesn't see the new closed group
-        if case .new = (message as? ClosedGroupControlMessage)?.kind { return nil }
-        if case .encryptionKeyPair = (message as? ClosedGroupControlMessage)?.kind { return nil }
+        if case .new = (message as? LegacyClosedGroupControlMessage)?.kind { return nil }
+        if case .encryptionKeyPair = (message as? LegacyClosedGroupControlMessage)?.kind { return nil }
         
         // For all other cases we want to prevent duplicate handling of the message (this
         // can happen in a number of situations, primarily with sync messages though hence
@@ -99,7 +99,7 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
             switch message {
                 case is ReadReceipt: return .readReceipt
                 case is TypingIndicator: return .typingIndicator
-                case is ClosedGroupControlMessage: return .closedGroupControlMessage
+                case is LegacyClosedGroupControlMessage: return .legacyClosedGroupControlMessage
                 case is DataExtractionNotification: return .dataExtractionNotification
                 case is ExpirationTimerUpdate: return .expirationTimerUpdate
                 case is ConfigurationMessage: return .configurationMessage
@@ -151,7 +151,7 @@ internal extension ControlMessageProcessRecord {
                 return nil
                 
             case .infoClosedGroupUpdated, .infoClosedGroupCurrentUserLeft:
-                self.variant = .closedGroupControlMessage
+                self.variant = .legacyClosedGroupControlMessage
             
             case .infoDisappearingMessagesUpdate:
                 self.variant = .expirationTimerUpdate

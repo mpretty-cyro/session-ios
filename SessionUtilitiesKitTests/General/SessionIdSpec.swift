@@ -47,6 +47,8 @@ class SessionIdSpec: QuickSpec {
                     .to(equal("0588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
                 expect(SessionId(.blinded, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
                     .to(equal("1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
+                expect(SessionId(.closedGroup, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
+                    .to(equal("0388672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
             }
         }
         
@@ -57,6 +59,7 @@ class SessionIdSpec: QuickSpec {
                         expect(SessionId.Prefix(from: "00")).to(equal(.unblinded))
                         expect(SessionId.Prefix(from: "05")).to(equal(.standard))
                         expect(SessionId.Prefix(from: "15")).to(equal(.blinded))
+                        expect(SessionId.Prefix(from: "03")).to(equal(.closedGroup))
                     }
                     
                     it("fails when nil") {

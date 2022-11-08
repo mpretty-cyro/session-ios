@@ -18,7 +18,12 @@ enum _011_AddClosedGroupInfo: Migration {
             t.add(.groupImageUrl, .text)
             t.add(.groupImageFileName, .text)
             t.add(.groupImageEncryptionKey, .text)
+            t.add(.isApproved, .boolean)
         }
+        
+        // Mark all existing closed groups as approved
+        try ClosedGroup
+            .updateAll(db, ClosedGroup.Columns.isApproved.set(to: true))
         
         Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
     }

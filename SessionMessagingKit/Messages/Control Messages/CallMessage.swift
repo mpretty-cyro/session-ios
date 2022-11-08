@@ -74,7 +74,7 @@ public final class CallMessage: ControlMessage {
                 
                 case Kind.endCall.description: self = .endCall
                     
-                default: fatalError("Invalid case when trying to decode ClosedGroupControlMessage.Kind")
+                default: fatalError("Invalid case when trying to decode LegacyClosedGroupControlMessage.Kind")
             }
         }
         

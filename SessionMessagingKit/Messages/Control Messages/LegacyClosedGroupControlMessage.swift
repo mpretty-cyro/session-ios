@@ -6,7 +6,7 @@ import Sodium
 import Curve25519Kit
 import SessionUtilitiesKit
 
-public final class ClosedGroupControlMessage: ControlMessage {
+public final class LegacyClosedGroupControlMessage: ControlMessage {
     private enum CodingKeys: String, CodingKey {
         case kind
     }
@@ -92,7 +92,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
                 case Kind.encryptionKeyPair(publicKey: nil, wrappers: []).description:
                     self = .encryptionKeyPair(
                         publicKey: try? container.decode(Data.self, forKey: .publicKey),
-                        wrappers: try container.decode([ClosedGroupControlMessage.KeyPairWrapper].self, forKey: .wrappers)
+                        wrappers: try container.decode([LegacyClosedGroupControlMessage.KeyPairWrapper].self, forKey: .wrappers)
                     )
                     
                 case Kind.nameChange(name: "").description:
@@ -236,7 +236,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
 
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> ClosedGroupControlMessage? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> LegacyClosedGroupControlMessage? {
         guard let closedGroupControlMessageProto = proto.dataMessage?.closedGroupControlMessage else {
             return nil
         }
@@ -249,7 +249,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
                     let encryptionKeyPairAsProto = closedGroupControlMessageProto.encryptionKeyPair
                 else { return nil }
                 
-                return ClosedGroupControlMessage(
+                return LegacyClosedGroupControlMessage(
                     kind: .new(
                         publicKey: publicKey,
                         name: name,
@@ -264,7 +264,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
                 )
                 
             case .encryptionKeyPair:
-                return ClosedGroupControlMessage(
+                return LegacyClosedGroupControlMessage(
                     kind: .encryptionKeyPair(
                         publicKey: closedGroupControlMessageProto.publicKey,
                         wrappers: closedGroupControlMessageProto.wrappers
@@ -275,22 +275,22 @@ public final class ClosedGroupControlMessage: ControlMessage {
             case .nameChange:
                 guard let name = closedGroupControlMessageProto.name else { return nil }
                 
-                return ClosedGroupControlMessage(kind: .nameChange(name: name))
+                return LegacyClosedGroupControlMessage(kind: .nameChange(name: name))
                 
             case .membersAdded:
-                return ClosedGroupControlMessage(
+                return LegacyClosedGroupControlMessage(
                     kind: .membersAdded(members: closedGroupControlMessageProto.members)
                 )
                 
             case .membersRemoved:
-                return ClosedGroupControlMessage(
+                return LegacyClosedGroupControlMessage(
                     kind: .membersRemoved(members: closedGroupControlMessageProto.members)
                 )
                 
-            case .memberLeft: return ClosedGroupControlMessage(kind: .memberLeft)
+            case .memberLeft: return LegacyClosedGroupControlMessage(kind: .memberLeft)
                 
             case .encryptionKeyPairRequest:
-                return ClosedGroupControlMessage(kind: .encryptionKeyPairRequest)
+                return LegacyClosedGroupControlMessage(kind: .encryptionKeyPairRequest)
         }
     }
 
@@ -339,8 +339,6 @@ public final class ClosedGroupControlMessage: ControlMessage {
             let contentProto = SNProtoContent.builder()
             let dataMessageProto = SNProtoDataMessage.builder()
             dataMessageProto.setClosedGroupControlMessage(try closedGroupControlMessage.build())
-            // Group context
-            try setGroupContextIfNeeded(db, on: dataMessageProto)
             contentProto.setDataMessage(try dataMessageProto.build())
             return try contentProto.build()
         } catch {
@@ -362,7 +360,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
 
 // MARK: - Convenience
 
-public extension ClosedGroupControlMessage.Kind {
+public extension LegacyClosedGroupControlMessage.Kind {
     func infoMessage(_ db: Database, sender: String) throws -> String? {
         switch self {
             case .nameChange(let name):

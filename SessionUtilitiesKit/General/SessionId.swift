@@ -9,6 +9,7 @@ public struct SessionId {
         case standard = "05"    // Used for identified users, open groups, etc.
         case blinded = "15"     // Used for authentication and participants in open groups with blinding enabled
         case unblinded = "00"   // Used for authentication in open groups with blinding disabled
+        case closedGroup = "03" // Used for updated closed groups
         
         public init?(from stringValue: String?) {
             guard let stringValue: String = stringValue else { return nil }

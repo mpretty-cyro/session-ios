@@ -79,7 +79,7 @@ extension MessageReceiver {
                         .standardIncoming
                     )
                     
-                case .standard, .unblinded:
+                case .standard, .unblinded, .closedGroup:
                     return (sender == currentUserPublicKey ?
                         .standardOutgoing :
                         .standardIncoming

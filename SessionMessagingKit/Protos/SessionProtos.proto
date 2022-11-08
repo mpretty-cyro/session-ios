@@ -48,6 +48,41 @@ message MessageRequestResponse {
   optional LokiProfile               profile                   = 3;
 }
 
+// this will replace our closedGroupControlMessage but we will need to keep both for some time
+message GroupMessage {
+  optional GroupDeleteMessage          deleteMessage        = 31;
+  optional GroupMemberLeftMessage      memberLeftMessage    = 32;
+  optional GroupInviteMessage          inviteMessage        = 33;
+  optional GroupPromoteMessage         promoteMessage       = 34;
+}
+
+message GroupDeleteMessage {
+  // @required
+  required bytes          publicKey         = 1; // the identity public key of the group to be deleted
+  // @required
+  required bytes          lastEncryptionKey = 2; // used by members to make sure incoming admin action can be trusted
+}
+
+message GroupInviteMessage {
+  // @required
+  required bytes          publicKey         = 1; // this is the group public key
+  // @required
+  required string         name              = 2;
+  // @required
+  required bytes          memberPrivateKey  = 3;
+}
+
+message GroupPromoteMessage {
+  // @required
+  required bytes          publicKey           = 1; // this is the session id for the user that should be promoted
+  // @required
+  required bytes          encryptedPrivateKey = 2; // this is the group admins key
+}
+
+message GroupMemberLeftMessage {
+  // the pubkey of the member left is included as part of the closed group encryption logic
+}
+
 message Content {
   optional DataMessage                dataMessage                = 1;
   optional CallMessage                callMessage                = 3;
@@ -193,7 +228,6 @@ message DataMessage {
 
   optional string                    body                      = 1;
   repeated AttachmentPointer         attachments               = 2;
-  optional GroupContext              group                     = 3;
   optional uint32                    flags                     = 4;
   optional uint32                    expireTimer               = 5;
   optional bytes                     profileKey                = 6;
@@ -205,6 +239,7 @@ message DataMessage {
   optional OpenGroupInvitation       openGroupInvitation       = 102;
   optional ClosedGroupControlMessage closedGroupControlMessage = 104;
   optional string                    syncTarget                = 105;
+  optional GroupMessage              groupMessage              = 120;
 }
 
 message ConfigurationMessage {
@@ -269,24 +304,4 @@ message AttachmentPointer {
   optional uint32  height      = 10;
   optional string  caption     = 11;
   optional string  url         = 101;
-}
-
-message GroupContext {
-
-  enum Type {
-    UNKNOWN      = 0;
-    UPDATE       = 1;
-    DELIVER      = 2;
-    QUIT         = 3;
-    REQUEST_INFO = 4;
-  }
-
-  // @required
-  optional bytes             id      = 1;
-  // @required
-  optional Type              type    = 2;
-  optional string            name    = 3;
-  repeated string            members = 4;
-  optional AttachmentPointer avatar  = 5;
-  repeated string            admins  = 6;
 }

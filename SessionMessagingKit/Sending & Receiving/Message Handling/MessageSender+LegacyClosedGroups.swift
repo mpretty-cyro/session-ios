@@ -64,7 +64,7 @@ extension MessageSender {
             promises.append(
                 try MessageSender.sendNonDurably(
                     db,
-                    message: ClosedGroupControlMessage(
+                    message: LegacyClosedGroupControlMessage(
                         kind: .new(
                             publicKey: Data(hex: groupPublicKey),
                             name: name,
@@ -161,11 +161,11 @@ extension MessageSender {
             return try MessageSender
                 .sendNonDurably(
                     db,
-                    message: ClosedGroupControlMessage(
+                    message: LegacyClosedGroupControlMessage(
                         kind: .encryptionKeyPair(
                             publicKey: nil,
                             wrappers: targetMembers.map { memberPublicKey in
-                                ClosedGroupControlMessage.KeyPairWrapper(
+                                LegacyClosedGroupControlMessage.KeyPairWrapper(
                                     publicKey: memberPublicKey,
                                     encryptedKeyPair: try MessageSender.encryptWithSessionProtocol(
                                         plaintext,
@@ -227,7 +227,7 @@ extension MessageSender {
                 threadId: thread.id,
                 authorId: userPublicKey,
                 variant: .infoClosedGroupUpdated,
-                body: ClosedGroupControlMessage.Kind
+                body: LegacyClosedGroupControlMessage.Kind
                     .nameChange(name: name)
                     .infoMessage(db, sender: userPublicKey),
                 timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
@@ -236,7 +236,7 @@ extension MessageSender {
             guard let interactionId: Int64 = interaction.id else { throw StorageError.objectNotSaved }
             
             // Send the update to the group
-            let closedGroupControlMessage = ClosedGroupControlMessage(kind: .nameChange(name: name))
+            let closedGroupControlMessage = LegacyClosedGroupControlMessage(kind: .nameChange(name: name))
             try MessageSender.send(
                 db,
                 message: closedGroupControlMessage,
@@ -327,7 +327,7 @@ extension MessageSender {
             threadId: thread.id,
             authorId: userPublicKey,
             variant: .infoClosedGroupUpdated,
-            body: ClosedGroupControlMessage.Kind
+            body: LegacyClosedGroupControlMessage.Kind
                 .membersAdded(members: addedMembers.map { Data(hex: $0) })
                 .infoMessage(db, sender: userPublicKey),
             timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
@@ -338,7 +338,7 @@ extension MessageSender {
         // Send the update to the group
         try MessageSender.send(
             db,
-            message: ClosedGroupControlMessage(
+            message: LegacyClosedGroupControlMessage(
                 kind: .membersAdded(members: addedMembers.map { Data(hex: $0) })
             ),
             interactionId: interactionId,
@@ -352,7 +352,7 @@ extension MessageSender {
             
             try MessageSender.send(
                 db,
-                message: ClosedGroupControlMessage(
+                message: LegacyClosedGroupControlMessage(
                     kind: .new(
                         publicKey: Data(hex: closedGroup.id),
                         name: closedGroup.name,
@@ -428,7 +428,7 @@ extension MessageSender {
                 threadId: thread.id,
                 authorId: userPublicKey,
                 variant: .infoClosedGroupUpdated,
-                body: ClosedGroupControlMessage.Kind
+                body: LegacyClosedGroupControlMessage.Kind
                     .membersRemoved(members: removedMembers.map { Data(hex: $0) })
                     .infoMessage(db, sender: userPublicKey),
                 timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
@@ -446,7 +446,7 @@ extension MessageSender {
         let promise = try MessageSender
             .sendNonDurably(
                 db,
-                message: ClosedGroupControlMessage(
+                message: LegacyClosedGroupControlMessage(
                     kind: .membersRemoved(
                         members: removedMembers.map { Data(hex: $0) }
                     )
@@ -493,7 +493,7 @@ extension MessageSender {
             threadId: thread.id,
             authorId: userPublicKey,
             variant: .infoClosedGroupCurrentUserLeft,
-            body: ClosedGroupControlMessage.Kind
+            body: LegacyClosedGroupControlMessage.Kind
                 .memberLeft
                 .infoMessage(db, sender: userPublicKey),
             timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000))
@@ -507,7 +507,7 @@ extension MessageSender {
         let promise = try MessageSender
             .sendNonDurably(
                 db,
-                message: ClosedGroupControlMessage(
+                message: LegacyClosedGroupControlMessage(
                     kind: .memberLeft
                 ),
                 interactionId: interactionId,
@@ -554,26 +554,6 @@ extension MessageSender {
         return promise
     }
     
-    /*
-    public static func requestEncryptionKeyPair(for groupPublicKey: String, using transaction: YapDatabaseReadWriteTransaction) throws {
-        #if DEBUG
-        preconditionFailure("Shouldn't currently be in use.")
-        #endif
-        // Get the group, check preconditions & prepare
-        let groupID = LKGroupUtilities.getEncodedClosedGroupIDAsData(groupPublicKey)
-        let threadID = TSGroupThread.threadId(fromGroupId: groupID)
-        guard let thread = TSGroupThread.fetch(uniqueId: threadID, transaction: transaction) else {
-            SNLog("Can't request encryption key pair for nonexistent closed group.")
-            throw Error.noThread
-        }
-        let group = thread.groupModel
-        guard group.groupMemberIds.contains(getUserHexEncodedPublicKey()) else { return }
-        // Send the request to the group
-        let closedGroupControlMessage = ClosedGroupControlMessage(kind: .encryptionKeyPairRequest)
-        MessageSender.send(closedGroupControlMessage, in: thread, using: transaction)
-    }
-     */
-    
     public static func sendLatestEncryptionKeyPair(_ db: Database, to publicKey: String, for groupPublicKey: String) {
         guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: groupPublicKey) else {
             return SNLog("Couldn't send key pair for nonexistent closed group.")
@@ -611,11 +591,11 @@ extension MessageSender {
             SNLog("Sending latest encryption key pair to: \(publicKey).")
             try MessageSender.send(
                 db,
-                message: ClosedGroupControlMessage(
+                message: LegacyClosedGroupControlMessage(
                     kind: .encryptionKeyPair(
                         publicKey: Data(hex: groupPublicKey),
                         wrappers: [
-                            ClosedGroupControlMessage.KeyPairWrapper(
+                            LegacyClosedGroupControlMessage.KeyPairWrapper(
                                 publicKey: publicKey,
                                 encryptedKeyPair: ciphertext
                             )

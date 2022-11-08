@@ -215,16 +215,34 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
     }()
 
     lazy var scrollButton: ScrollToBottomButton = ScrollToBottomButton(delegate: self)
-
-    lazy var messageRequestView: UIView = {
+    
+    lazy var messageRequestBackgroundView: UIView = {
         let result: UIView = UIView()
         result.translatesAutoresizingMaskIntoConstraints = false
         result.themeBackgroundColor = .backgroundPrimary
+        result.isHidden = messageRequestStackView.isHidden
+
+        return result
+    }()
+    
+    lazy var messageRequestStackView: UIStackView = {
+        let result: UIStackView = UIStackView()
+        result.translatesAutoresizingMaskIntoConstraints = false
+        result.axis = .vertical
+        result.alignment = .fill
+        result.distribution = .fill
         result.isHidden = (
             self.viewModel.threadData.threadIsMessageRequest == false ||
             self.viewModel.threadData.threadRequiresApproval == true
         )
 
+        return result
+    }()
+    
+    private lazy var messageRequestDescriptionContainerView: UIView = {
+        let result: UIView = UIView()
+        result.translatesAutoresizingMaskIntoConstraints = false
+        
         return result
     }()
 
@@ -235,7 +253,18 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         result.text = "MESSAGE_REQUESTS_INFO".localized()
         result.themeTextColor = .textSecondary
         result.textAlignment = .center
-        result.numberOfLines = 2
+        result.numberOfLines = 0
+
+        return result
+    }()
+    
+    private lazy var messageRequestActionStackView: UIStackView = {
+        let result: UIStackView = UIStackView()
+        result.translatesAutoresizingMaskIntoConstraints = false
+        result.axis = .horizontal
+        result.alignment = .fill
+        result.distribution = .fill
+        result.spacing = (UIDevice.current.isIPad ? Values.iPadButtonSpacing : 20)
 
         return result
     }()
@@ -266,6 +295,7 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         result.setTitle("TXT_BLOCK_USER_TITLE".localized(), for: .normal)
         result.setThemeTitleColor(.danger, for: .normal)
         result.addTarget(self, action: #selector(block), for: .touchUpInside)
+        result.isHidden = (self.viewModel.threadData.threadVariant != .contact)
 
         return result
     }()
@@ -322,37 +352,34 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
 
         // Message requests view & scroll to bottom
         view.addSubview(scrollButton)
-        view.addSubview(messageRequestView)
+        view.addSubview(messageRequestBackgroundView)
+        view.addSubview(messageRequestStackView)
 
-        messageRequestView.addSubview(messageRequestBlockButton)
-        messageRequestView.addSubview(messageRequestDescriptionLabel)
-        messageRequestView.addSubview(messageRequestAcceptButton)
-        messageRequestView.addSubview(messageRequestDeleteButton)
+        messageRequestStackView.addArrangedSubview(messageRequestBlockButton)
+        messageRequestStackView.addArrangedSubview(messageRequestDescriptionContainerView)
+        messageRequestStackView.addArrangedSubview(messageRequestActionStackView)
+        messageRequestDescriptionContainerView.addSubview(messageRequestDescriptionLabel)
+        messageRequestActionStackView.addArrangedSubview(messageRequestAcceptButton)
+        messageRequestActionStackView.addArrangedSubview(messageRequestDeleteButton)
 
-        scrollButton.pin(.right, to: .right, of: view, withInset: -20)
-        messageRequestView.pin(.left, to: .left, of: view)
-        messageRequestView.pin(.right, to: .right, of: view)
-        self.messageRequestsViewBotomConstraint = messageRequestView.pin(.bottom, to: .bottom, of: view, withInset: -16)
+        scrollButton.pin(.trailing, to: .trailing, of: view, withInset: -20)
+        messageRequestStackView.pin(.leading, to: .leading, of: view, withInset: 16)
+        messageRequestStackView.pin(.trailing, to: .trailing, of: view, withInset: -16)
+        self.messageRequestsViewBotomConstraint = messageRequestStackView.pin(.bottom, to: .bottom, of: view, withInset: -16)
         self.scrollButtonBottomConstraint = scrollButton.pin(.bottom, to: .bottom, of: view, withInset: -16)
         self.scrollButtonBottomConstraint?.isActive = false // Note: Need to disable this to avoid a conflict with the other bottom constraint
-        self.scrollButtonMessageRequestsBottomConstraint = scrollButton.pin(.bottom, to: .top, of: messageRequestView, withInset: -16)
+        self.scrollButtonMessageRequestsBottomConstraint = scrollButton.pin(.bottom, to: .top, of: messageRequestStackView)
         
-        messageRequestBlockButton.pin(.top, to: .top, of: messageRequestView, withInset: 10)
-        messageRequestBlockButton.center(.horizontal, in: messageRequestView)
-        
-        messageRequestDescriptionLabel.pin(.top, to: .bottom, of: messageRequestBlockButton, withInset: 5)
-        messageRequestDescriptionLabel.pin(.left, to: .left, of: messageRequestView, withInset: 40)
-        messageRequestDescriptionLabel.pin(.right, to: .right, of: messageRequestView, withInset: -40)
-
-        messageRequestAcceptButton.pin(.top, to: .bottom, of: messageRequestDescriptionLabel, withInset: 20)
-        messageRequestAcceptButton.pin(.left, to: .left, of: messageRequestView, withInset: 20)
-        messageRequestAcceptButton.pin(.bottom, to: .bottom, of: messageRequestView)
-        
-        messageRequestDeleteButton.pin(.top, to: .bottom, of: messageRequestDescriptionLabel, withInset: 20)
-        messageRequestDeleteButton.pin(.left, to: .right, of: messageRequestAcceptButton, withInset: UIDevice.current.isIPad ? Values.iPadButtonSpacing : 20)
-        messageRequestDeleteButton.pin(.right, to: .right, of: messageRequestView, withInset: -20)
-        messageRequestDeleteButton.pin(.bottom, to: .bottom, of: messageRequestView)
+        messageRequestDescriptionLabel.pin(.top, to: .top, of: messageRequestDescriptionContainerView, withInset: 5)
+        messageRequestDescriptionLabel.pin(.leading, to: .leading, of: messageRequestDescriptionContainerView, withInset: 20)
+        messageRequestDescriptionLabel.pin(.trailing, to: .trailing, of: messageRequestDescriptionContainerView, withInset: -20)
+        messageRequestDescriptionLabel.pin(.bottom, to: .bottom, of: messageRequestDescriptionContainerView, withInset: -20)
+        messageRequestActionStackView.pin(.top, to: .bottom, of: messageRequestDescriptionContainerView, withInset: 20)
         messageRequestDeleteButton.set(.width, to: .width, of: messageRequestAcceptButton)
+        messageRequestBackgroundView.pin(.top, to: .top, of: messageRequestStackView)
+        messageRequestBackgroundView.pin(.leading, to: .leading, of: view)
+        messageRequestBackgroundView.pin(.trailing, to: .trailing, of: view)
+        messageRequestBackgroundView.pin(.bottom, to: .bottom, of: view)
 
         // Unread count view
         view.addSubview(unreadCountView)
@@ -574,19 +601,24 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         
         if
             initialLoad ||
+            viewModel.threadData.threadVariant != updatedThreadData.threadVariant ||
             viewModel.threadData.threadRequiresApproval != updatedThreadData.threadRequiresApproval ||
             viewModel.threadData.threadIsMessageRequest != updatedThreadData.threadIsMessageRequest ||
             viewModel.threadData.profile != updatedThreadData.profile
         {
             updateNavBarButtons(threadData: updatedThreadData, initialVariant: viewModel.initialThreadVariant)
             
-            let messageRequestsViewWasVisible: Bool = (messageRequestView.isHidden == false)
+            let messageRequestsViewWasVisible: Bool = (messageRequestStackView.isHidden == false)
             
             UIView.animate(withDuration: 0.3) { [weak self] in
-                self?.messageRequestView.isHidden = (
+                self?.messageRequestBlockButton.isHidden = (
+                    self?.viewModel.threadData.threadVariant != .contact
+                )
+                self?.messageRequestStackView.isHidden = (
                     updatedThreadData.threadIsMessageRequest == false ||
                     updatedThreadData.threadRequiresApproval == true
                 )
+                self?.messageRequestBackgroundView.isHidden = (self?.messageRequestStackView.isHidden == true)
             
                 self?.scrollButtonMessageRequestsBottomConstraint?.isActive = (
                     updatedThreadData.threadIsMessageRequest == true
@@ -595,8 +627,8 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
                 
                 // Update the table content inset and offset to account for
                 // the dissapearance of the messageRequestsView
-                if messageRequestsViewWasVisible {
-                    let messageRequestsOffset: CGFloat = ((self?.messageRequestView.bounds.height ?? 0) + 16)
+                if messageRequestsViewWasVisible != (self?.messageRequestStackView.isHidden == false) {
+                    let messageRequestsOffset: CGFloat = ((self?.messageRequestStackView.bounds.height ?? 0) + 16)
                     let oldContentInset: UIEdgeInsets = (self?.tableView.contentInset ?? UIEdgeInsets.zero)
                     self?.tableView.contentInset = UIEdgeInsets(
                         top: 0,
@@ -1089,7 +1121,7 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         // needed for proper calculations, so force an initial layout if it doesn't have a size)
         var hasDoneLayout: Bool = true
 
-        if messageRequestView.bounds.height <= CGFloat.leastNonzeroMagnitude {
+        if messageRequestStackView.bounds.height <= CGFloat.leastNonzeroMagnitude {
             hasDoneLayout = false
 
             UIView.performWithoutAnimation {
@@ -1098,7 +1130,7 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         }
         
         let keyboardTop = (UIScreen.main.bounds.height - keyboardRect.minY)
-        let messageRequestsOffset: CGFloat = (messageRequestView.isHidden ? 0 : messageRequestView.bounds.height + 16)
+        let messageRequestsOffset: CGFloat = (messageRequestStackView.isHidden ? 0 : messageRequestStackView.bounds.height + 16)
         let oldContentInset: UIEdgeInsets = tableView.contentInset
         let newContentInset: UIEdgeInsets = UIEdgeInsets(
             top: 0,
@@ -1604,6 +1636,11 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
                 at: position,
                 animated: (self.didFinishInitialLayout && isAnimated)
             )
+            
+            // Need to explicitly call 'scrollViewDidScroll' here as it won't get triggered
+            // by 'scrollToRow' if a scroll doesn't occur (eg. if there is less than 1 screen
+            // of messages)
+            self.scrollViewDidScroll(self.tableView)
             
             // If we haven't finished the initial layout then we want to delay the highlight slightly
             // so it doesn't look buggy with the push transition

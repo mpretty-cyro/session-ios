@@ -683,7 +683,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                 accessibilityIdentifier: "\(ThreadSettingsViewModel.self).leave_group",
                                 confirmationInfo: ConfirmationModal.Info(
                                     title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
-                                    explanation: (currentUserIsClosedGroupMember ?
+                                    explanation: (currentUserIsClosedGroupAdmin ?
                                         "admin_group_leave_warning".localized() :
                                         "CONFIRM_LEAVE_GROUP_DESCRIPTION".localized()
                                     ),

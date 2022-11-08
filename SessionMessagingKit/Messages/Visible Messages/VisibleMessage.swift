@@ -181,14 +181,6 @@ public final class VisibleMessage: Message {
             dataMessage.setReaction(reactionProto)
         }
         
-        // Group context
-        do {
-            try setGroupContextIfNeeded(db, on: dataMessage)
-        } catch {
-            SNLog("Couldn't construct visible message proto from: \(self).")
-            return nil
-        }
-        
         // Sync target
         if let syncTarget = syncTarget {
             dataMessage.setSyncTarget(syncTarget)

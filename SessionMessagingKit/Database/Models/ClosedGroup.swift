@@ -26,6 +26,7 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         case groupImageEncryptionKey
         case groupDescription
         case formationTimestamp
+        case isApproved
     }
     
     public var id: String { threadId }  // Identifiable
@@ -53,6 +54,9 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
     
     /// The timestamp at which the group was created
     public let formationTimestamp: TimeInterval
+    
+    /// A flag indicating whether the group is approved, when false the group will appear in the Message Requests section
+    public let isApproved: Bool
     
     // MARK: - Relationships
     
@@ -97,7 +101,8 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         groupImageFileName: String? = nil,
         groupImageEncryptionKey: OWSAES256Key? = nil,
         groupDescription: String? = nil,
-        formationTimestamp: TimeInterval
+        formationTimestamp: TimeInterval,
+        isApproved: Bool = false
     ) {
         self.threadId = threadId
         self.name = name
@@ -106,6 +111,7 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         self.groupImageEncryptionKey = groupImageEncryptionKey
         self.groupDescription = groupDescription
         self.formationTimestamp = formationTimestamp
+        self.isApproved = isApproved
     }
 }
 
@@ -139,7 +145,8 @@ public extension ClosedGroup {
             groupImageFileName: try? container.decode(String.self, forKey: .groupImageFileName),
             groupImageEncryptionKey: groupImageEncryptionKey,
             groupDescription: try? container.decode(String.self, forKey: .groupDescription),
-            formationTimestamp: try container.decode(TimeInterval.self, forKey: .formationTimestamp)
+            formationTimestamp: try container.decode(TimeInterval.self, forKey: .formationTimestamp),
+            isApproved: ((try? container.decode(Bool.self, forKey: .isApproved)) ?? false)
         )
     }
     
@@ -155,6 +162,7 @@ public extension ClosedGroup {
             forKey: .groupImageEncryptionKey
         )
         try container.encode(formationTimestamp, forKey: .formationTimestamp)
+        try container.encode(isApproved, forKey: .isApproved)
     }
 }
 
@@ -166,7 +174,8 @@ public extension ClosedGroup {
         groupImageUrl: Updatable<String?> = .existing,
         groupImageFileName: Updatable<String?> = .existing,
         groupImageEncryptionKey: Updatable<OWSAES256Key?> = .existing,
-        groupDescription: Updatable<String?> = .existing
+        groupDescription: Updatable<String?> = .existing,
+        isApproved: Updatable<Bool> = .existing
     ) -> ClosedGroup {
         return ClosedGroup(
             threadId: threadId,
@@ -175,7 +184,8 @@ public extension ClosedGroup {
             groupImageFileName: (groupImageFileName ?? self.groupImageFileName),
             groupImageEncryptionKey: (groupImageEncryptionKey ?? self.groupImageEncryptionKey),
             groupDescription: (groupDescription ?? self.groupDescription),
-            formationTimestamp: formationTimestamp
+            formationTimestamp: formationTimestamp,
+            isApproved: (isApproved ?? self.isApproved)
         )
     }
 }

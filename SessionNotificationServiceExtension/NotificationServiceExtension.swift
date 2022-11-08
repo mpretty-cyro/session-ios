@@ -108,8 +108,8 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                         case let unsendRequest as UnsendRequest:
                             try MessageReceiver.handleUnsendRequest(db, message: unsendRequest)
                             
-                        case let closedGroupControlMessage as ClosedGroupControlMessage:
-                            try MessageReceiver.handleClosedGroupControlMessage(db, closedGroupControlMessage)
+                        case let closedGroupControlMessage as LegacyClosedGroupControlMessage:
+                            try MessageReceiver.handleLegacyClosedGroupControlMessage(db, closedGroupControlMessage)
                             
                         case let callMessage as CallMessage:
                             try MessageReceiver.handleCallMessage(db, message: callMessage)

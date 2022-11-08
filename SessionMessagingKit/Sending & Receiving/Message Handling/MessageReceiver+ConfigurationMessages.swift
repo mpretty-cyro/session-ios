@@ -151,7 +151,7 @@ extension MessageReceiver {
                         secretKey: closedGroup.encryptionKeySecretKey.bytes
                     )
                     
-                    try MessageReceiver.handleNewClosedGroup(
+                    try MessageReceiver.handleLegacyNewClosedGroup(
                         db,
                         groupPublicKey: closedGroup.publicKey,
                         name: closedGroup.name,
