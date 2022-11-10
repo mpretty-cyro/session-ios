@@ -1578,6 +1578,11 @@ extension ConversationVC:
             case .typingIndicator, .dateHeader: break
             
             case .textOnlyMessage:
+                if cellViewModel.body == nil, let linkPreview: LinkPreview = cellViewModel.linkPreview {
+                    UIPasteboard.general.string = linkPreview.url
+                    return
+                }
+                
                 UIPasteboard.general.string = cellViewModel.body
             
             case .audio, .genericAttachment, .mediaMessage:
@@ -2200,69 +2205,93 @@ extension ConversationVC {
         isNewThread: Bool,
         timestampMs: Int64
     ) {
-        guard threadVariant == .contact else { return }
-
-        // If the contact doesn't exist then we should create it so we can store the 'isApproved' state
-        // (it'll be updated with correct profile info if they accept the message request so this
-        // shouldn't cause weird behaviours)
-        guard
-            let approvalData: (contact: Contact, thread: SessionThread?) = Storage.shared.read({ db in
-                return (
-                    Contact.fetchOrCreate(db, id: threadId),
-                    try SessionThread.fetchOne(db, id: threadId)
-                )
-            }),
-            let thread: SessionThread = approvalData.thread,
-            !approvalData.contact.isApproved
-        else {
-            return
-        }
-        
-        Storage.shared.writeAsync(
-            updates: { db in
-                // If we aren't creating a new thread (ie. sending a message request) then send a
-                // messageRequestResponse back to the sender (this allows the sender to know that
-                // they have been approved and can now use this contact in closed groups)
-                if !isNewThread {
-                    try MessageSender.send(
-                        db,
-                        message: MessageRequestResponse(
-                            isApproved: true,
-                            sentTimestampMs: UInt64(timestampMs)
-                        ),
-                        interactionId: nil,
-                        in: thread
-                    )
-                }
-                
-                // Default 'didApproveMe' to true for the person approving the message request
-                try approvalData.contact
-                    .with(
-                        isApproved: true,
-                        didApproveMe: .update(approvalData.contact.didApproveMe || !isNewThread)
-                    )
-                    .save(db)
-                
-                // Send a sync message with the details of the contact
-                try MessageSender
-                    .syncConfiguration(db, forceSyncNow: true)
-                    .retainUntilComplete()
-            },
-            completion: { _, _ in
-                // Remove the 'MessageRequestsViewController' from the nav hierarchy if present
-                DispatchQueue.main.async { [weak self] in
-                    if
-                        let viewControllers: [UIViewController] = self?.navigationController?.viewControllers,
-                        let messageRequestsIndex = viewControllers.firstIndex(where: { $0 is MessageRequestsViewController }),
-                        messageRequestsIndex > 0
-                    {
-                        var newViewControllers = viewControllers
-                        newViewControllers.remove(at: messageRequestsIndex)
-                        self?.navigationController?.viewControllers = newViewControllers
-                    }
+        let updateNavigationBackStack: () -> Void = {
+            // Remove the 'MessageRequestsViewController' from the nav hierarchy if present
+            DispatchQueue.main.async { [weak self] in
+                if
+                    let viewControllers: [UIViewController] = self?.navigationController?.viewControllers,
+                    let messageRequestsIndex = viewControllers.firstIndex(where: { $0 is MessageRequestsViewController }),
+                    messageRequestsIndex > 0
+                {
+                    var newViewControllers = viewControllers
+                    newViewControllers.remove(at: messageRequestsIndex)
+                    self?.navigationController?.viewControllers = newViewControllers
                 }
             }
-        )
+        }
+        
+        // The behaviour is different depending on the type of conversation
+        switch threadVariant {
+            case .contact:
+                // If the contact doesn't exist then we should create it so we can store the
+                // 'isApproved' state (it'll be updated with correct profile info if they
+                // accept the message request so this shouldn't cause weird behaviours)
+                guard
+                    let approvalData: (contact: Contact, thread: SessionThread?) = Storage.shared.read({ db in
+                        return (
+                            Contact.fetchOrCreate(db, id: threadId),
+                            try SessionThread.fetchOne(db, id: threadId)
+                        )
+                    }),
+                    let thread: SessionThread = approvalData.thread,
+                    !approvalData.contact.isApproved
+                else {
+                    return
+                }
+                
+                Storage.shared.writeAsync(
+                    updates: { db in
+                        // If we aren't creating a new thread (ie. sending a message request) then send a
+                        // messageRequestResponse back to the sender (this allows the sender to know that
+                        // they have been approved and can now use this contact in closed groups)
+                        if !isNewThread {
+                            try MessageSender.send(
+                                db,
+                                message: MessageRequestResponse(
+                                    isApproved: true,
+                                    sentTimestampMs: UInt64(timestampMs)
+                                ),
+                                interactionId: nil,
+                                in: thread
+                            )
+                        }
+                        
+                        // Default 'didApproveMe' to true for the person approving the message request
+                        try approvalData.contact
+                            .with(
+                                isApproved: true,
+                                didApproveMe: .update(approvalData.contact.didApproveMe || !isNewThread)
+                            )
+                            .save(db)
+                        
+                        // Update the config with the approved contact
+                        try MessageSender
+                            .syncConfiguration(db, forceSyncNow: true)
+                            .retainUntilComplete()
+                    },
+                    completion: { _, _ in updateNavigationBackStack() }
+                )
+                
+            case .closedGroup:
+                guard self.viewModel.threadData.closedGroup?.isApproved == false else { return }
+                
+                Storage.shared.writeAsync(
+                    updates: { db in
+                        // Flag the closed group as approved
+                        try ClosedGroup
+                            .filter(id: threadId)
+                            .updateAll(db, ClosedGroup.Columns.isApproved.set(to: true))
+                        
+                        // Update the config with the approved closed group
+                        try MessageSender
+                            .syncConfiguration(db, forceSyncNow: true)
+                            .retainUntilComplete()
+                    },
+                    completion: { _, _ in updateNavigationBackStack() }
+                )
+                
+            case .openGroup: return
+        }
     }
 
     @objc func acceptMessageRequest() {
@@ -2275,79 +2304,31 @@ extension ConversationVC {
     }
 
     @objc func deleteMessageRequest() {
-        guard self.viewModel.threadData.threadVariant == .contact else { return }
-        
-        let threadId: String = self.viewModel.threadData.threadId
-        let alertVC: UIAlertController = UIAlertController(
-            title: "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON".localized(),
-            message: nil,
-            preferredStyle: .actionSheet
-        )
-        alertVC.addAction(UIAlertAction(title: "TXT_DELETE_TITLE".localized(), style: .destructive) { _ in
-            // Delete the request
-            Storage.shared.writeAsync(
-                updates: { db in
-                    _ = try SessionThread
-                        .filter(id: threadId)
-                        .deleteAll(db)
-                },
-                completion: { db, _ in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.navigationController?.popViewController(animated: true)
-                    }
-                }
-            )
-        })
-        alertVC.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel, handler: nil))
-        
-        self.present(alertVC, animated: true, completion: nil)
+        MessageRequestsViewModel.deleteMessageRequest(
+            threadId: self.viewModel.threadData.threadId,
+            threadVariant: self.viewModel.threadData.threadVariant,
+            viewController: self
+        ) { [weak self] in
+            self?.stopObservingChanges()
+            
+            DispatchQueue.main.async {
+                self?.navigationController?.popViewController(animated: true)
+            }
+        }
     }
     
-    @objc func block() {
-        guard self.viewModel.threadData.threadVariant == .contact else { return }
-        
-        let threadId: String = self.viewModel.threadData.threadId
-        let alertVC: UIAlertController = UIAlertController(
-            title: "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized(),
-            message: nil,
-            preferredStyle: .actionSheet
-        )
-        alertVC.addAction(UIAlertAction(title: "BLOCK_LIST_BLOCK_BUTTON".localized(), style: .destructive) { _ in
-            // Delete the request
-            Storage.shared.writeAsync(
-                updates: { db in
-                    // Update the contact
-                    _ = try Contact
-                        .fetchOrCreate(db, id: threadId)
-                        .with(
-                            isApproved: false,
-                            isBlocked: true,
-
-                            // Note: We set this to true so the current user will be able to send a
-                            // message to the person who originally sent them the message request in
-                            // the future if they unblock them
-                            didApproveMe: true
-                        )
-                        .saved(db)
-                    
-                    _ = try SessionThread
-                        .filter(id: threadId)
-                        .deleteAll(db)
-                    
-                    try MessageSender
-                        .syncConfiguration(db, forceSyncNow: true)
-                        .retainUntilComplete()
-                },
-                completion: { db, _ in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.navigationController?.popViewController(animated: true)
-                    }
-                }
-            )
-        })
-        alertVC.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel, handler: nil))
-        
-        self.present(alertVC, animated: true, completion: nil)
+    @objc func blockMessageRequest() {
+        MessageRequestsViewModel.blockMessageRequest(
+            threadId: self.viewModel.threadData.threadId,
+            threadVariant: self.viewModel.threadData.threadVariant,
+            viewController: self
+        ) { [weak self] in
+            self?.stopObservingChanges()
+            
+            DispatchQueue.main.async {
+                self?.navigationController?.popViewController(animated: true)
+            }
+        }
     }
 }
 

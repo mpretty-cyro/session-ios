@@ -33,7 +33,7 @@ public enum OpenGroupAPI {
         hasPerformedInitialPoll: Bool,
         timeSinceLastPoll: TimeInterval,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<[Endpoint: (OnionRequestResponseInfoType, Codable?)]> {
+    ) -> Promise<[Endpoint: (ResponseInfoType, Codable?)]> {
         let lastInboxMessageId: Int64 = (try? OpenGroup
             .select(.inboxLatestMessageId)
             .filter(OpenGroup.Columns.server == server)
@@ -55,7 +55,7 @@ public enum OpenGroupAPI {
 
         // Generate the requests
         let requestResponseType: [BatchRequestInfoType] = [
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -83,14 +83,14 @@ public enum OpenGroupAPI {
                     )
                     
                     return [
-                        BatchRequestInfo(
+                        HTTP.BatchRequestInfo(
                             request: Request<NoBody, Endpoint>(
                                 server: server,
                                 endpoint: .roomPollInfo(openGroup.roomToken, openGroup.infoUpdates)
                             ),
                             responseType: RoomPollInfo.self
                         ),
-                        BatchRequestInfo(
+                        HTTP.BatchRequestInfo(
                             request: Request<NoBody, Endpoint>(
                                 server: server,
                                 endpoint: (shouldRetrieveRecentMessages ?
@@ -113,7 +113,7 @@ public enum OpenGroupAPI {
                 !capabilities.contains(.blind) ? [] :
                 [
                     // Inbox
-                    BatchRequestInfo(
+                    HTTP.BatchRequestInfo(
                         request: Request<NoBody, Endpoint>(
                             server: server,
                             endpoint: (lastInboxMessageId == 0 ?
@@ -125,7 +125,7 @@ public enum OpenGroupAPI {
                     ),
                     
                     // Outbox
-                    BatchRequestInfo(
+                    HTTP.BatchRequestInfo(
                         request: Request<NoBody, Endpoint>(
                             server: server,
                             endpoint: (lastOutboxMessageId == 0 ?
@@ -153,8 +153,8 @@ public enum OpenGroupAPI {
         server: String,
         requests: [BatchRequestInfoType],
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<[Endpoint: (OnionRequestResponseInfoType, Codable?)]> {
-        let requestBody: BatchRequest = requests.map { $0.toSubRequest() }
+    ) -> Promise<[Endpoint: (ResponseInfoType, Codable?)]> {
+        let requestBody: HTTP.BatchRequest = requests.map { $0.toSubRequest() }
         let responseTypes = requests.map { $0.responseType }
         
         return OpenGroupAPI
@@ -169,12 +169,7 @@ public enum OpenGroupAPI {
                 using: dependencies
             )
             .decoded(as: responseTypes, on: OpenGroupAPI.workQueue, using: dependencies)
-            .map { result in
-                result.enumerated()
-                    .reduce(into: [:]) { prev, next in
-                        prev[requests[next.offset].endpoint] = next.element
-                    }
-            }
+            .map(requests: requests, toHashMapFor: Endpoint.self)
     }
     
     /// This is like `/batch`, except that it guarantees to perform requests sequentially in the order provided and will stop processing requests if the previous request
@@ -191,8 +186,8 @@ public enum OpenGroupAPI {
         server: String,
         requests: [BatchRequestInfoType],
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<[Endpoint: (OnionRequestResponseInfoType, Codable?)]> {
-        let requestBody: BatchRequest = requests.map { $0.toSubRequest() }
+    ) -> Promise<[Endpoint: (ResponseInfoType, Codable?)]> {
+        let requestBody: HTTP.BatchRequest = requests.map { $0.toSubRequest() }
         let responseTypes = requests.map { $0.responseType }
         
         return OpenGroupAPI
@@ -207,12 +202,7 @@ public enum OpenGroupAPI {
                 using: dependencies
             )
             .decoded(as: responseTypes, on: OpenGroupAPI.workQueue, using: dependencies)
-            .map { result in
-                result.enumerated()
-                    .reduce(into: [:]) { prev, next in
-                        prev[requests[next.offset].endpoint] = next.element
-                    }
-            }
+            .map(requests: requests, toHashMapFor: Endpoint.self)
     }
     
     // MARK: - Capabilities
@@ -229,7 +219,7 @@ public enum OpenGroupAPI {
         server: String,
         forceBlinded: Bool = false,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Capabilities)> {
+    ) -> Promise<(ResponseInfoType, Capabilities)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -252,7 +242,7 @@ public enum OpenGroupAPI {
         _ db: Database,
         server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [Room])> {
+    ) -> Promise<(ResponseInfoType, [Room])> {
         return OpenGroupAPI
             .send(
                 db,
@@ -276,7 +266,7 @@ public enum OpenGroupAPI {
         for roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Room)> {
+    ) -> Promise<(ResponseInfoType, Room)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -304,7 +294,7 @@ public enum OpenGroupAPI {
         for roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, RoomPollInfo)> {
+    ) -> Promise<(ResponseInfoType, RoomPollInfo)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -324,10 +314,10 @@ public enum OpenGroupAPI {
         for roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(capabilities: (info: OnionRequestResponseInfoType, data: Capabilities), room: (info: OnionRequestResponseInfoType, data: Room))> {
+    ) -> Promise<(capabilities: (info: ResponseInfoType, data: Capabilities), room: (info: ResponseInfoType, data: Room))> {
         let requestResponseType: [BatchRequestInfoType] = [
             // Get the latest capabilities for the server (in case it's a new server or the cached ones are stale)
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -336,7 +326,7 @@ public enum OpenGroupAPI {
             ),
             
             // And the room info
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .room(roomToken)
@@ -352,10 +342,10 @@ public enum OpenGroupAPI {
                 requests: requestResponseType,
                 using: dependencies
             )
-            .map { (response: [Endpoint: (OnionRequestResponseInfoType, Codable?)]) -> (capabilities: (OnionRequestResponseInfoType, Capabilities), room: (OnionRequestResponseInfoType, Room)) in
-                let maybeCapabilities: (info: OnionRequestResponseInfoType, data: Capabilities?)? = response[.capabilities]
-                    .map { info, data in (info, (data as? BatchSubResponse<Capabilities>)?.body) }
-                let maybeRoomResponse: (OnionRequestResponseInfoType, Codable?)? = response
+            .map { (response: [Endpoint: (ResponseInfoType, Codable?)]) -> (capabilities: (ResponseInfoType, Capabilities), room: (ResponseInfoType, Room)) in
+                let maybeCapabilities: (info: ResponseInfoType, data: Capabilities?)? = response[.capabilities]
+                    .map { info, data in (info, (data as? HTTP.BatchSubResponse<Capabilities>)?.body) }
+                let maybeRoomResponse: (ResponseInfoType, Codable?)? = response
                     .first(where: { key, _ in
                         switch key {
                             case .room: return true
@@ -363,13 +353,13 @@ public enum OpenGroupAPI {
                         }
                     })
                     .map { _, value in value }
-                let maybeRoom: (info: OnionRequestResponseInfoType, data: Room?)? = maybeRoomResponse
-                    .map { info, data in (info, (data as? BatchSubResponse<Room>)?.body) }
+                let maybeRoom: (info: ResponseInfoType, data: Room?)? = maybeRoomResponse
+                    .map { info, data in (info, (data as? HTTP.BatchSubResponse<Room>)?.body) }
                 
                 guard
-                    let capabilitiesInfo: OnionRequestResponseInfoType = maybeCapabilities?.info,
+                    let capabilitiesInfo: ResponseInfoType = maybeCapabilities?.info,
                     let capabilities: Capabilities = maybeCapabilities?.data,
-                    let roomInfo: OnionRequestResponseInfoType = maybeRoom?.info,
+                    let roomInfo: ResponseInfoType = maybeRoom?.info,
                     let room: Room = maybeRoom?.data
                 else {
                     throw HTTP.Error.parsingFailed
@@ -388,10 +378,10 @@ public enum OpenGroupAPI {
         _ db: Database,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(capabilities: (info: OnionRequestResponseInfoType, data: Capabilities), rooms: (info: OnionRequestResponseInfoType, data: [Room]))> {
+    ) -> Promise<(capabilities: (info: ResponseInfoType, data: Capabilities), rooms: (info: ResponseInfoType, data: [Room]))> {
         let requestResponseType: [BatchRequestInfoType] = [
             // Get the latest capabilities for the server (in case it's a new server or the cached ones are stale)
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -400,7 +390,7 @@ public enum OpenGroupAPI {
             ),
             
             // And the room info
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .rooms
@@ -416,10 +406,10 @@ public enum OpenGroupAPI {
                 requests: requestResponseType,
                 using: dependencies
             )
-            .map { (response: [Endpoint: (OnionRequestResponseInfoType, Codable?)]) -> (capabilities: (OnionRequestResponseInfoType, Capabilities), rooms: (OnionRequestResponseInfoType, [Room])) in
-                let maybeCapabilities: (info: OnionRequestResponseInfoType, data: Capabilities?)? = response[.capabilities]
-                    .map { info, data in (info, (data as? BatchSubResponse<Capabilities>)?.body) }
-                let maybeRoomResponse: (OnionRequestResponseInfoType, Codable?)? = response
+            .map { (response: [Endpoint: (ResponseInfoType, Codable?)]) -> (capabilities: (ResponseInfoType, Capabilities), rooms: (ResponseInfoType, [Room])) in
+                let maybeCapabilities: (info: ResponseInfoType, data: Capabilities?)? = response[.capabilities]
+                    .map { info, data in (info, (data as? HTTP.BatchSubResponse<Capabilities>)?.body) }
+                let maybeRoomResponse: (ResponseInfoType, Codable?)? = response
                     .first(where: { key, _ in
                         switch key {
                             case .rooms: return true
@@ -427,13 +417,13 @@ public enum OpenGroupAPI {
                         }
                     })
                     .map { _, value in value }
-                let maybeRooms: (info: OnionRequestResponseInfoType, data: [Room]?)? = maybeRoomResponse
-                    .map { info, data in (info, (data as? BatchSubResponse<[Room]>)?.body) }
+                let maybeRooms: (info: ResponseInfoType, data: [Room]?)? = maybeRoomResponse
+                    .map { info, data in (info, (data as? HTTP.BatchSubResponse<[Room]>)?.body) }
                 
                 guard
-                    let capabilitiesInfo: OnionRequestResponseInfoType = maybeCapabilities?.info,
+                    let capabilitiesInfo: ResponseInfoType = maybeCapabilities?.info,
                     let capabilities: Capabilities = maybeCapabilities?.data,
-                    let roomsInfo: OnionRequestResponseInfoType = maybeRooms?.info,
+                    let roomsInfo: ResponseInfoType = maybeRooms?.info,
                     let rooms: [Room] = maybeRooms?.data
                 else {
                     throw HTTP.Error.parsingFailed
@@ -458,7 +448,7 @@ public enum OpenGroupAPI {
         whisperMods: Bool,
         fileIds: [String]?,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Message)> {
+    ) -> Promise<(ResponseInfoType, Message)> {
         guard let signResult: (publicKey: String, signature: Bytes) = sign(db, messageBytes: plaintext.bytes, for: server, fallbackSigningType: .standard, using: dependencies) else {
             return Promise(error: OpenGroupAPIError.signingFailed)
         }
@@ -490,7 +480,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Message)> {
+    ) -> Promise<(ResponseInfoType, Message)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -514,7 +504,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         guard let signResult: (publicKey: String, signature: Bytes) = sign(db, messageBytes: plaintext.bytes, for: server, fallbackSigningType: .standard, using: dependencies) else {
             return Promise(error: OpenGroupAPIError.signingFailed)
         }
@@ -542,7 +532,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -564,7 +554,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [Message])> {
+    ) -> Promise<(ResponseInfoType, [Message])> {
         return OpenGroupAPI
             .send(
                 db,
@@ -587,7 +577,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [Message])> {
+    ) -> Promise<(ResponseInfoType, [Message])> {
         return OpenGroupAPI
             .send(
                 db,
@@ -610,7 +600,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [Message])> {
+    ) -> Promise<(ResponseInfoType, [Message])> {
         return OpenGroupAPI
             .send(
                 db,
@@ -646,7 +636,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -668,7 +658,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<OnionRequestResponseInfoType> {
+    ) -> Promise<ResponseInfoType> {
         /// URL(String:) won't convert raw emojis, so need to do a little encoding here.
         /// The raw emoji will come back when calling url.path
         guard let encodedEmoji: String = emoji.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -695,7 +685,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, ReactionAddResponse)> {
+    ) -> Promise<(ResponseInfoType, ReactionAddResponse)> {
         /// URL(String:) won't convert raw emojis, so need to do a little encoding here.
         /// The raw emoji will come back when calling url.path
         guard let encodedEmoji: String = emoji.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -722,7 +712,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, ReactionRemoveResponse)> {
+    ) -> Promise<(ResponseInfoType, ReactionRemoveResponse)> {
         /// URL(String:) won't convert raw emojis, so need to do a little encoding here.
         /// The raw emoji will come back when calling url.path
         guard let encodedEmoji: String = emoji.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -749,7 +739,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, ReactionRemoveAllResponse)> {
+    ) -> Promise<(ResponseInfoType, ReactionRemoveAllResponse)> {
         /// URL(String:) won't convert raw emojis, so need to do a little encoding here.
         /// The raw emoji will come back when calling url.path
         guard let encodedEmoji: String = emoji.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -787,7 +777,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<OnionRequestResponseInfoType> {
+    ) -> Promise<ResponseInfoType> {
         return OpenGroupAPI
             .send(
                 db,
@@ -810,7 +800,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<OnionRequestResponseInfoType> {
+    ) -> Promise<ResponseInfoType> {
         return OpenGroupAPI
             .send(
                 db,
@@ -832,7 +822,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<OnionRequestResponseInfoType> {
+    ) -> Promise<ResponseInfoType> {
         return OpenGroupAPI
             .send(
                 db,
@@ -855,7 +845,7 @@ public enum OpenGroupAPI {
         to roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, FileUploadResponse)> {
+    ) -> Promise<(ResponseInfoType, FileUploadResponse)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -882,7 +872,7 @@ public enum OpenGroupAPI {
         from roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data)> {
+    ) -> Promise<(ResponseInfoType, Data)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -911,7 +901,7 @@ public enum OpenGroupAPI {
         _ db: Database,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [DirectMessage]?)> {
+    ) -> Promise<(ResponseInfoType, [DirectMessage]?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -935,7 +925,7 @@ public enum OpenGroupAPI {
         id: Int64,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [DirectMessage]?)> {
+    ) -> Promise<(ResponseInfoType, [DirectMessage]?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -957,7 +947,7 @@ public enum OpenGroupAPI {
         toInboxFor blindedSessionId: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, SendDirectMessageResponse)> {
+    ) -> Promise<(ResponseInfoType, SendDirectMessageResponse)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -984,7 +974,7 @@ public enum OpenGroupAPI {
         _ db: Database,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [DirectMessage]?)> {
+    ) -> Promise<(ResponseInfoType, [DirectMessage]?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -1008,7 +998,7 @@ public enum OpenGroupAPI {
         id: Int64,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, [DirectMessage]?)> {
+    ) -> Promise<(ResponseInfoType, [DirectMessage]?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -1061,7 +1051,7 @@ public enum OpenGroupAPI {
         from roomTokens: [String]? = nil,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -1109,7 +1099,7 @@ public enum OpenGroupAPI {
         from roomTokens: [String]?,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         return OpenGroupAPI
             .send(
                 db,
@@ -1186,7 +1176,7 @@ public enum OpenGroupAPI {
         for roomTokens: [String]?,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         guard (moderator != nil && admin == nil) || (moderator == nil && admin != nil) else {
             return Promise(error: HTTP.Error.generic)
         }
@@ -1218,7 +1208,7 @@ public enum OpenGroupAPI {
         in roomToken: String,
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<[OnionRequestResponseInfoType]> {
+    ) -> Promise<[ResponseInfoType]> {
         let banRequestBody: UserBanRequest = UserBanRequest(
             rooms: [roomToken],
             global: nil,
@@ -1227,15 +1217,15 @@ public enum OpenGroupAPI {
         
         // Generate the requests
         let requestResponseType: [BatchRequestInfoType] = [
-            BatchRequestInfo(
-                request: Request(
+            HTTP.BatchRequestInfo(
+                request: Request<UserBanRequest, Endpoint>(
                     method: .post,
                     server: server,
                     endpoint: .userBan(sessionId),
                     body: banRequestBody
                 )
             ),
-            BatchRequestInfo(
+            HTTP.BatchRequestInfo(
                 request: Request<NoBody, Endpoint>(
                     method: .delete,
                     server: server,
@@ -1376,10 +1366,10 @@ public enum OpenGroupAPI {
         
         updatedRequest.allHTTPHeaderFields = (request.allHTTPHeaderFields ?? [:])
             .updated(with: [
-                Header.sogsPubKey.rawValue: signResult.publicKey,
-                Header.sogsTimestamp.rawValue: "\(timestamp)",
-                Header.sogsNonce.rawValue: nonce.base64EncodedString(),
-                Header.sogsSignature.rawValue: signResult.signature.toBase64()
+                HTTP.Header.sogsPubKey: signResult.publicKey,
+                HTTP.Header.sogsTimestamp: "\(timestamp)",
+                HTTP.Header.sogsNonce: nonce.base64EncodedString(),
+                HTTP.Header.sogsSignature: signResult.signature.toBase64()
             ])
         
         return updatedRequest
@@ -1392,7 +1382,7 @@ public enum OpenGroupAPI {
         request: Request<T, Endpoint>,
         forceBlinded: Bool = false,
         using dependencies: SMKDependencies = SMKDependencies()
-    ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    ) -> Promise<(ResponseInfoType, Data?)> {
         let urlRequest: URLRequest
         
         do {
@@ -1408,7 +1398,9 @@ public enum OpenGroupAPI {
             .asRequest(of: String.self)
             .fetchOne(db)
         
-        guard let publicKey: String = maybePublicKey else { return Promise(error: OpenGroupAPIError.noPublicKey) }
+        guard let publicKey: String = maybePublicKey else {
+            return Promise(error: OpenGroupAPIError.noPublicKey)
+        }
         
         // Attempt to sign the request with the new auth
         guard let signedRequest: URLRequest = sign(db, request: urlRequest, for: request.server, with: publicKey, forceBlinded: forceBlinded, using: dependencies) else {

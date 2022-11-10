@@ -352,17 +352,7 @@ extension MessageReceiver {
             let wasCurrentUserRemoved: Bool = !members.contains(userPublicKey)
             
             if wasCurrentUserRemoved {
-                ClosedGroupPoller.shared.stopPolling(for: id)
-                
-                _ = try closedGroup
-                    .keyPairs
-                    .deleteAll(db)
-                
-                let _ = PushNotificationAPI.performOperation(
-                    .unsubscribe,
-                    for: id,
-                    publicKey: userPublicKey
-                )
+                try? ClosedGroup.removeKeysAndUnsubscribe(db, threadId: id)
             }
             
             // Notify the user if needed
@@ -423,18 +413,7 @@ extension MessageReceiver {
                 .deleteAll(db)
             
             if didAdminLeave || sender == userPublicKey {
-                // Remove the group from the database and unsubscribe from PNs
-                ClosedGroupPoller.shared.stopPolling(for: id)
-                
-                _ = try closedGroup
-                    .keyPairs
-                    .deleteAll(db)
-                
-                let _ = PushNotificationAPI.performOperation(
-                    .unsubscribe,
-                    for: id,
-                    publicKey: userPublicKey
-                )
+                try? ClosedGroup.removeKeysAndUnsubscribe(db, threadId: id)
             }
             
             // Re-add the removed member as a zombie (unless the admin left which disbands the

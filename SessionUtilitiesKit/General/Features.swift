@@ -1,6 +1,8 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-@objc(SNFeatures)
-public final class Features : NSObject {
+import Foundation
+
+public final class Features {
     public static let useOnionRequests = true
     public static let useTestnet = false
 }

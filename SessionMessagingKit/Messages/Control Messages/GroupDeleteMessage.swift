@@ -17,7 +17,7 @@ public final class GroupDeleteMessage: ControlMessage {
 
     // MARK: - Initialization
     
-    internal init(publicKey: Data, lastEncryptionKey: Data) {
+    public init(publicKey: Data, lastEncryptionKey: Data) {
         self.publicKey = publicKey
         self.lastEncryptionKey = lastEncryptionKey
         

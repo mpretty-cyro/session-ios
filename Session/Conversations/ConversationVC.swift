@@ -294,7 +294,7 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 16)
         result.setTitle("TXT_BLOCK_USER_TITLE".localized(), for: .normal)
         result.setThemeTitleColor(.danger, for: .normal)
-        result.addTarget(self, action: #selector(block), for: .touchUpInside)
+        result.addTarget(self, action: #selector(blockMessageRequest), for: .touchUpInside)
         result.isHidden = (self.viewModel.threadData.threadVariant != .contact)
 
         return result
@@ -553,7 +553,7 @@ final class ConversationVC: BaseVC, ConversationSearchControllerDelegate, UITabl
         )
     }
     
-    private func stopObservingChanges() {
+    func stopObservingChanges() {
         // Stop observing database changes
         dataChangeObservable?.cancel()
         self.viewModel.onInteractionChange = nil

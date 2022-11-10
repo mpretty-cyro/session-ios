@@ -39,4 +39,19 @@ public final class GroupMemberLeftMessage: ControlMessage {
         GroupMemberLeft()
         """
     }
+    
+    // MARK: - Convenience
+    
+    public static func infoMessage(
+        _ db: Database,
+        userPublicKey: String,
+        sender: String
+    ) -> String {
+        guard sender != userPublicKey else { return "GROUP_YOU_LEFT".localized() }
+        
+        return String(
+            format: "GROUP_MEMBER_LEFT".localized(),
+            Profile.displayName(db, id: sender, threadVariant: .closedGroup)
+        )
+    }
 }

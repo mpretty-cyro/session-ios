@@ -410,10 +410,12 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
         .mapToSessionTableViewData(for: self)
     
     override var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> {
-        selectedContactIdsSubject
+        let threadId: String = self.threadId
+        
+        return selectedContactIdsSubject
             .prepend([])
             .map { [weak self] selectedContactIds in
-                let contactNames: [String] = selectedContactIds
+                let contacts: [(id: String, name: String?)] = selectedContactIds
                     .compactMap { contactId in
                         guard
                             let section: EditGroupViewModel.SectionModel = self?.tableData
@@ -425,9 +427,9 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                                         default: return false
                                     }
                                 })
-                        else { return contactId }
+                        else { return (contactId, nil) }
                         
-                        return info.title?.text
+                        return (contactId, info.title?.text)
                     }
                 
                 return SessionButton.Info(
@@ -439,7 +441,7 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
                     isEnabled: !selectedContactIds.isEmpty,
                     onTap: {
                         self?.transitionToScreen(
-                            RemoveUsersModal(contactNames: contactNames),
+                            RemoveUsersModal(threadId: threadId, contacts: contacts),
                             transitionType: .present
                         )
                     }
@@ -576,31 +578,5 @@ class EditGroupViewModel: SessionTableViewModel<EditGroupViewModel.NavButton, Ed
         }
         
         self.transitionToScreen(viewController, transitionType: .present)
-    }
-                    
-    private func clearConversationMessagesForEveryone(threadId: String) {
-        // TODO: Send the 'DELETE_MESSAGES' message
-        self.clearConversationMessages(threadId: threadId)
-    }
-                    
-    private func clearConversationMessages(threadId: String) {
-        dependencies.storage.writeAsync { db in
-            try Interaction
-                .filter(Interaction.Columns.threadId == threadId)
-                .deleteAll(db)
-        }
-    }
-                    
-    private func deleteConversationForEveryone(threadId: String) {
-        // TODO: Send the 'DELETE_GROUP' message with `members: '*'`
-        self.deleteConversation(threadId: threadId)
-    }
-                    
-    private func deleteConversation(threadId: String) {
-        dependencies.storage.writeAsync { db in
-            try SessionThread
-                .filter(id: threadId)
-                .deleteAll(db)
-        }
     }
 }

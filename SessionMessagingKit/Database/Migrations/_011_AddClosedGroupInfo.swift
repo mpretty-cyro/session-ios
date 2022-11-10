@@ -18,7 +18,10 @@ enum _011_AddClosedGroupInfo: Migration {
             t.add(.groupImageUrl, .text)
             t.add(.groupImageFileName, .text)
             t.add(.groupImageEncryptionKey, .text)
+            t.add(.privateKey, .blob)
+            t.add(.memberPrivateKey, .blob)
             t.add(.isApproved, .boolean)
+            t.add(.isDeleted, .boolean)
         }
         
         // Mark all existing closed groups as approved

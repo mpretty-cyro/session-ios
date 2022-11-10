@@ -23,7 +23,7 @@ public extension MentionInfo {
         threadVariant: SessionThread.Variant,
         targetPrefix: SessionId.Prefix,
         pattern: FTS5Pattern?
-    ) -> AdaptedFetchRequest<SQLRequest<MentionInfo>>? {
+    ) -> (any FetchRequest<MentionInfo>)? {
         guard threadVariant != .contact || userPublicKey != threadId else { return nil }
         
         let profile: TypedTableAlias<Profile> = TypedTableAlias()

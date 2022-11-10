@@ -33,15 +33,14 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let threadUnreadCountKey: SQL = SQL(stringLiteral: CodingKeys.threadUnreadCount.stringValue)
     public static let threadUnreadMentionCountKey: SQL = SQL(stringLiteral: CodingKeys.threadUnreadMentionCount.stringValue)
     public static let contactProfileKey: SQL = SQL(stringLiteral: CodingKeys.contactProfile.stringValue)
+    public static let closedGroupAvatarsKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupAvatars.stringValue)
     public static let closedGroupUserCountKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupUserCount.stringValue)
     public static let currentUserIsClosedGroupMemberKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupMember.stringValue)
     public static let currentUserIsClosedGroupAdminKey: SQL = SQL(stringLiteral: CodingKeys.currentUserIsClosedGroupAdmin.stringValue)
-    public static let closedGroupProfileFrontKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupProfileFront.stringValue)
-    public static let closedGroupProfileBackKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupProfileBack.stringValue)
-    public static let closedGroupProfileBackFallbackKey: SQL = SQL(stringLiteral: CodingKeys.closedGroupProfileBackFallback.stringValue)
     public static let openGroupNameKey: SQL = SQL(stringLiteral: CodingKeys.openGroupName.stringValue)
     public static let openGroupServerKey: SQL = SQL(stringLiteral: CodingKeys.openGroupServer.stringValue)
     public static let openGroupRoomTokenKey: SQL = SQL(stringLiteral: CodingKeys.openGroupRoomToken.stringValue)
+    public static let openGroupPublicKeyKey: SQL = SQL(stringLiteral: CodingKeys.openGroupPublicKey.stringValue)
     public static let openGroupProfilePictureDataKey: SQL = SQL(stringLiteral: CodingKeys.openGroupProfilePictureData.stringValue)
     public static let openGroupUserCountKey: SQL = SQL(stringLiteral: CodingKeys.openGroupUserCount.stringValue)
     public static let openGroupPermissionsKey: SQL = SQL(stringLiteral: CodingKeys.openGroupPermissions.stringValue)
@@ -63,10 +62,8 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let closedGroupUserCountString: String = CodingKeys.closedGroupUserCount.stringValue
     public static let openGroupUserCountString: String = CodingKeys.openGroupUserCount.stringValue
     public static let contactProfileString: String = CodingKeys.contactProfile.stringValue
-    public static let closedGroupProfileFrontString: String = CodingKeys.closedGroupProfileFront.stringValue
-    public static let closedGroupProfileBackString: String = CodingKeys.closedGroupProfileBack.stringValue
-    public static let closedGroupProfileBackFallbackString: String = CodingKeys.closedGroupProfileBackFallback.stringValue
     public static let closedGroupString: String = CodingKeys.closedGroup.stringValue
+    public static let closedGroupAvatarsString: String = CodingKeys.closedGroupAvatars.stringValue
     public static let interactionAttachmentDescriptionInfoString: String = CodingKeys.interactionAttachmentDescriptionInfo.stringValue
     
     // MARK: - NotificationOption
@@ -82,6 +79,101 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
                 case .mentionsOnly: return "NOTIFICATIONS_OPTION_MENTIONS_ONLY".localized()
                 case .mute: return "NOTIFICATIONS_OPTION_MUTE".localized()
             }
+        }
+    }
+    
+    // MARK: - ClosedGroupAvatars
+    
+    public struct ClosedGroupAvatars: FetchableRecord, Decodable, Equatable, Hashable, Differentiable {
+        let threadId: String
+        let front: Profile?
+        let back: Profile?
+        
+        static func columnCounts(_ db: Database) throws -> [Int] {
+            return [
+                1,
+                try Profile.numberOfSelectedColumns(db),
+                try Profile.numberOfSelectedColumns(db)
+            ]
+        }
+        
+        static func scopeAdapter(
+            _ db: Database,
+            baseAdapter: RowAdapter,
+            startIndex: Int
+        ) throws -> ScopeAdapter {
+            let adapters = try splittingRowAdapters(
+                columnCounts: [startIndex]
+                    .appending(contentsOf: columnCounts(db))
+            )
+            
+            return ScopeAdapter(
+                base: baseAdapter,
+                scopes: [
+                    "threadId": adapters[1],
+                    "front": adapters[2],
+                    "back": adapters[3]
+                ]
+            )
+        }
+        
+        static func scopeAdapter(
+            _ db: Database,
+            parentKey: String,
+            adapters: [RowAdapter],
+            adapterStartIndex: Int
+        ) throws -> [String: RowAdapter] {
+            guard
+                let numAdapters: Int = (try? columnCounts(db))?.count,
+                adapters.count >= (adapterStartIndex + numAdapters)
+            else { return [:] }
+            
+            return [
+                "\(parentKey).threadId": adapters[adapterStartIndex],
+                "\(parentKey).front": adapters[adapterStartIndex + 1],
+                "\(parentKey).back": adapters[adapterStartIndex + 2]
+            ]
+        }
+        
+        public static func query(userPublicKey: String) -> SQL {
+            let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
+            let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
+            let profile: TypedTableAlias<Profile> = TypedTableAlias()
+            
+            let profileFrontLiteral: SQL = SQL(stringLiteral: "front")
+            let profileBackLiteral: SQL = SQL(stringLiteral: "back")
+            let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
+            
+            return """
+                SELECT
+                    \(closedGroup[.threadId]),
+                    \(profileFrontLiteral).*,
+                    \(profileBackLiteral).*
+                FROM \(ClosedGroup.self)
+                LEFT JOIN \(Profile.self) AS \(profileFrontLiteral) ON \(profileFrontLiteral).\(profileIdColumnLiteral) = (
+                    SELECT \(groupMember[.profileId])
+                    FROM \(GroupMember.self)
+                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
+                    WHERE (
+                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
+                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
+                        \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
+                    )
+                    ORDER BY \(SQL("\(groupMember[.profileId]) = \(userPublicKey)")) ASC, \(groupMember[.profileId])
+                    LIMIT 1
+                )
+                LEFT JOIN \(Profile.self) AS \(profileBackLiteral) ON \(profileBackLiteral).\(profileIdColumnLiteral) = (
+                    SELECT \(groupMember[.profileId])
+                    FROM \(GroupMember.self)
+                    WHERE (
+                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
+                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
+                        \(groupMember[.profileId]) != IFNULL(\(profileFrontLiteral).\(profileIdColumnLiteral), '')
+                    )
+                    ORDER BY \(SQL("\(groupMember[.profileId]) = \(userPublicKey)")) ASC, \(groupMember[.profileId])
+                    LIMIT 1
+                )
+            """
         }
     }
     
@@ -125,16 +217,15 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     // Thread display info
     
     private let contactProfile: Profile?
-    private let closedGroupProfileFront: Profile?
-    private let closedGroupProfileBack: Profile?
-    private let closedGroupProfileBackFallback: Profile?
     public let closedGroup: ClosedGroup?
+    private let closedGroupAvatars: ClosedGroupAvatars?
     private let closedGroupUserCount: Int?
     public let currentUserIsClosedGroupMember: Bool?
     public let currentUserIsClosedGroupAdmin: Bool?
     public let openGroupName: String?
     public let openGroupServer: String?
     public let openGroupRoomToken: String?
+    public let openGroupPublicKey: String?
     public let openGroupProfilePictureData: Data?
     private let openGroupUserCount: Int?
     private let openGroupPermissions: OpenGroup.Permissions?
@@ -176,7 +267,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
             case .contact: return contactProfile
             case .closedGroup:
                 guard ProfileManager.hasProfileImageData(with: closedGroup?.groupImageFileName) else {
-                    return (closedGroupProfileBack ?? closedGroupProfileBackFallback)
+                    return closedGroupAvatars?.back
                 }
                 
                 return closedGroup?.asProfile()
@@ -187,7 +278,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     
     public var additionalProfile: Profile? {
         switch threadVariant {
-            case .closedGroup: return closedGroupProfileFront
+            case .closedGroup: return closedGroupAvatars?.front
             default: return nil
         }
     }
@@ -295,16 +386,15 @@ public extension SessionThreadViewModel {
         // Thread display info
         
         self.contactProfile = contactProfile
-        self.closedGroupProfileFront = nil
-        self.closedGroupProfileBack = nil
-        self.closedGroupProfileBackFallback = nil
         self.closedGroup = nil
+        self.closedGroupAvatars = nil
         self.closedGroupUserCount = nil
         self.currentUserIsClosedGroupMember = currentUserIsClosedGroupMember
         self.currentUserIsClosedGroupAdmin = nil
         self.openGroupName = nil
         self.openGroupServer = nil
         self.openGroupRoomToken = nil
+        self.openGroupPublicKey = nil
         self.openGroupProfilePictureData = nil
         self.openGroupUserCount = nil
         self.openGroupPermissions = nil
@@ -355,16 +445,15 @@ public extension SessionThreadViewModel {
             threadUnreadCount: self.threadUnreadCount,
             threadUnreadMentionCount: self.threadUnreadMentionCount,
             contactProfile: self.contactProfile,
-            closedGroupProfileFront: self.closedGroupProfileFront,
-            closedGroupProfileBack: self.closedGroupProfileBack,
-            closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
             closedGroup: self.closedGroup,
+            closedGroupAvatars: self.closedGroupAvatars,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
             openGroupName: self.openGroupName,
             openGroupServer: self.openGroupServer,
             openGroupRoomToken: self.openGroupRoomToken,
+            openGroupPublicKey: self.openGroupPublicKey,
             openGroupProfilePictureData: self.openGroupProfilePictureData,
             openGroupUserCount: self.openGroupUserCount,
             openGroupPermissions: self.openGroupPermissions,
@@ -408,16 +497,15 @@ public extension SessionThreadViewModel {
             threadUnreadCount: self.threadUnreadCount,
             threadUnreadMentionCount: self.threadUnreadMentionCount,
             contactProfile: self.contactProfile,
-            closedGroupProfileFront: self.closedGroupProfileFront,
-            closedGroupProfileBack: self.closedGroupProfileBack,
-            closedGroupProfileBackFallback: self.closedGroupProfileBackFallback,
             closedGroup: self.closedGroup,
+            closedGroupAvatars: self.closedGroupAvatars,
             closedGroupUserCount: self.closedGroupUserCount,
             currentUserIsClosedGroupMember: self.currentUserIsClosedGroupMember,
             currentUserIsClosedGroupAdmin: self.currentUserIsClosedGroupAdmin,
             openGroupName: self.openGroupName,
             openGroupServer: self.openGroupServer,
             openGroupRoomToken: self.openGroupRoomToken,
+            openGroupPublicKey: self.openGroupPublicKey,
             openGroupProfilePictureData: self.openGroupProfilePictureData,
             openGroupUserCount: self.openGroupUserCount,
             openGroupPermissions: self.openGroupPermissions,
@@ -457,8 +545,8 @@ public extension SessionThreadViewModel {
         userPublicKey: String,
         groupSQL: SQL,
         orderSQL: SQL
-    ) -> (([Int64]) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>>) {
-        return { rowIds -> AdaptedFetchRequest<SQLRequest<ViewModel>> in
+    ) -> (([Int64]) -> any FetchRequest<SessionThreadViewModel>) {
+        return { rowIds -> any FetchRequest<ViewModel> in
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
             let contact: TypedTableAlias<Contact> = TypedTableAlias()
             let typingIndicator: TypedTableAlias<ThreadTypingIndicator> = TypedTableAlias()
@@ -472,6 +560,7 @@ public extension SessionThreadViewModel {
             let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
             
+            let threadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.threadId.name)
             let interactionTimestampMsColumnLiteral: SQL = SQL(stringLiteral: Interaction.Columns.timestampMs.name)
             let interactionStateInteractionIdColumnLiteral: SQL = SQL(stringLiteral: RecipientState.Columns.interactionId.name)
             let readReceiptTableLiteral: SQL = SQL(stringLiteral: "readReceipt")
@@ -510,10 +599,8 @@ public extension SessionThreadViewModel {
                     \(Interaction.self).\(ViewModel.threadUnreadMentionCountKey),
                 
                     \(ViewModel.contactProfileKey).*,
-                    \(ViewModel.closedGroupProfileFrontKey).*,
-                    \(ViewModel.closedGroupProfileBackKey).*,
-                    \(ViewModel.closedGroupProfileBackFallbackKey).*,
                     \(ClosedGroup.self).*,
+                    \(ViewModel.closedGroupAvatarsKey).*,
                     (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
                     \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                     \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
@@ -595,63 +682,51 @@ public extension SessionThreadViewModel {
                     \(SQL("\(groupMember[.profileId]) = \(userPublicKey)"))
                 )
             
-                LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (
-                    \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) = (
-                        SELECT MIN(\(groupMember[.profileId]))
-                        FROM \(GroupMember.self)
-                        JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                        WHERE (
-                            \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                            \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                            \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                        )
-                    )
-                )
-                LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON (
-                    \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) != \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) AND
-                    \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) = (
-                        SELECT MAX(\(groupMember[.profileId]))
-                        FROM \(GroupMember.self)
-                        JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                        WHERE (
-                            \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                            \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                            \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                        )
-                    )
-                )
-                LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON (
-                    \(closedGroup[.threadId]) IS NOT NULL AND
-                    \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) IS NULL AND
-                    \(ViewModel.closedGroupProfileBackFallbackKey).\(profileIdColumnLiteral) = \(SQL("\(userPublicKey)"))
-                )
+                LEFT JOIN (
+                    \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+                ) AS \(ViewModel.closedGroupAvatarsKey) ON \(ViewModel.closedGroupAvatarsKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
                 
                 WHERE \(thread.alias[Column.rowID]) IN \(rowIds)
                 \(groupSQL)
                 ORDER BY \(orderSQL)
             """
             
-            return request.adapted { db in
-                let adapters = try splittingRowAdapters(columnCounts: [
-                    numColumnsBeforeProfiles,
-                    Profile.numberOfSelectedColumns(db),
-                    Profile.numberOfSelectedColumns(db),
-                    Profile.numberOfSelectedColumns(db),
-                    Profile.numberOfSelectedColumns(db),
-                    ClosedGroup.numberOfSelectedColumns(db),
-                    numColumnsBetweenProfilesAndAttachmentInfo,
-                    Attachment.DescriptionInfo.numberOfSelectedColumns()
-                ])
-                
-                return ScopeAdapter([
-                    ViewModel.contactProfileString: adapters[1],
-                    ViewModel.closedGroupProfileFrontString: adapters[2],
-                    ViewModel.closedGroupProfileBackString: adapters[3],
-                    ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                    ViewModel.closedGroupString: adapters[5],
-                    ViewModel.interactionAttachmentDescriptionInfoString: adapters[7]
-                ])
-            }
+            return request
+                .adapted { db in
+                    RenameColumnAdapter { column in
+                        // Note: The query automatically adds a suffix to the various profile columns
+                        // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
+                        // decoding so we need to strip the information after the colon
+                        guard column.contains(":") else { return column }
+                        
+                        return String(column.split(separator: ":")[0])
+                    }
+                }
+                .adapted { db in
+                    let adapters = try splittingRowAdapters(columnCounts: [
+                        numColumnsBeforeProfiles,
+                        Profile.numberOfSelectedColumns(db),
+                        ClosedGroup.numberOfSelectedColumns(db),
+                        ClosedGroupAvatars.columnCounts(db).reduce(0, +),
+                        numColumnsBetweenProfilesAndAttachmentInfo,
+                        Attachment.DescriptionInfo.numberOfSelectedColumns()
+                    ])
+                    
+                    return ScopeAdapter([
+                        ViewModel.contactProfileString: adapters[1],
+                        ViewModel.closedGroupString: adapters[2],
+                        ViewModel.closedGroupAvatarsString: try ClosedGroupAvatars.scopeAdapter(
+                            db,
+                            baseAdapter: adapters[3],
+                            startIndex: (
+                                numColumnsBeforeProfiles +
+                                Profile.numberOfSelectedColumns(db) +
+                                ClosedGroup.numberOfSelectedColumns(db)
+                            )
+                        ),
+                        ViewModel.interactionAttachmentDescriptionInfoString: adapters[5]
+                    ])
+                }
         }
     }
     
@@ -698,7 +773,7 @@ public extension SessionThreadViewModel {
         return SQL("\(thread[.isPinned]) DESC, IFNULL(\(interaction[.timestampMs]), (\(thread[.creationDateTimestamp]) * 1000)) DESC")
     }()
     
-    static let messageRequetsOrderSQL: SQL = {
+    static let messageRequestsOrderSQL: SQL = {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
         
@@ -711,7 +786,7 @@ public extension SessionThreadViewModel {
 public extension SessionThreadViewModel {
     /// **Note:** This query **will** include deleted incoming messages in it's unread count (they should never be marked as unread
     /// but including this warning just in case there is a discrepancy)
-    static func conversationQuery(threadId: String, userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func conversationQuery(threadId: String, userPublicKey: String) -> any FetchRequest<SessionThreadViewModel> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
@@ -759,6 +834,7 @@ public extension SessionThreadViewModel {
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.server]) AS \(ViewModel.openGroupServerKey),
                 \(openGroup[.roomToken]) AS \(ViewModel.openGroupRoomTokenKey),
+                \(openGroup[.publicKey]) AS \(ViewModel.openGroupPublicKeyKey),
                 \(openGroup[.userCount]) AS \(ViewModel.openGroupUserCountKey),
                 \(openGroup[.permissions]) AS \(ViewModel.openGroupPermissionsKey),
         
@@ -817,14 +893,14 @@ public extension SessionThreadViewModel {
         }
     }
     
-    static func conversationSettingsQuery(threadId: String, userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func conversationSettingsQuery(threadId: String, userPublicKey: String) -> any FetchRequest<SessionThreadViewModel> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
         let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
-        let profile: TypedTableAlias<Profile> = TypedTableAlias()
         
+        let threadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.threadId.name)
         let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
         let adminMemberLiteral: SQL = SQL(stringLiteral: "adminMember")
         let groupMemberRoleColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.role.name)
@@ -852,15 +928,16 @@ public extension SessionThreadViewModel {
                 \(thread[.onlyNotifyForMentions]) AS \(ViewModel.threadOnlyNotifyForMentionsKey),
         
                 \(ViewModel.contactProfileKey).*,
-                \(ViewModel.closedGroupProfileFrontKey).*,
-                \(ViewModel.closedGroupProfileBackKey).*,
-                \(ViewModel.closedGroupProfileBackFallbackKey).*,
                 \(ClosedGroup.self).*,
+                \(ViewModel.closedGroupAvatarsKey).*,
                 
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
                 (\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupAdminKey),
         
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
+                \(openGroup[.server]) AS \(ViewModel.openGroupServerKey),
+                \(openGroup[.roomToken]) AS \(ViewModel.openGroupRoomTokenKey),
+                \(openGroup[.publicKey]) AS \(ViewModel.openGroupPublicKeyKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
                     
                 \(SQL("\(userPublicKey)")) AS \(ViewModel.currentUserPublicKeyKey)
@@ -881,58 +958,46 @@ public extension SessionThreadViewModel {
                 \(SQL("\(adminMemberLiteral).\(groupMemberProfileIdColumnLiteral) = \(userPublicKey)"))
             )
         
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (
-                \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) = (
-                    SELECT MIN(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON (
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) != \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) = (
-                    SELECT MAX(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON (
-                \(closedGroup[.threadId]) IS NOT NULL AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) IS NULL AND
-                \(ViewModel.closedGroupProfileBackFallbackKey).\(profileIdColumnLiteral) = \(SQL("\(userPublicKey)"))
-            )
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON \(ViewModel.closedGroupAvatarsKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
             
             WHERE \(SQL("\(thread[.id]) = \(threadId)"))
         """
         
-        return request.adapted { db in
-            let adapters = try splittingRowAdapters(columnCounts: [
-                numColumnsBeforeProfiles,
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                ClosedGroup.numberOfSelectedColumns(db)
-            ])
-            
-            return ScopeAdapter([
-                ViewModel.contactProfileString: adapters[1],
-                ViewModel.closedGroupProfileFrontString: adapters[2],
-                ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                ViewModel.closedGroupString: adapters[5]
-            ])
-        }
+        return request
+            .adapted { db in
+                RenameColumnAdapter { column in
+                    // Note: The query automatically adds a suffix to the various profile columns
+                    // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
+                    // decoding so we need to strip the information after the colon
+                    guard column.contains(":") else { return column }
+                    
+                    return String(column.split(separator: ":")[0])
+                }
+            }
+            .adapted { db in
+                let adapters = try splittingRowAdapters(columnCounts: [
+                    numColumnsBeforeProfiles,
+                    Profile.numberOfSelectedColumns(db),
+                    ClosedGroup.numberOfSelectedColumns(db),
+                    ClosedGroupAvatars.columnCounts(db).reduce(0, +)
+                ])
+                
+                return ScopeAdapter([
+                    ViewModel.contactProfileString: adapters[1],
+                    ViewModel.closedGroupString: adapters[2],
+                    ViewModel.closedGroupAvatarsString: try ClosedGroupAvatars.scopeAdapter(
+                        db,
+                        baseAdapter: adapters[3],
+                        startIndex: (
+                            numColumnsBeforeProfiles +
+                            Profile.numberOfSelectedColumns(db) +
+                            ClosedGroup.numberOfSelectedColumns(db)
+                        )
+                    )
+                ])
+            }
     }
 }
 
@@ -995,13 +1060,14 @@ public extension SessionThreadViewModel {
         return pattern
     }
     
-    static func messagesQuery(userPublicKey: String, pattern: FTS5Pattern) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func messagesQuery(userPublicKey: String, pattern: FTS5Pattern) -> any FetchRequest<SessionThreadViewModel> {
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
-        let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
         let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
         let profile: TypedTableAlias<Profile> = TypedTableAlias()
+        
+        let threadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.threadId.name)
         let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
         let interactionLiteral: SQL = SQL(stringLiteral: Interaction.databaseTableName)
         let interactionFullTextSearch: SQL = SQL(stringLiteral: Interaction.fullTextSearchTableName)
@@ -1023,10 +1089,8 @@ public extension SessionThreadViewModel {
                 \(thread[.isPinned]) AS \(ViewModel.threadIsPinnedKey),
                 
                 \(ViewModel.contactProfileKey).*,
-                \(ViewModel.closedGroupProfileFrontKey).*,
-                \(ViewModel.closedGroupProfileBackKey).*,
-                \(ViewModel.closedGroupProfileBackFallbackKey).*,
                 \(ClosedGroup.self).*,
+                \(ViewModel.closedGroupAvatarsKey).*,
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
             
@@ -1050,59 +1114,47 @@ public extension SessionThreadViewModel {
             LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(interaction[.threadId])
             LEFT JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(interaction[.threadId])
         
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (
-                \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) = (
-                    SELECT MIN(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(groupMember[.profileId]) != \(userPublicKey)
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON (
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) != \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) = (
-                    SELECT MAX(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(groupMember[.profileId]) != \(userPublicKey)
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON (
-                \(closedGroup[.threadId]) IS NOT NULL AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) IS NULL AND
-                \(ViewModel.closedGroupProfileBackFallbackKey).\(profileIdColumnLiteral) = \(userPublicKey)
-            )
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON \(ViewModel.closedGroupAvatarsKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
         
             ORDER BY \(Column.rank), \(interaction[.timestampMs].desc)
             LIMIT \(SQL("\(SessionThreadViewModel.searchResultsLimit)"))
         """
         
-        return request.adapted { db in
-            let adapters = try splittingRowAdapters(columnCounts: [
-                numColumnsBeforeProfiles,
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                ClosedGroup.numberOfSelectedColumns(db)
-            ])
-            
-            return ScopeAdapter([
-                ViewModel.contactProfileString: adapters[1],
-                ViewModel.closedGroupProfileFrontString: adapters[2],
-                ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                ViewModel.closedGroupString: adapters[5]
-            ])
-        }
+        return request
+            .adapted { db in
+                RenameColumnAdapter { column in
+                    // Note: The query automatically adds a suffix to the various profile columns
+                    // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
+                    // decoding so we need to strip the information after the colon
+                    guard column.contains(":") else { return column }
+                    
+                    return String(column.split(separator: ":")[0])
+                }
+            }
+            .adapted { db in
+                let adapters = try splittingRowAdapters(columnCounts: [
+                    numColumnsBeforeProfiles,
+                    Profile.numberOfSelectedColumns(db),
+                    ClosedGroup.numberOfSelectedColumns(db),
+                    ClosedGroupAvatars.columnCounts(db).reduce(0, +)
+                ])
+                
+                return ScopeAdapter([
+                    ViewModel.contactProfileString: adapters[1],
+                    ViewModel.closedGroupString: adapters[2],
+                    ViewModel.closedGroupAvatarsString: try ClosedGroupAvatars.scopeAdapter(
+                        db,
+                        baseAdapter: adapters[3],
+                        startIndex: (
+                            numColumnsBeforeProfiles +
+                            Profile.numberOfSelectedColumns(db) +
+                            ClosedGroup.numberOfSelectedColumns(db)
+                        )
+                    )
+                ])
+            }
     }
     
     /// This method does an FTS search against threads and their contacts to find any which contain the pattern
@@ -1116,7 +1168,7 @@ public extension SessionThreadViewModel {
     /// - Closed group member name
     /// - Open group name
     /// - "Note to self" text match
-    static func contactsAndGroupsQuery(userPublicKey: String, pattern: FTS5Pattern, searchTerm: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func contactsAndGroupsQuery(userPublicKey: String, pattern: FTS5Pattern, searchTerm: String) -> any FetchRequest<SessionThreadViewModel> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
         let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
@@ -1127,6 +1179,7 @@ public extension SessionThreadViewModel {
         let profileNameColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.name.name)
         
         let closedGroupNameString: String = "closedGroupName"
+        let threadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.threadId.name)
         let profileFullTextSearch: SQL = SQL(stringLiteral: Profile.fullTextSearchTableName)
         let closedGroupNameKey: SQL = SQL(stringLiteral: closedGroupNameString)
         let closedGroupNameColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.name.name)
@@ -1164,10 +1217,8 @@ public extension SessionThreadViewModel {
                 \(thread[.isPinned]) AS \(ViewModel.threadIsPinnedKey),
                 
                 \(ViewModel.contactProfileKey).*,
-                \(ViewModel.closedGroupProfileFrontKey).*,
-                \(ViewModel.closedGroupProfileBackKey).*,
-                \(ViewModel.closedGroupProfileBackFallbackKey).*,
                 \(ClosedGroup.self).*,
+                \(ViewModel.closedGroupAvatarsKey).*,
                 \(closedGroup[.name]) AS \(closedGroupNameKey),
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
@@ -1181,10 +1232,10 @@ public extension SessionThreadViewModel {
         // MARK: --Contact Threads
         let contactQueryCommonJoinFilterGroup: SQL = """
             JOIN \(Profile.self) AS \(ViewModel.contactProfileKey) ON \(ViewModel.contactProfileKey).\(profileIdColumnLiteral) = \(thread[.id])
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON false
             LEFT JOIN \(ClosedGroup.self) ON false
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON false
             LEFT JOIN \(OpenGroup.self) ON false
             LEFT JOIN (
                 SELECT
@@ -1240,35 +1291,9 @@ public extension SessionThreadViewModel {
                 WHERE \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)"))
                 GROUP BY \(groupMember[.groupId])
             ) AS \(groupMemberInfoLiteral) ON \(groupMemberInfoLiteral).\(groupMemberGroupIdColumnLiteral) = \(closedGroup[.threadId])
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (
-                \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) = (
-                    SELECT MIN(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(groupMember[.profileId]) != \(userPublicKey)
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON (
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) != \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) = (
-                    SELECT MAX(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(groupMember[.profileId]) != \(userPublicKey)
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON (
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) IS NULL AND
-                \(ViewModel.closedGroupProfileBackFallbackKey).\(profileIdColumnLiteral) = \(userPublicKey)
-            )
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON \(ViewModel.closedGroupAvatarsKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
         
             LEFT JOIN \(Profile.self) AS \(ViewModel.contactProfileKey) ON false
             LEFT JOIN \(OpenGroup.self) ON false
@@ -1339,10 +1364,10 @@ public extension SessionThreadViewModel {
                 \(openGroupFullTextSearch).\(openGroupNameColumnLiteral) MATCH \(pattern)
             )
             LEFT JOIN \(Profile.self) AS \(ViewModel.contactProfileKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON false
             LEFT JOIN \(ClosedGroup.self) ON false
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON false
             LEFT JOIN (
                 SELECT
                     \(groupMember[.groupId]),
@@ -1359,11 +1384,11 @@ public extension SessionThreadViewModel {
         // MARK: --Note to Self Thread
         let noteToSelfQueryCommonJoins: SQL = """
             JOIN \(Profile.self) AS \(ViewModel.contactProfileKey) ON \(ViewModel.contactProfileKey).\(profileIdColumnLiteral) = \(thread[.id])
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON false
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON false
             LEFT JOIN \(OpenGroup.self) ON false
             LEFT JOIN \(ClosedGroup.self) ON false
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON false
             LEFT JOIN (
                 SELECT
                     \(groupMember[.groupId]),
@@ -1452,44 +1477,45 @@ public extension SessionThreadViewModel {
             LIMIT \(SQL("\(SessionThreadViewModel.searchResultsLimit)"))
         """
         
-        // Construct the actual request
-        let request: SQLRequest<ViewModel> = SQLRequest(
-            literal: finalQuery,
-            adapter: RenameColumnAdapter { column in
-                // Note: The query automatically adds a suffix to the various profile columns
-                // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
-                // decoding so we need to strip the information after the colon
-                guard column.contains(":") else { return column }
+        // Construct the actual request and add adapters which will group the various 'Profile'
+        // columns so they can be decoded as instances of 'Profile' types
+        return SQLRequest(literal: finalQuery, cached: false)
+            .adapted { db in
+                RenameColumnAdapter { column in
+                    // Note: The query automatically adds a suffix to the various profile columns
+                    // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
+                    // decoding so we need to strip the information after the colon
+                    guard column.contains(":") else { return column }
+                    
+                    return String(column.split(separator: ":")[0])
+                }
+            }
+            .adapted { db in
+                let adapters = try splittingRowAdapters(columnCounts: [
+                    numColumnsBeforeProfiles,
+                    Profile.numberOfSelectedColumns(db),
+                    ClosedGroup.numberOfSelectedColumns(db),
+                    ClosedGroupAvatars.columnCounts(db).reduce(0, +)
+                ])
                 
-                return String(column.split(separator: ":")[0])
-            },
-            cached: false
-        )
-        
-        // Add adapters which will group the various 'Profile' columns so they can be decoded
-        // as instances of 'Profile' types
-        return request.adapted { db in
-            let adapters = try splittingRowAdapters(columnCounts: [
-                numColumnsBeforeProfiles,
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                ClosedGroup.numberOfSelectedColumns(db)
-            ])
-
-            return ScopeAdapter([
-                ViewModel.contactProfileString: adapters[1],
-                ViewModel.closedGroupProfileFrontString: adapters[2],
-                ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                ViewModel.closedGroupString: adapters[5]
-            ])
-        }
+                return ScopeAdapter([
+                    ViewModel.contactProfileString: adapters[1],
+                    ViewModel.closedGroupString: adapters[2],
+                    ViewModel.closedGroupAvatarsString: try ClosedGroupAvatars.scopeAdapter(
+                        db,
+                        baseAdapter: adapters[3],
+                        startIndex: (
+                            numColumnsBeforeProfiles +
+                            Profile.numberOfSelectedColumns(db) +
+                            ClosedGroup.numberOfSelectedColumns(db)
+                        )
+                    )
+                ])
+            }
     }
     
     /// This method returns only the 'Note to Self' thread in the structure of a search result conversation
-    static func noteToSelfOnlyQuery(userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func noteToSelfOnlyQuery(userPublicKey: String) -> any FetchRequest<SessionThreadViewModel> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
         
@@ -1538,15 +1564,14 @@ public extension SessionThreadViewModel {
 // MARK: - Share Extension
 
 public extension SessionThreadViewModel {
-    static func shareQuery(userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+    static func shareQuery(userPublicKey: String) -> any FetchRequest<SessionThreadViewModel> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
-        let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
         let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
-        let profile: TypedTableAlias<Profile> = TypedTableAlias()
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
         
+        let threadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroup.Columns.threadId.name)
         let profileIdColumnLiteral: SQL = SQL(stringLiteral: Profile.Columns.id.name)
         
         /// **Note:** The `numColumnsBeforeProfiles` value **MUST** match the number of fields before
@@ -1569,10 +1594,8 @@ public extension SessionThreadViewModel {
                 \(contact[.isBlocked]) AS \(ViewModel.threadIsBlockedKey),
         
                 \(ViewModel.contactProfileKey).*,
-                \(ViewModel.closedGroupProfileFrontKey).*,
-                \(ViewModel.closedGroupProfileBackKey).*,
-                \(ViewModel.closedGroupProfileBackFallbackKey).*,
                 \(ClosedGroup.self).*,
+                \(ViewModel.closedGroupAvatarsKey).*,
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
         
@@ -1589,36 +1612,9 @@ public extension SessionThreadViewModel {
             LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(thread[.id])
             LEFT JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(thread[.id])
         
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileFrontKey) ON (
-                \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) = (
-                    SELECT MIN(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackKey) ON (
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) != \(ViewModel.closedGroupProfileFrontKey).\(profileIdColumnLiteral) AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) = (
-                    SELECT MAX(\(groupMember[.profileId]))
-                    FROM \(GroupMember.self)
-                    JOIN \(Profile.self) ON \(profile[.id]) = \(groupMember[.profileId])
-                    WHERE (
-                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)")) AND
-                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
-                        \(SQL("\(groupMember[.profileId]) != \(userPublicKey)"))
-                    )
-                )
-            )
-            LEFT JOIN \(Profile.self) AS \(ViewModel.closedGroupProfileBackFallbackKey) ON (
-                \(closedGroup[.threadId]) IS NOT NULL AND
-                \(ViewModel.closedGroupProfileBackKey).\(profileIdColumnLiteral) IS NULL AND
-                \(ViewModel.closedGroupProfileBackFallbackKey).\(profileIdColumnLiteral) = \(SQL("\(userPublicKey)"))
-            )
+            LEFT JOIN (
+                \(ClosedGroupAvatars.query(userPublicKey: userPublicKey))
+            ) AS \(ViewModel.closedGroupAvatarsKey) ON \(ViewModel.closedGroupAvatarsKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
             
             WHERE (
                 \(SessionThread.isNotMessageRequest(userPublicKey: userPublicKey))
@@ -1628,23 +1624,38 @@ public extension SessionThreadViewModel {
             ORDER BY IFNULL(\(interaction[.timestampMs]), (\(thread[.creationDateTimestamp]) * 1000)) DESC
         """
         
-        return request.adapted { db in
-            let adapters = try splittingRowAdapters(columnCounts: [
-                numColumnsBeforeProfiles,
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                Profile.numberOfSelectedColumns(db),
-                ClosedGroup.numberOfSelectedColumns(db)
-            ])
-            
-            return ScopeAdapter([
-                ViewModel.contactProfileString: adapters[1],
-                ViewModel.closedGroupProfileFrontString: adapters[2],
-                ViewModel.closedGroupProfileBackString: adapters[3],
-                ViewModel.closedGroupProfileBackFallbackString: adapters[4],
-                ViewModel.closedGroupString: adapters[5]
-            ])
-        }
+        return request
+            .adapted { db in
+                RenameColumnAdapter { column in
+                    // Note: The query automatically adds a suffix to the various profile columns
+                    // to make them easier to distinguish (ie. 'id' -> 'id:1') - this breaks the
+                    // decoding so we need to strip the information after the colon
+                    guard column.contains(":") else { return column }
+                    
+                    return String(column.split(separator: ":")[0])
+                }
+            }
+            .adapted { db in
+                let adapters = try splittingRowAdapters(columnCounts: [
+                    numColumnsBeforeProfiles,
+                    Profile.numberOfSelectedColumns(db),
+                    ClosedGroup.numberOfSelectedColumns(db),
+                    ClosedGroupAvatars.columnCounts(db).reduce(0, +)
+                ])
+                
+                return ScopeAdapter([
+                    ViewModel.contactProfileString: adapters[1],
+                    ViewModel.closedGroupString: adapters[2],
+                    ViewModel.closedGroupAvatarsString: try ClosedGroupAvatars.scopeAdapter(
+                        db,
+                        baseAdapter: adapters[3],
+                        startIndex: (
+                            numColumnsBeforeProfiles +
+                            Profile.numberOfSelectedColumns(db) +
+                            ClosedGroup.numberOfSelectedColumns(db)
+                        )
+                    )
+                ])
+            }
     }
 }

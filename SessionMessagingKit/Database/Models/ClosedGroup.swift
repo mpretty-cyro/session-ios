@@ -26,7 +26,10 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         case groupImageEncryptionKey
         case groupDescription
         case formationTimestamp
+        case privateKey
+        case memberPrivateKey
         case isApproved
+        case isDeleted
     }
     
     public var id: String { threadId }  // Identifiable
@@ -55,8 +58,17 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
     /// The timestamp at which the group was created
     public let formationTimestamp: TimeInterval
     
+    /// The private key for the closed group, this will be set if the user is an admin in the new closed group
+    public let privateKey: Data?
+    
+    /// The subkey for the user within closed group, this will be set if the user is not an admin in the new closed group
+    public let memberPrivateKey: Data?
+    
     /// A flag indicating whether the group is approved, when false the group will appear in the Message Requests section
     public let isApproved: Bool
+    
+    /// A flag indicating whether the group was deleted
+    public let isDeleted: Bool
     
     // MARK: - Relationships
     
@@ -102,7 +114,10 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         groupImageEncryptionKey: OWSAES256Key? = nil,
         groupDescription: String? = nil,
         formationTimestamp: TimeInterval,
-        isApproved: Bool = false
+        privateKey: Data? = nil,
+        memberPrivateKey: Data? = nil,
+        isApproved: Bool = false,
+        isDeleted: Bool = false
     ) {
         self.threadId = threadId
         self.name = name
@@ -111,7 +126,10 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         self.groupImageEncryptionKey = groupImageEncryptionKey
         self.groupDescription = groupDescription
         self.formationTimestamp = formationTimestamp
+        self.privateKey = privateKey
+        self.memberPrivateKey = memberPrivateKey
         self.isApproved = isApproved
+        self.isDeleted = isDeleted
     }
 }
 
@@ -146,7 +164,10 @@ public extension ClosedGroup {
             groupImageEncryptionKey: groupImageEncryptionKey,
             groupDescription: try? container.decode(String.self, forKey: .groupDescription),
             formationTimestamp: try container.decode(TimeInterval.self, forKey: .formationTimestamp),
-            isApproved: ((try? container.decode(Bool.self, forKey: .isApproved)) ?? false)
+            privateKey: try? container.decode(Data.self, forKey: .privateKey),
+            memberPrivateKey: try? container.decode(Data.self, forKey: .memberPrivateKey),
+            isApproved: ((try? container.decode(Bool.self, forKey: .isApproved)) ?? false),
+            isDeleted: ((try? container.decode(Bool.self, forKey: .isDeleted)) ?? false)
         )
     }
     
@@ -162,7 +183,10 @@ public extension ClosedGroup {
             forKey: .groupImageEncryptionKey
         )
         try container.encode(formationTimestamp, forKey: .formationTimestamp)
+        try container.encodeIfPresent(privateKey, forKey: .privateKey)
+        try container.encodeIfPresent(memberPrivateKey, forKey: .memberPrivateKey)
         try container.encode(isApproved, forKey: .isApproved)
+        try container.encode(isDeleted, forKey: .isDeleted)
     }
 }
 
@@ -175,7 +199,8 @@ public extension ClosedGroup {
         groupImageFileName: Updatable<String?> = .existing,
         groupImageEncryptionKey: Updatable<OWSAES256Key?> = .existing,
         groupDescription: Updatable<String?> = .existing,
-        isApproved: Updatable<Bool> = .existing
+        isApproved: Updatable<Bool> = .existing,
+        isDeleted: Updatable<Bool> = .existing
     ) -> ClosedGroup {
         return ClosedGroup(
             threadId: threadId,
@@ -185,7 +210,8 @@ public extension ClosedGroup {
             groupImageEncryptionKey: (groupImageEncryptionKey ?? self.groupImageEncryptionKey),
             groupDescription: (groupDescription ?? self.groupDescription),
             formationTimestamp: formationTimestamp,
-            isApproved: (isApproved ?? self.isApproved)
+            isApproved: (isApproved ?? self.isApproved),
+            isDeleted: (isDeleted ?? self.isDeleted)
         )
     }
 }
@@ -211,5 +237,64 @@ public extension ClosedGroup {
             profilePictureFileName: groupImageFileName,
             profileEncryptionKey: groupImageEncryptionKey
         )
+    }
+    
+    static func removeKeysAndUnsubscribe(
+        _ db: Database? = nil,
+        threadId: String,
+        removeGroupData: Bool = false
+    ) throws {
+        try removeKeysAndUnsubscribe(db, threadIds: [threadId], removeGroupData: removeGroupData)
+    }
+    
+    static func removeKeysAndUnsubscribe(
+        _ db: Database? = nil,
+        threadIds: [String],
+        removeGroupData: Bool = false
+    ) throws {
+        guard let db: Database = db else {
+            Storage.shared.write { db in
+                try ClosedGroup.removeKeysAndUnsubscribe(
+                    db,
+                    threadIds: threadIds,
+                    removeGroupData: removeGroupData)
+            }
+            return
+        }
+        
+        // Remove the group from the database and unsubscribe from PNs
+        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        
+        threadIds.forEach { threadId in
+            ClosedGroupPoller.shared.stopPolling(for: threadId)
+            
+            PushNotificationAPI
+                .performOperation(
+                    .unsubscribe,
+                    for: threadId,
+                    publicKey: userPublicKey
+                )
+                .retainUntilComplete()
+        }
+        
+        // Remove the keys for the group
+        try ClosedGroupKeyPair
+            .filter(threadIds.contains(ClosedGroupKeyPair.Columns.threadId))
+            .deleteAll(db)
+        
+        // Remove the remaining group data if desired
+        if removeGroupData {
+            try SessionThread
+                .filter(ids: threadIds)
+                .deleteAll(db)
+            
+            try ClosedGroup
+                .filter(ids: threadIds)
+                .deleteAll(db)
+            
+            try GroupMember
+                .filter(threadIds.contains(GroupMember.Columns.groupId))
+                .deleteAll(db)
+        }
     }
 }

@@ -8,11 +8,11 @@ import SessionUtilitiesKit
 
 public protocol OnionRequestAPIType {
     static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
-    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
+    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)>
 }
 
 public extension OnionRequestAPIType {
-    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)> {
         sendOnionRequest(request, to: server, using: .v4, with: x25519PublicKey)
     }
 }
@@ -393,7 +393,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     }
 
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
             return Promise(error: OnionRequestAPIError.invalidURL)
         }
@@ -419,8 +419,8 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         return promise
     }
 
-    public static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion) -> Promise<(OnionRequestResponseInfoType, Data?)> {
-        let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
+    public static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion) -> Promise<(ResponseInfoType, Data?)> {
+        let (promise, seal) = Promise<(ResponseInfoType, Data?)>.pending()
         var guardSnode: Snode?
         
         Threading.workQueue.async { // Avoid race conditions on `guardSnodes` and `paths`
@@ -591,7 +591,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             let endpoint: String = url.path
                     .appending(url.query.map { value in "?\(value)" })
                 
-                let requestInfo: RequestInfo = RequestInfo(
+                let requestInfo: HTTP.RequestInfo = HTTP.RequestInfo(
                     method: (request.httpMethod ?? "GET"),   // The default (if nil) is 'GET'
                     endpoint: endpoint,
                     headers: (request.allHTTPHeaderFields ?? [:])
@@ -624,7 +624,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         destinationSymmetricKey: Data,
         version: OnionRequestAPIVersion,
         destination: OnionRequestAPIDestination,
-        seal: Resolver<(OnionRequestResponseInfoType, Data?)>
+        seal: Resolver<(ResponseInfoType, Data?)>
     ) {
         switch version {
             // V2 and V3 Onion Requests have the same structure for responses
@@ -679,14 +679,14 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                             return seal.reject(OnionRequestAPIError.httpRequestFailedAtDestination(statusCode: UInt(statusCode), data: bodyAsData, destination: destination))
                         }
                         
-                        return seal.fulfill((OnionRequestAPI.ResponseInfo(code: statusCode, headers: [:]), bodyAsData))
+                        return seal.fulfill((HTTP.ResponseInfo(code: statusCode, headers: [:]), bodyAsData))
                     }
                     
                     guard 200...299 ~= statusCode else {
                         return seal.reject(OnionRequestAPIError.httpRequestFailedAtDestination(statusCode: UInt(statusCode), data: data, destination: destination))
                     }
                     
-                    return seal.fulfill((OnionRequestAPI.ResponseInfo(code: statusCode, headers: [:]), data))
+                    return seal.fulfill((HTTP.ResponseInfo(code: statusCode, headers: [:]), data))
                     
                 }
                 catch {
@@ -701,7 +701,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                     let data: Data = try AESGCM.decrypt(responseData, with: destinationSymmetricKey)
                     
                     // Process the bencoded response
-                    guard let processedResponse: (info: ResponseInfo, body: Data?) = process(bencodedData: data) else {
+                    guard let processedResponse: (info: ResponseInfoType, body: Data?) = process(bencodedData: data) else {
                         return seal.reject(HTTP.Error.invalidResponse)
                     }
 
@@ -736,7 +736,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         }
     }
     
-    public static func process(bencodedData data: Data) -> (info: ResponseInfo, body: Data?)? {
+    public static func process(bencodedData data: Data) -> (info: ResponseInfoType, body: Data?)? {
         // The data will be in the form of `l123:jsone` or `l123:json456:bodye` so we need to break the data
         // into parts to properly process it
         guard let responseString: String = String(data: data, encoding: .ascii), responseString.starts(with: "l") else {
@@ -753,7 +753,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         let infoStringEndIndex: String.Index = responseString.index(infoStringStartIndex, offsetBy: infoLength)
         let infoString: String = String(responseString[infoStringStartIndex..<infoStringEndIndex])
 
-        guard let infoStringData: Data = infoString.data(using: .utf8), let responseInfo: ResponseInfo = try? JSONDecoder().decode(ResponseInfo.self, from: infoStringData) else {
+        guard let infoStringData: Data = infoString.data(using: .utf8), let responseInfo: HTTP.ResponseInfo = try? JSONDecoder().decode(HTTP.ResponseInfo.self, from: infoStringData) else {
             return nil
         }
 

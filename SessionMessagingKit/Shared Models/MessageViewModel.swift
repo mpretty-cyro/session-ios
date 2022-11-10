@@ -623,8 +623,8 @@ public extension MessageViewModel {
         userPublicKey: String,
         orderSQL: SQL,
         groupSQL: SQL?
-    ) -> (([Int64]) -> AdaptedFetchRequest<SQLRequest<MessageViewModel>>) {
-        return { rowIds -> AdaptedFetchRequest<SQLRequest<ViewModel>> in
+    ) -> (([Int64]) -> any FetchRequest<MessageViewModel>) {
+        return { rowIds -> any FetchRequest<ViewModel> in
             let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
             let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
@@ -766,8 +766,8 @@ public extension MessageViewModel {
 // MARK: --AttachmentInteractionInfo
 
 public extension MessageViewModel.AttachmentInteractionInfo {
-    static let baseQuery: ((SQL?) -> AdaptedFetchRequest<SQLRequest<MessageViewModel.AttachmentInteractionInfo>>) = {
-        return { additionalFilters -> AdaptedFetchRequest<SQLRequest<AttachmentInteractionInfo>> in
+    static let baseQuery: ((SQL?) -> any FetchRequest<MessageViewModel.AttachmentInteractionInfo>) = {
+        return { additionalFilters -> any FetchRequest<AttachmentInteractionInfo> in
             let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
             let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
             
@@ -849,8 +849,8 @@ public extension MessageViewModel.AttachmentInteractionInfo {
 // MARK: --ReactionInfo
 
 public extension MessageViewModel.ReactionInfo {
-    static let baseQuery: ((SQL?) -> AdaptedFetchRequest<SQLRequest<MessageViewModel.ReactionInfo>>) = {
-        return { additionalFilters -> AdaptedFetchRequest<SQLRequest<ReactionInfo>> in
+    static let baseQuery: ((SQL?) -> any FetchRequest<MessageViewModel.ReactionInfo>) = {
+        return { additionalFilters -> any FetchRequest<ReactionInfo> in
             let reaction: TypedTableAlias<Reaction> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
             

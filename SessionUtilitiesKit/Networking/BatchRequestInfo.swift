@@ -2,10 +2,8 @@
 
 import Foundation
 import PromiseKit
-import SessionUtilitiesKit
-import SessionSnodeKit
 
-extension OpenGroupAPI {
+public extension HTTP {
     // MARK: - BatchSubRequest
     
     struct BatchSubRequest: Encodable {
@@ -28,13 +26,13 @@ extension OpenGroupAPI {
         private let b64: String?
         private let bytes: [UInt8]?
         
-        init<T: Encodable>(request: Request<T, Endpoint>) {
+        init<T: Encodable, E: EndpointType>(request: Request<T, E>) {
             self.method = request.method
             self.path = request.urlPathAndParamsString
             self.headers = (request.headers.isEmpty ? nil : request.headers.toHTTPHeaders())
             
-            // Note: Need to differentiate between JSON, b64 string and bytes body values to ensure they are
-            // encoded correctly so the server knows how to handle them
+            // Note: Need to differentiate between JSON, b64 string and bytes body values to ensure
+            // they are encoded correctly so the server knows how to handle them
             switch request.body {
                 case let bodyString as String:
                     self.jsonBodyEncoder = nil
@@ -55,7 +53,7 @@ extension OpenGroupAPI {
             }
         }
         
-        func encode(to encoder: Encoder) throws {
+        public func encode(to encoder: Encoder) throws {
             var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
 
             try container.encode(method, forKey: .method)
@@ -71,39 +69,39 @@ extension OpenGroupAPI {
     
     struct BatchSubResponse<T: Codable>: Codable {
         /// The numeric http response code (e.g. 200 for success)
-        let code: Int32
+        public let code: Int32
         
         /// This should always include the content type of the request
-        let headers: [String: String]
+        public let headers: [String: String]
         
         /// The body of the request; will be plain json if content-type is `application/json`, otherwise it will be base64 encoded data
-        let body: T?
+        public let body: T?
         
         /// A flag to indicate that there was a body but it failed to parse
-        let failedToParseBody: Bool
+        public let failedToParseBody: Bool
     }
     
     // MARK: - BatchRequestInfo<T, R>
     
-    struct BatchRequestInfo<T: Encodable>: BatchRequestInfoType {
-        let request: Request<T, Endpoint>
-        let responseType: Codable.Type
+    struct BatchRequestInfo<T: Encodable, E: EndpointType>: BatchRequestInfoType {
+        let request: Request<T, E>
+        public let responseType: Codable.Type
         
-        var endpoint: Endpoint { request.endpoint }
+        public var endpoint: any EndpointType { request.endpoint }
         
-        init<R: Codable>(request: Request<T, Endpoint>, responseType: R.Type) {
+        public init<R: Codable>(request: Request<T, E>, responseType: R.Type) {
             self.request = request
             self.responseType = BatchSubResponse<R>.self
         }
         
-        init(request: Request<T, Endpoint>) {
+        public init(request: Request<T, E>) {
             self.init(
                 request: request,
                 responseType: NoResponse.self
             )
         }
         
-        func toSubRequest() -> BatchSubRequest {
+        public func toSubRequest() -> BatchSubRequest {
             return BatchSubRequest(request: request)
         }
     }
@@ -112,15 +110,15 @@ extension OpenGroupAPI {
     
     typealias BatchRequest = [BatchSubRequest]
     typealias BatchResponseTypes = [Codable.Type]
-    typealias BatchResponse = [(OnionRequestResponseInfoType, Codable?)]
+    typealias BatchResponse = [(ResponseInfoType, Codable?)]
 }
 
-extension OpenGroupAPI.BatchSubResponse {
+public extension HTTP.BatchSubResponse {
     init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
         let body: T? = try? container.decode(T.self, forKey: .body)
         
-        self = OpenGroupAPI.BatchSubResponse(
+        self = HTTP.BatchSubResponse(
             code: try container.decode(Int32.self, forKey: .code),
             headers: try container.decode([String: String].self, forKey: .headers),
             body: body,
@@ -133,11 +131,11 @@ extension OpenGroupAPI.BatchSubResponse {
 
 /// This protocol is designed to erase the types from `BatchRequestInfo<T, R>` so multiple types can be used
 /// in arrays when doing `/batch` and `/sequence` requests
-protocol BatchRequestInfoType {
+public protocol BatchRequestInfoType {
     var responseType: Codable.Type { get }
-    var endpoint: OpenGroupAPI.Endpoint { get }
+    var endpoint: any EndpointType { get }
     
-    func toSubRequest() -> OpenGroupAPI.BatchSubRequest
+    func toSubRequest() -> HTTP.BatchSubRequest
 }
 
 // MARK: - Convenience
@@ -148,9 +146,9 @@ public extension Decodable {
     }
 }
 
-extension Promise where T == (OnionRequestResponseInfoType, Data?) {
-    func decoded(as types: OpenGroupAPI.BatchResponseTypes, on queue: DispatchQueue? = nil, using dependencies: Dependencies = Dependencies()) -> Promise<OpenGroupAPI.BatchResponse> {
-        self.map(on: queue) { responseInfo, maybeData -> OpenGroupAPI.BatchResponse in
+public extension Promise where T == (ResponseInfoType, Data?) {
+    func decoded(as types: HTTP.BatchResponseTypes, on queue: DispatchQueue? = nil, using dependencies: Dependencies = Dependencies()) -> Promise<HTTP.BatchResponse> {
+        self.map(on: queue) { responseInfo, maybeData -> HTTP.BatchResponse in
             // Need to split the data into an array of data so each item can be Decoded correctly
             guard let data: Data = maybeData else { throw HTTP.Error.parsingFailed }
             guard let jsonObject: Any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
@@ -169,6 +167,22 @@ extension Promise where T == (OnionRequestResponseInfoType, Data?) {
             catch {
                 throw HTTP.Error.parsingFailed
             }
+        }
+    }
+}
+
+public extension Promise where T == HTTP.BatchResponse {
+    func map<E: EndpointType>(
+        requests: [BatchRequestInfoType],
+        toHashMapFor endpointType: E.Type
+    ) -> Promise<[E: (ResponseInfoType, Codable?)]> {
+        return self.map { result in
+            result.enumerated()
+                .reduce(into: [:]) { prev, next in
+                    guard let endpoint: E = requests[next.offset].endpoint as? E else { return }
+                    
+                    prev[endpoint] = next.element
+                }
         }
     }
 }

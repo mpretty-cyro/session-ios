@@ -1,25 +1,24 @@
 import Foundation
-import SessionUtilitiesKit
 
 // MARK: - Convenience Types
 
-struct Empty: Codable {}
+public struct Empty: Codable {}
 
-typealias NoBody = Empty
-typealias NoResponse = Empty
+public typealias NoBody = Empty
+public typealias NoResponse = Empty
 
-protocol EndpointType: Hashable {
+public protocol EndpointType: Hashable {
     var path: String { get }
 }
 
 // MARK: - Request
 
-struct Request<T: Encodable, Endpoint: EndpointType> {
+public struct Request<T: Encodable, Endpoint: EndpointType> {
     let method: HTTP.Verb
-    let server: String
+    public let server: String
     let endpoint: Endpoint
-    let queryParameters: [QueryParam: String]
-    let headers: [Header: String]
+    let queryParameters: [HTTP.QueryParam: String]
+    let headers: [HTTP.Header: String]
     /// This is the body value sent during the request
     ///
     /// **Warning:** The `bodyData` value should be used to when making the actual request instead of this as there
@@ -28,12 +27,12 @@ struct Request<T: Encodable, Endpoint: EndpointType> {
     
     // MARK: - Initialization
 
-    init(
+    public init(
         method: HTTP.Verb = .get,
         server: String,
         endpoint: Endpoint,
-        queryParameters: [QueryParam: String] = [:],
-        headers: [Header: String] = [:],
+        queryParameters: [HTTP.QueryParam: String] = [:],
+        headers: [HTTP.Header: String] = [:],
         body: T? = nil
     ) {
         self.method = method
@@ -56,7 +55,9 @@ struct Request<T: Encodable, Endpoint: EndpointType> {
         switch body {
             case let bodyString as String:
                 // The only acceptable string body is a base64 encoded one
-                guard let encodedData: Data = Data(base64Encoded: bodyString) else { throw HTTP.Error.parsingFailed }
+                guard let encodedData: Data = Data(base64Encoded: bodyString) else {
+                    throw HTTP.Error.parsingFailed
+                }
                 
                 return encodedData
                 
@@ -77,7 +78,7 @@ struct Request<T: Encodable, Endpoint: EndpointType> {
         return [
             "/\(endpoint.path)",
             queryParameters
-                .map { key, value in "\(key.rawValue)=\(value)" }
+                .map { key, value in "\(key)=\(value)" }
                 .joined(separator: "&")
         ]
         .compactMap { $0 }
@@ -85,7 +86,7 @@ struct Request<T: Encodable, Endpoint: EndpointType> {
         .joined(separator: "?")
     }
     
-    func generateUrlRequest() throws -> URLRequest {
+    public func generateUrlRequest() throws -> URLRequest {
         guard let url: URL = url else { throw HTTP.Error.invalidURL }
         
         var urlRequest: URLRequest = URLRequest(url: url)

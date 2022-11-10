@@ -628,6 +628,7 @@
 "GROUP_REMOVE_USERS_OPTION" = "Remove users";
 "GROUP_REMOVE_USER_AND_MESSAGES_OPTION" = "Remove user & messages";
 "GROUP_REMOVE_USERS_AND_MESSAGES_OPTION" = "Remove users & messages";
+"GROUP_DELETED_MESSAGE" = "You were removed from this group";
 "GROUP_INVITE_TITLE" = "Invite Contacts";
 "GROUP_INVITE_ACTION" = "Invite";
 "GROUP_INVITE_SENT_TITLE" = "Invitation Sent";

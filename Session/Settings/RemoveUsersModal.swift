@@ -7,12 +7,19 @@ import SessionMessagingKit
 import SignalUtilitiesKit
 
 final class RemoveUsersModal: Modal {
-    private let contactNames: [String]
+    private let threadId: String
+    private let contacts: [(id: String, name: String?)]
     
     // MARK: - Initialization
     
-    init(contactNames: [String], targetView: UIView? = nil, afterClosed: (() -> ())? = nil) {
-        self.contactNames = contactNames
+    init(
+        threadId: String,
+        contacts: [(id: String, name: String?)],
+        targetView: UIView? = nil,
+        afterClosed: (() -> ())? = nil
+    ) {
+        self.threadId = threadId
+        self.contacts = contacts
         
         super.init(targetView: targetView, afterClosed: afterClosed)
         
@@ -29,7 +36,7 @@ final class RemoveUsersModal: Modal {
     private lazy var titleLabel: UILabel = {
         let result = UILabel()
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
-        result.text = (contactNames.count <= 1 ?
+        result.text = (contacts.count <= 1 ?
             "GROUP_REMOVE_USER_ACTION".localized() :
             "GROUP_REMOVE_USERS_ACTION".localized()
         )
@@ -45,7 +52,10 @@ final class RemoveUsersModal: Modal {
         let result = UILabel()
         result.font = .systemFont(ofSize: Values.smallFontSize)
         result.attributedText = ConfirmationModal.boldedUserString(
-            contactNames: contactNames,
+            contactNames: contacts
+                // Prioritise displaying actual names over truncated ids
+                .sorted { lhs, rhs in (lhs.name != nil || rhs.name == nil) }
+                .map { id, name in (name ?? Profile.truncated(id: id, truncating: .middle)) },
             singleUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_SINGLE".localized(),
             twoUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_TWO".localized(),
             manyUserString: "GROUP_REMOVE_USER_CONFIRMATION_EXPLANATION_MANY".localized()
@@ -64,7 +74,7 @@ final class RemoveUsersModal: Modal {
             radio.update(isSelected: true)
         }
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = (contactNames.count == 1 ?
+        result.text = (contacts.count == 1 ?
             "GROUP_REMOVE_USER_OPTION".localized() :
             "GROUP_REMOVE_USERS_OPTION".localized()
         )
@@ -79,7 +89,7 @@ final class RemoveUsersModal: Modal {
             radio.update(isSelected: true)
         }
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = (contactNames.count == 1 ?
+        result.text = (contacts.count == 1 ?
             "GROUP_REMOVE_USER_AND_MESSAGES_OPTION".localized() :
             "GROUP_REMOVE_USERS_AND_MESSAGES_OPTION".localized()
         )
@@ -155,7 +165,49 @@ final class RemoveUsersModal: Modal {
     }
     
     private func removeUsersOnly() {
+        let threadId: String = self.threadId
+        let contactIds: [String] = self.contacts.map { id, _ in id }
+        
         ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self] _ in
+            Storage.shared
+                .writeAsync(
+                    updates: { db in
+                        let contactThreads: [SessionThread] = try contactIds
+                            .map { try SessionThread.fetchOrCreate(db, id: $0, variant: .contact) }
+                        
+                        guard
+                            let encryptionKeyPair: ClosedGroupKeyPair = try ClosedGroupKeyPair .fetchLatestKeyPair(db, threadId: threadId)
+                        else { return }
+                        
+                        // Send a deletion message to each user to be removed
+                        for thread in contactThreads {
+                            // TODO: Encrypt this for the target user
+                            let lastEncryptionKey: Data = encryptionKeyPair.secretKey
+                            
+                            try MessageSender.send(
+                                db,
+                                message: GroupDeleteMessage(
+                                    publicKey: Data(hex: threadId),
+                                    lastEncryptionKey: lastEncryptionKey
+                                ),
+                                interactionId: nil,
+                                in: thread
+                            )
+                        }
+                    },
+                    completion: { _, result in
+                        DispatchQueue.main.async {
+                            switch result {
+                                case .failure:
+                                    self?.dismiss(animated: true) {
+                                    }
+                                    
+                                case .success:
+                                    self?.dismiss(animated: true, completion: nil) // Dismiss the loader
+                            }
+                        }
+                    }
+                )
         }
     }
 }

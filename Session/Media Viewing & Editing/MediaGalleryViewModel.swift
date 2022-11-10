@@ -287,8 +287,8 @@ public class MediaGalleryViewModel {
             return SQL("\(interaction[.timestampMs]), \(interactionAttachment[.albumIndex].desc)")
         }()
         
-        fileprivate static func baseQuery(orderSQL: SQL, customFilters: SQL? = nil) -> (([Int64]) -> AdaptedFetchRequest<SQLRequest<Item>>) {
-            return { rowIds -> AdaptedFetchRequest<SQLRequest<Item>> in
+        fileprivate static func baseQuery(orderSQL: SQL, customFilters: SQL? = nil) -> (([Int64]) -> any FetchRequest<Item>) {
+            return { rowIds -> any FetchRequest<Item> in
                 let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
                 let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
                 let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
@@ -336,7 +336,7 @@ public class MediaGalleryViewModel {
             }
         }
         
-        fileprivate static func baseQuery(orderSQL: SQL, customFilters: SQL) -> AdaptedFetchRequest<SQLRequest<Item>> {
+        fileprivate static func baseQuery(orderSQL: SQL, customFilters: SQL) -> any FetchRequest<Item> {
             return Item.baseQuery(orderSQL: orderSQL, customFilters: customFilters)([])
         }
 

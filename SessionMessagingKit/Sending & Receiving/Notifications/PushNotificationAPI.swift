@@ -61,7 +61,7 @@ public final class PushNotificationAPI : NSObject {
         let url = URL(string: "\(server)/unregister")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ Header.contentType.rawValue: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
@@ -120,7 +120,7 @@ public final class PushNotificationAPI : NSObject {
         let url = URL(string: "\(server)/register")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ Header.contentType.rawValue: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
         request.httpBody = body
         
         var promises: [Promise<Void>] = []
@@ -189,7 +189,7 @@ public final class PushNotificationAPI : NSObject {
         let url = URL(string: "\(server)/\(operation.endpoint)")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ Header.contentType.rawValue: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
@@ -231,7 +231,7 @@ public final class PushNotificationAPI : NSObject {
         let url = URL(string: "\(server)/notify")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ Header.contentType.rawValue: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
         request.httpBody = body
         
         let retryCount: UInt = (maxRetryCount ?? PushNotificationAPI.maxRetryCount)

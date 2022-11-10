@@ -394,15 +394,16 @@ class MessageRequestsViewController: BaseVC, UITableViewDelegate, UITableViewDat
         switch section.model {
             case .threads:
                 let threadId: String = section.elements[indexPath.row].threadId
-                let isClosedGroupAdmin: Bool = (
-                    section.elements[indexPath.row].threadVariant == .closedGroup &&
-                    section.elements[indexPath.row].currentUserIsClosedGroupAdmin == true
-                )
+                let threadVariant: SessionThread.Variant = section.elements[indexPath.row].threadVariant
                 let delete: UIContextualAction = UIContextualAction(
                     style: .destructive,
                     title: "TXT_DELETE_TITLE".localized()
                 ) { [weak self] _, _, completionHandler in
-                    self?.delete(threadId)
+                    MessageRequestsViewModel.deleteMessageRequest(
+                        threadId: threadId,
+                        threadVariant: threadVariant,
+                        viewController: self
+                    )
                     completionHandler(true)
                 }
                 delete.themeBackgroundColor = .conversationButton_swipeDestructive
@@ -413,26 +414,18 @@ class MessageRequestsViewController: BaseVC, UITableViewDelegate, UITableViewDat
                             style: .normal,
                             title: "BLOCK_LIST_BLOCK_BUTTON".localized()
                         ) { [weak self] _, _, completionHandler in
-                            self?.block(threadId)
+                            MessageRequestsViewModel.blockMessageRequest(
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                viewController: self
+                            )
                             completionHandler(true)
                         }
                         block.themeBackgroundColor = .conversationButton_swipeSecondary
                         
                         return UISwipeActionsConfiguration(actions: [ delete, block ])
-                        
-                    case .closedGroup:
-                        let leave: UIContextualAction = UIContextualAction(
-                            style: .normal,
-                            title: "LEAVE_BUTTON_TITLE".localized()
-                        ) { [weak self] _, _, completionHandler in
-                            self?.leave(threadId, isClosedGroupAdmin: isClosedGroupAdmin)
-                            completionHandler(true)
-                        }
-                        leave.themeBackgroundColor = .conversationButton_swipeSecondary
-                        
-                        return UISwipeActionsConfiguration(actions: [ delete, leave ])
-                        
-                    case .openGroup:
+                    
+                    case .closedGroup, .openGroup:
                         return UISwipeActionsConfiguration(actions: [ delete ])
                 }
                 
@@ -447,9 +440,16 @@ class MessageRequestsViewController: BaseVC, UITableViewDelegate, UITableViewDat
             return
         }
         
-        let threadIds: [String] = (viewModel.threadData
+        let contactThreadIds: [String] = (viewModel.threadData
             .first { $0.model == .threads }?
             .elements
+            .filter { $0.threadVariant == .contact }
+            .map { $0.threadId })
+            .defaulting(to: [])
+        let closedGroupThreadIds: [String] = (viewModel.threadData
+            .first { $0.model == .threads }?
+            .elements
+            .filter { $0.threadVariant == .closedGroup }
             .map { $0.threadId })
             .defaulting(to: [])
         let alertVC: UIAlertController = UIAlertController(
@@ -464,76 +464,17 @@ class MessageRequestsViewController: BaseVC, UITableViewDelegate, UITableViewDat
             // Clear the requests
             Storage.shared.write { db in
                 _ = try SessionThread
-                    .filter(ids: threadIds)
+                    .filter(ids: contactThreadIds)
                     .deleteAll(db)
+                
+                try ClosedGroup.removeKeysAndUnsubscribe(
+                    db,
+                    threadIds: closedGroupThreadIds,
+                    removeGroupData: true
+                )
             }
         })
         alertVC.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel, handler: nil))
         self.present(alertVC, animated: true, completion: nil)
-    }
-
-    private func delete(_ threadId: String) {
-        let modal: ConfirmationModal = ConfirmationModal(
-            info: ConfirmationModal.Info(
-                title: "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON".localized(),
-                confirmTitle: "TXT_DELETE_TITLE".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .alert_text
-            ) { _ in
-                Storage.shared.write { db in
-                    _ = try SessionThread
-                        .filter(id: threadId)
-                        .deleteAll(db)
-                }
-            }
-        )
-        
-        self.present(modal, animated: true, completion: nil)
-    }
-    
-    private func block(_ threadId: String) {
-        let modal: ConfirmationModal = ConfirmationModal(
-            info: ConfirmationModal.Info(
-                title: "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized(),
-                confirmTitle: "BLOCK_LIST_BLOCK_BUTTON".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .alert_text
-            ) { _ in
-                Storage.shared.write { db in
-                    _ = try SessionThread
-                        .filter(id: threadId)
-                        .deleteAll(db)
-                    _ = try Contact
-                        .fetchOrCreate(db, id: threadId)
-                        .with(
-                            isApproved: false,
-                            isBlocked: true
-                        )
-                        .saved(db)
-                    
-                    // Force a config sync
-                    try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
-                }
-            }
-        )
-        
-        self.present(modal, animated: true, completion: nil)
-    }
-    
-    private func leave(_ threadId: String, isClosedGroupAdmin: Bool) {
-        let modal: ConfirmationModal = ConfirmationModal(
-            info: ConfirmationModal.Info(
-                title: "CONFIRM_LEAVE_GROUP_TITLE".localized(),
-                explanation: (isClosedGroupAdmin ?
-                    "admin_group_leave_warning".localized() :
-                    "CONFIRM_LEAVE_GROUP_DESCRIPTION".localized()
-                ),
-                confirmTitle: "LEAVE_BUTTON_TITLE".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .alert_text
-            ) { _ in
-            }
-        )
-        self.present(modal, animated: true, completion: nil)
     }
 }

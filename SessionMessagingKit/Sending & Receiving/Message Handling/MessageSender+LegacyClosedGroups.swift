@@ -513,22 +513,7 @@ extension MessageSender {
                 interactionId: interactionId,
                 in: thread
             )
-            .done {
-                // Remove the group from the database and unsubscribe from PNs
-                ClosedGroupPoller.shared.stopPolling(for: groupPublicKey)
-                
-                Storage.shared.write { db in
-                    try closedGroup
-                        .keyPairs
-                        .deleteAll(db)
-                    
-                    let _ = PushNotificationAPI.performOperation(
-                        .unsubscribe,
-                        for: groupPublicKey,
-                        publicKey: userPublicKey
-                    )
-                }
-            }
+            .done { try? ClosedGroup.removeKeysAndUnsubscribe(threadId: groupPublicKey) }
             .map { _ in }
         
         // Update the group (if the admin leaves the group is disbanded)

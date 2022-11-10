@@ -273,8 +273,8 @@ class BlockedContactsViewModel: SessionTableViewModel<NoNav, BlockedContactsView
         static func query(
             filterSQL: SQL,
             orderSQL: SQL
-        ) -> (([Int64]) -> AdaptedFetchRequest<SQLRequest<DataModel>>) {
-            return { rowIds -> AdaptedFetchRequest<SQLRequest<DataModel>> in
+        ) -> (([Int64]) -> any FetchRequest<DataModel>) {
+            return { rowIds -> any FetchRequest<DataModel> in
                 let profile: TypedTableAlias<Profile> = TypedTableAlias()
                 
                 /// **Note:** The `numColumnsBeforeProfile` value **MUST** match the number of fields before
