@@ -431,7 +431,7 @@ public struct ProfileManager {
                 .recover(on: queue) { error in
                     SNLog("Updating service with profile failed.")
                     
-                    let isMaxFileSizeExceeded: Bool = ((error as? HTTP.Error) == HTTP.Error.maxFileSizeExceeded)
+                    let isMaxFileSizeExceeded: Bool = ((error as? HTTPError) == .maxFileSizeExceeded)
                     failure?(isMaxFileSizeExceeded ?
                         .avatarUploadMaxFileSizeExceeded :
                         .avatarUploadFailed

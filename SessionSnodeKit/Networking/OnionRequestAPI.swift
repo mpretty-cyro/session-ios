@@ -7,7 +7,9 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public protocol OnionRequestAPIType {
-    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
+    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPI.Endpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
+    
+    static func sendOnionRequest(_ payload: Data, to snode: Snode) -> Promise<(ResponseInfoType, Data?)>
     static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)>
 }
 
@@ -77,7 +79,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             HTTP.execute(.get, url, timeout: timeout)
                 .done2 { responseData in
                     guard let responseJson: JSON = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON else {
-                        throw HTTP.Error.invalidJSON
+                        throw HTTPError.invalidJSON
                     }
                     guard let version = responseJson["version"] as? String else {
                         return seal.reject(OnionRequestAPIError.missingSnodeVersion)
@@ -369,17 +371,22 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     // MARK: - Public API
     
     /// Sends an onion request to `snode`. Builds new paths as needed.
-    public static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> Promise<Data> {
+    public static func sendOnionRequest(
+        to snode: Snode,
+        invoking method: SnodeAPI.Endpoint,
+        with parameters: JSON,
+        associatedWith publicKey: String? = nil
+    ) -> Promise<Data> {
         let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
         
         guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return Promise(error: HTTPError.invalidJSON)
         }
         
         /// **Note:** Currently the service nodes only support V3 Onion Requests
         return sendOnionRequest(with: payload, to: OnionRequestAPIDestination.snode(snode), version: .v3)
             .map { _, maybeData in
-                guard let data: Data = maybeData else { throw HTTP.Error.invalidResponse }
+                guard let data: Data = maybeData else { throw HTTPError.invalidResponse }
                 
                 return data
             }
@@ -390,17 +397,34 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                 
                 throw SnodeAPI.handleError(withStatusCode: statusCode, data: data, forSnode: snode, associatedWith: publicKey) ?? error
             }
+    
+    /// Sends an onion request to `snode`. Builds new paths as needed.
+    public static func sendOnionRequest(
+        _ payload: Data,
+        to snode: Snode
+    ) -> Promise<(ResponseInfoType, Data?)> {
+        /// **Note:** Currently the service nodes only support V3 Onion Requests
+        return sendOnionRequest(
+            with: payload,
+            to: OnionRequestAPIDestination.snode(snode),
+            version: .v3
+        )
     }
 
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)> {
+    public static func sendOnionRequest(
+        _ request: URLRequest,
+        to server: String,
+        using version: OnionRequestAPIVersion = .v4,
+        with x25519PublicKey: String
+    ) -> Promise<(ResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
             return Promise(error: OnionRequestAPIError.invalidURL)
         }
         
         let scheme: String? = url.scheme
         let port: UInt16? = url.port.map { UInt16($0) }
-        
+        // TODO: Is 'generatePayload' ONLY used for this endpoint? Potentially clear out some logic if it's not used for Snode requests?
         guard let payload: Data = generatePayload(for: request, with: version) else {
             return Promise(error: OnionRequestAPIError.invalidRequestInfo)
         }
@@ -464,7 +488,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         }
         
         promise.catch2 { error in // Must be invoked on Threading.workQueue
-            guard case HTTP.Error.httpRequestFailed(let statusCode, let data) = error, let guardSnode = guardSnode else {
+            guard case HTTPError.httpRequestFailed(let statusCode, let data) = error, let guardSnode = guardSnode else {
                 return
             }
             
@@ -586,9 +610,10 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                 
             // V4 Onion Requests have a very different structure
             case .v4:
-                // Note: We need to remove the leading forward slash unless we are explicitly hitting a legacy
-                // endpoint (in which case we need it to ensure the request signing works correctly
-            let endpoint: String = url.path
+                // Note: We need to remove the leading forward slash unless we are explicitly hitting
+                // a legacy endpoint (in which case we need it to ensure the request signing works
+                // correctly
+                let endpoint: String = url.path
                     .appending(url.query.map { value in "?\(value)" })
                 
                 let requestInfo: HTTP.RequestInfo = HTTP.RequestInfo(
@@ -638,18 +663,18 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                     json = [ "result": result ]
                 }
                 else {
-                    return seal.reject(HTTP.Error.invalidJSON)
+                    return seal.reject(HTTPError.invalidJSON)
                 }
                 
                 guard let base64EncodedIVAndCiphertext = json["result"] as? String, let ivAndCiphertext = Data(base64Encoded: base64EncodedIVAndCiphertext), ivAndCiphertext.count >= AESGCM.ivSize else {
-                    return seal.reject(HTTP.Error.invalidJSON)
+                    return seal.reject(HTTPError.invalidJSON)
                 }
                 
                 do {
                     let data = try AESGCM.decrypt(ivAndCiphertext, with: destinationSymmetricKey)
                     
                     guard let json = try JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON, let statusCode = json["status_code"] as? Int ?? json["status"] as? Int else {
-                        return seal.reject(HTTP.Error.invalidJSON)
+                        return seal.reject(HTTPError.invalidJSON)
                     }
                     
                     if statusCode == 406 { // Clock out of sync
@@ -664,7 +689,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                     
                     if let bodyAsString = json["body"] as? String {
                         guard let bodyAsData = bodyAsString.data(using: .utf8) else {
-                            return seal.reject(HTTP.Error.invalidResponse)
+                            return seal.reject(HTTPError.invalidResponse)
                         }
                         guard let body = try? JSONSerialization.jsonObject(with: bodyAsData, options: [ .fragmentsAllowed ]) as? JSON else {
                             return seal.reject(OnionRequestAPIError.httpRequestFailedAtDestination(statusCode: UInt(statusCode), data: bodyAsData, destination: destination))
@@ -695,14 +720,14 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             
             // V4 Onion Requests have a very different structure for responses
             case .v4:
-                guard responseData.count >= AESGCM.ivSize else { return seal.reject(HTTP.Error.invalidResponse) }
+                guard responseData.count >= AESGCM.ivSize else { return seal.reject(HTTPError.invalidResponse) }
                 
                 do {
                     let data: Data = try AESGCM.decrypt(responseData, with: destinationSymmetricKey)
                     
                     // Process the bencoded response
                     guard let processedResponse: (info: ResponseInfoType, body: Data?) = process(bencodedData: data) else {
-                        return seal.reject(HTTP.Error.invalidResponse)
+                        return seal.reject(HTTPError.invalidResponse)
                     }
 
                     // Custom handle a clock out of sync error (v4 returns '425' but included the '406'

@@ -15,7 +15,7 @@ public extension Data {
             return try decoder.decode(type, from: self)
         }
         catch {
-            throw HTTP.Error.parsingFailed
+            throw HTTPError.parsingFailed
         }
     }
 

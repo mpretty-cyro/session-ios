@@ -2,6 +2,4 @@
 
 import Foundation
 
-public extension HTTP {
-    typealias QueryParam = String
-}
+public typealias HTTPQueryParam = String

@@ -93,94 +93,104 @@ public final class BackgroundPoller {
             .then(on: DispatchQueue.main) { swarm -> Promise<Void> in
                 guard let snode = swarm.randomElement() else { throw SnodeAPIError.generic }
                 
-                return SnodeAPI.getMessages(from: snode, associatedWith: publicKey)
-                    .then(on: DispatchQueue.main) { messages, lastHash -> Promise<Void> in
-                        guard !messages.isEmpty, BackgroundPoller.isValid else { return Promise.value(()) }
-                        
-                        var jobsToRun: [Job] = []
-                        var messageCount: Int = 0
-                        var hadValidHashUpdate: Bool = false
-                        
-                        Storage.shared.write { db in
-                            messages
-                                .compactMap { message -> ProcessedMessage? in
-                                    do {
-                                        return try Message.processRawReceivedMessage(db, rawMessage: message)
-                                    }
-                                    catch {
-                                        switch error {
-                                            // Ignore duplicate & selfSend message errors (and don't bother
-                                            // logging them as there will be a lot since we each service node
-                                            // duplicates messages)
-                                            case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
-                                                MessageReceiverError.duplicateMessage,
-                                                MessageReceiverError.duplicateControlMessage,
-                                                MessageReceiverError.selfSend:
-                                                break
-                                                
-                                            case MessageReceiverError.duplicateMessageNewSnode:
-                                                hadValidHashUpdate = true
-                                                break
-                                            
-                                            // In the background ignore 'SQLITE_ABORT' (it generally means
-                                            // the BackgroundPoller has timed out
-                                            case DatabaseError.SQLITE_ABORT: break
-                                            
-                                            default: SNLog("Failed to deserialize envelope due to error: \(error).")
-                                        }
-                                        
-                                        return nil
-                                    }
-                                }
-                                .grouped { threadId, _, _ in (threadId ?? Message.nonThreadMessageId) }
-                                .forEach { threadId, threadMessages in
-                                    messageCount += threadMessages.count
-                                    
-                                    let maybeJob: Job? = Job(
-                                        variant: .messageReceive,
-                                        behaviour: .runOnce,
-                                        threadId: threadId,
-                                        details: MessageReceiveJob.Details(
-                                            messages: threadMessages.map { $0.messageInfo },
-                                            calledFromBackgroundPoller: true
-                                        )
-                                    )
-                                    
-                                    guard let job: Job = maybeJob else { return }
-                                    
-                                    // Add to the JobRunner so they are persistent and will retry on
-                                    // the next app run if they fail
-                                    JobRunner.add(db, job: job, canStartJob: false)
-                                    jobsToRun.append(job)
-                                }
-                            
-                            if messageCount == 0 && !hadValidHashUpdate, let lastHash: String = lastHash {
-                                // Update the cached validity of the messages
-                                try SnodeReceivedMessageInfo.handlePotentialDeletedOrInvalidHash(
-                                    db,
-                                    potentiallyInvalidHashes: [lastHash],
-                                    otherKnownValidHashes: messages.map { $0.info.hash }
-                                )
-                            }
-                        }
-                        
-                        let promises: [Promise<Void>] = jobsToRun.map { job -> Promise<Void> in
-                            let (promise, seal) = Promise<Void>.pending()
-                            
-                            // Note: In the background we just want jobs to fail silently
-                            MessageReceiveJob.run(
-                                job,
-                                queue: DispatchQueue.main,
-                                success: { _, _ in seal.fulfill(()) },
-                                failure: { _, _, _ in seal.fulfill(()) },
-                                deferred: { _ in seal.fulfill(()) }
-                            )
-
-                            return promise
-                        }
-
-                        return when(fulfilled: promises)
-                    }
+                return Poller.poll(
+                    snode,
+                    on: DispatchQueue.main,
+                    calledFromBackgroundPoller: true,
+                    isBackgroundPollValid: { BackgroundPoller.isValid }
+                )
             }
+                
+//                return SnodeAPI.getMessages(from: snode, associatedWith: publicKey)
+//                    .then(on: DispatchQueue.main) { _, result -> Promise<Void> in
+//                        guard let (messages, lastHash) = result else { return Promise.value(()) }  // TODO: Turn into an object
+//
+//                        guard !messages.isEmpty, BackgroundPoller.isValid else { return Promise.value(()) }
+//
+//                        var jobsToRun: [Job] = []
+//                        var messageCount: Int = 0
+//                        var hadValidHashUpdate: Bool = false
+//
+//                        Storage.shared.write { db in
+//                            messages
+//                                .compactMap { message -> ProcessedMessage? in
+//                                    do {
+//                                        return try Message.processRawReceivedMessage(db, rawMessage: message)
+//                                    }
+//                                    catch {
+//                                        switch error {
+//                                            // Ignore duplicate & selfSend message errors (and don't bother
+//                                            // logging them as there will be a lot since we each service node
+//                                            // duplicates messages)
+//                                            case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
+//                                                MessageReceiverError.duplicateMessage,
+//                                                MessageReceiverError.duplicateControlMessage,
+//                                                MessageReceiverError.selfSend:
+//                                                break
+//
+//                                            case MessageReceiverError.duplicateMessageNewSnode:
+//                                                hadValidHashUpdate = true
+//                                                break
+//
+//                                            // In the background ignore 'SQLITE_ABORT' (it generally means
+//                                            // the BackgroundPoller has timed out
+//                                            case DatabaseError.SQLITE_ABORT: break
+//
+//                                            default: SNLog("Failed to deserialize envelope due to error: \(error).")
+//                                        }
+//
+//                                        return nil
+//                                    }
+//                                }
+//                                .grouped { threadId, _, _ in (threadId ?? Message.nonThreadMessageId) }
+//                                .forEach { threadId, threadMessages in
+//                                    messageCount += threadMessages.count
+//
+//                                    let maybeJob: Job? = Job(
+//                                        variant: .messageReceive,
+//                                        behaviour: .runOnce,
+//                                        threadId: threadId,
+//                                        details: MessageReceiveJob.Details(
+//                                            messages: threadMessages.map { $0.messageInfo },
+//                                            calledFromBackgroundPoller: true
+//                                        )
+//                                    )
+//
+//                                    guard let job: Job = maybeJob else { return }
+//
+//                                    // Add to the JobRunner so they are persistent and will retry on
+//                                    // the next app run if they fail
+//                                    JobRunner.add(db, job: job, canStartJob: false)
+//                                    jobsToRun.append(job)
+//                                }
+//
+//                            if messageCount == 0 && !hadValidHashUpdate, let lastHash: String = lastHash {
+//                                // Update the cached validity of the messages
+//                                try SnodeReceivedMessageInfo.handlePotentialDeletedOrInvalidHash(
+//                                    db,
+//                                    potentiallyInvalidHashes: [lastHash],
+//                                    otherKnownValidHashes: messages.map { $0.info.hash }
+//                                )
+//                            }
+//                        }
+//
+//                        let promises: [Promise<Void>] = jobsToRun.map { job -> Promise<Void> in
+//                            let (promise, seal) = Promise<Void>.pending()
+//
+//                            // Note: In the background we just want jobs to fail silently
+//                            MessageReceiveJob.run(
+//                                job,
+//                                queue: DispatchQueue.main,
+//                                success: { _, _ in seal.fulfill(()) },
+//                                failure: { _, _, _ in seal.fulfill(()) },
+//                                deferred: { _ in seal.fulfill(()) }
+//                            )
+//
+//                            return promise
+//                        }
+//
+//                        return when(fulfilled: promises)
+//                    }
+//            }
     }
 }

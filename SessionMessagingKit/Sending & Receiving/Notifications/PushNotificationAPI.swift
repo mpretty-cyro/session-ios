@@ -55,13 +55,13 @@ public final class PushNotificationAPI : NSObject {
         let requestBody: RegistrationRequestBody = RegistrationRequestBody(token: token.toHexString(), pubKey: nil)
         
         guard let body: Data = try? JSONEncoder().encode(requestBody) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return Promise(error: HTTPError.invalidJSON)
         }
         
         let url = URL(string: "\(server)/unregister")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTPHeader.contentType: "application/json" ]
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
@@ -105,7 +105,7 @@ public final class PushNotificationAPI : NSObject {
         let requestBody: RegistrationRequestBody = RegistrationRequestBody(token: hexEncodedToken, pubKey: publicKey)
         
         guard let body: Data = try? JSONEncoder().encode(requestBody) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return Promise(error: HTTPError.invalidJSON)
         }
         
         let userDefaults = UserDefaults.standard
@@ -120,7 +120,7 @@ public final class PushNotificationAPI : NSObject {
         let url = URL(string: "\(server)/register")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTPHeader.contentType: "application/json" ]
         request.httpBody = body
         
         var promises: [Promise<Void>] = []
@@ -183,13 +183,13 @@ public final class PushNotificationAPI : NSObject {
         
         guard isUsingFullAPNs else { return Promise<Void> { $0.fulfill(()) } }
         guard let body: Data = try? JSONEncoder().encode(requestBody) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return Promise(error: HTTPError.invalidJSON)
         }
         
         let url = URL(string: "\(server)/\(operation.endpoint)")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTPHeader.contentType: "application/json" ]
         request.httpBody = body
         
         let promise: Promise<Void> = attempt(maxRetryCount: maxRetryCount, recoveringOn: DispatchQueue.global()) {
@@ -225,13 +225,13 @@ public final class PushNotificationAPI : NSObject {
         let requestBody: NotifyRequestBody = NotifyRequestBody(data: message, sendTo: recipient)
         
         guard let body: Data = try? JSONEncoder().encode(requestBody) else {
-            return Promise(error: HTTP.Error.invalidJSON)
+            return Promise(error: HTTPError.invalidJSON)
         }
         
         let url = URL(string: "\(server)/notify")!
         var request: URLRequest = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [ HTTP.Header.contentType: "application/json" ]
+        request.allHTTPHeaderFields = [ HTTPHeader.contentType: "application/json" ]
         request.httpBody = body
         
         let retryCount: UInt = (maxRetryCount ?? PushNotificationAPI.maxRetryCount)

@@ -79,7 +79,7 @@ public final class FileServerAPI: NSObject {
         
         return OnionRequestAPI.sendOnionRequest(urlRequest, to: request.server, with: serverPublicKey)
             .map2 { _, response in
-                guard let response: Data = response else { throw HTTP.Error.parsingFailed }
+                guard let response: Data = response else { throw HTTPError.parsingFailed }
                 
                 return response
             }

@@ -14,13 +14,13 @@ public extension Promise where T == Data {
 public extension Promise where T == (ResponseInfoType, Data?) {
     func decoded<R: Decodable>(as type: R.Type, on queue: DispatchQueue? = nil, using dependencies: Dependencies = Dependencies()) -> Promise<(ResponseInfoType, R)> {
         self.map(on: queue) { responseInfo, maybeData -> (ResponseInfoType, R) in
-            guard let data: Data = maybeData else { throw HTTP.Error.parsingFailed }
+            guard let data: Data = maybeData else { throw HTTPError.parsingFailed }
             
             do {
                 return (responseInfo, try data.decoded(as: type, using: dependencies))
             }
             catch {
-                throw HTTP.Error.parsingFailed
+                throw HTTPError.parsingFailed
             }
         }
     }

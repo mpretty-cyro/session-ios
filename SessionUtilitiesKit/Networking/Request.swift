@@ -14,11 +14,11 @@ public protocol EndpointType: Hashable {
 // MARK: - Request
 
 public struct Request<T: Encodable, Endpoint: EndpointType> {
-    let method: HTTP.Verb
+    let method: HTTPMethod
     public let server: String
     let endpoint: Endpoint
-    let queryParameters: [HTTP.QueryParam: String]
-    let headers: [HTTP.Header: String]
+    let queryParameters: [HTTPQueryParam: String]
+    let headers: [HTTPHeader: String]
     /// This is the body value sent during the request
     ///
     /// **Warning:** The `bodyData` value should be used to when making the actual request instead of this as there
@@ -28,11 +28,11 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
     // MARK: - Initialization
 
     public init(
-        method: HTTP.Verb = .get,
+        method: HTTPMethod = .get,
         server: String,
         endpoint: Endpoint,
-        queryParameters: [HTTP.QueryParam: String] = [:],
-        headers: [HTTP.Header: String] = [:],
+        queryParameters: [HTTPQueryParam: String] = [:],
+        headers: [HTTPHeader: String] = [:],
         body: T? = nil
     ) {
         self.method = method
@@ -56,7 +56,7 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
             case let bodyString as String:
                 // The only acceptable string body is a base64 encoded one
                 guard let encodedData: Data = Data(base64Encoded: bodyString) else {
-                    throw HTTP.Error.parsingFailed
+                    throw HTTPError.parsingFailed
                 }
                 
                 return encodedData
@@ -87,7 +87,7 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
     }
     
     public func generateUrlRequest() throws -> URLRequest {
-        guard let url: URL = url else { throw HTTP.Error.invalidURL }
+        guard let url: URL = url else { throw HTTPError.invalidURL }
         
         var urlRequest: URLRequest = URLRequest(url: url)
         urlRequest.httpMethod = method.rawValue

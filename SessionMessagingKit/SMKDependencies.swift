@@ -6,13 +6,7 @@ import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
-public class SMKDependencies: Dependencies {
-    internal var _onionApi: Atomic<OnionRequestAPIType.Type?>
-    public var onionApi: OnionRequestAPIType.Type {
-        get { Dependencies.getValueSettingIfNull(&_onionApi) { OnionRequestAPI.self } }
-        set { _onionApi.mutate { $0 = newValue } }
-    }
-    
+public class SMKDependencies: SSKDependencies {
     internal var _sodium: Atomic<SodiumType?>
     public var sodium: SodiumType {
         get { Dependencies.getValueSettingIfNull(&_sodium) { Sodium() } }
@@ -79,7 +73,6 @@ public class SMKDependencies: Dependencies {
         standardUserDefaults: UserDefaultsType? = nil,
         date: Date? = nil
     ) {
-        _onionApi = Atomic(onionApi)
         _sodium = Atomic(sodium)
         _box = Atomic(box)
         _genericHash = Atomic(genericHash)
@@ -90,6 +83,7 @@ public class SMKDependencies: Dependencies {
         _nonceGenerator24 = Atomic(nonceGenerator24)
         
         super.init(
+            onionApi: onionApi,
             generalCache: generalCache,
             storage: storage,
             scheduler: scheduler,

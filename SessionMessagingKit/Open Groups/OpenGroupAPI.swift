@@ -362,7 +362,7 @@ public enum OpenGroupAPI {
                     let roomInfo: ResponseInfoType = maybeRoom?.info,
                     let room: Room = maybeRoom?.data
                 else {
-                    throw HTTP.Error.parsingFailed
+                    throw HTTPError.parsingFailed
                 }
                 
                 return (
@@ -426,7 +426,7 @@ public enum OpenGroupAPI {
                     let roomsInfo: ResponseInfoType = maybeRooms?.info,
                     let rooms: [Room] = maybeRooms?.data
                 else {
-                    throw HTTP.Error.parsingFailed
+                    throw HTTPError.parsingFailed
                 }
                 
                 return (
@@ -883,7 +883,7 @@ public enum OpenGroupAPI {
                 using: dependencies
             )
             .map { responseInfo, maybeData in
-                guard let data: Data = maybeData else { throw HTTP.Error.parsingFailed }
+                guard let data: Data = maybeData else { throw HTTPError.parsingFailed }
                 
                 return (responseInfo, data)
             }
@@ -1178,7 +1178,7 @@ public enum OpenGroupAPI {
         using dependencies: SMKDependencies = SMKDependencies()
     ) -> Promise<(ResponseInfoType, Data?)> {
         guard (moderator != nil && admin == nil) || (moderator == nil && admin != nil) else {
-            return Promise(error: HTTP.Error.generic)
+            return Promise(error: HTTPError.generic)
         }
         
         return OpenGroupAPI
@@ -1366,10 +1366,10 @@ public enum OpenGroupAPI {
         
         updatedRequest.allHTTPHeaderFields = (request.allHTTPHeaderFields ?? [:])
             .updated(with: [
-                HTTP.Header.sogsPubKey: signResult.publicKey,
-                HTTP.Header.sogsTimestamp: "\(timestamp)",
-                HTTP.Header.sogsNonce: nonce.base64EncodedString(),
-                HTTP.Header.sogsSignature: signResult.signature.toBase64()
+                HTTPHeader.sogsPubKey: signResult.publicKey,
+                HTTPHeader.sogsTimestamp: "\(timestamp)",
+                HTTPHeader.sogsNonce: nonce.base64EncodedString(),
+                HTTPHeader.sogsSignature: signResult.signature.toBase64()
             ])
         
         return updatedRequest

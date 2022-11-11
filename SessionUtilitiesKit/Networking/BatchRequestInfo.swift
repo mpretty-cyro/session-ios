@@ -16,7 +16,7 @@ public extension HTTP {
             case bytes
         }
         
-        let method: HTTP.Verb
+        let method: HTTPMethod
         let path: String
         let headers: [String: String]?
         
@@ -71,7 +71,7 @@ public extension HTTP {
         /// The numeric http response code (e.g. 200 for success)
         public let code: Int32
         
-        /// This should always include the content type of the request
+        /// Any headers returned by the request
         public let headers: [String: String]
         
         /// The body of the request; will be plain json if content-type is `application/json`, otherwise it will be base64 encoded data
@@ -120,9 +120,13 @@ public extension HTTP.BatchSubResponse {
         
         self = HTTP.BatchSubResponse(
             code: try container.decode(Int32.self, forKey: .code),
-            headers: try container.decode([String: String].self, forKey: .headers),
+            headers: ((try? container.decode([String: String].self, forKey: .headers)) ?? [:]),
             body: body,
-            failedToParseBody: (body == nil && T.self != NoResponse.self && !(T.self is ExpressibleByNilLiteral.Type))
+            failedToParseBody: (
+                body == nil &&
+                T.self != NoResponse.self &&
+                !(T.self is ExpressibleByNilLiteral.Type)
+            )
         )
     }
 }
@@ -150,14 +154,30 @@ public extension Promise where T == (ResponseInfoType, Data?) {
     func decoded(as types: HTTP.BatchResponseTypes, on queue: DispatchQueue? = nil, using dependencies: Dependencies = Dependencies()) -> Promise<HTTP.BatchResponse> {
         self.map(on: queue) { responseInfo, maybeData -> HTTP.BatchResponse in
             // Need to split the data into an array of data so each item can be Decoded correctly
-            guard let data: Data = maybeData else { throw HTTP.Error.parsingFailed }
+            guard let data: Data = maybeData else { throw HTTPError.parsingFailed }
             guard let jsonObject: Any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-                throw HTTP.Error.parsingFailed
+                throw HTTPError.parsingFailed
             }
-            guard let anyArray: [Any] = jsonObject as? [Any] else { throw HTTP.Error.parsingFailed }
             
-            let dataArray: [Data] = anyArray.compactMap { try? JSONSerialization.data(withJSONObject: $0) }
-            guard dataArray.count == types.count else { throw HTTP.Error.parsingFailed }
+            let dataArray: [Data]
+            
+            switch jsonObject {
+                case let anyArray as [Any]:
+                    dataArray = anyArray.compactMap { try? JSONSerialization.data(withJSONObject: $0) }
+                    
+                    guard dataArray.count == types.count else { throw HTTPError.parsingFailed }
+                    
+                case let anyDict as [String: Any]:
+                    guard
+                        let resultsArray: [Data] = (anyDict["results"] as? [Any])?
+                            .compactMap({ try? JSONSerialization.data(withJSONObject: $0) }),
+                        resultsArray.count == types.count
+                    else { throw HTTPError.parsingFailed }
+                    
+                    dataArray = resultsArray
+                    
+                default: throw HTTPError.parsingFailed
+            }
             
             do {
                 return try zip(dataArray, types)
@@ -165,7 +185,7 @@ public extension Promise where T == (ResponseInfoType, Data?) {
                     .map { data in (responseInfo, data) }
             }
             catch {
-                throw HTTP.Error.parsingFailed
+                throw HTTPError.parsingFailed
             }
         }
     }

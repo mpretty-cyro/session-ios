@@ -160,22 +160,12 @@ public final class ClosedGroupPoller {
                         poller?.isPolling.wrappedValue[groupPublicKey] == true
                     else { return Promise(error: Error.pollingCanceled) }
                     
-                    let promises: [Promise<([SnodeReceivedMessage], String?)>] = {
-                        if SnodeAPI.hardfork >= 19 && SnodeAPI.softfork >= 1 {
-                            return [ SnodeAPI.getMessages(from: snode, associatedWith: groupPublicKey, authenticated: false) ]
-                        }
-                        
-                        if SnodeAPI.hardfork >= 19 {
-                            return [
-                                SnodeAPI.getClosedGroupMessagesFromDefaultNamespace(from: snode, associatedWith: groupPublicKey),
-                                SnodeAPI.getMessages(from: snode, associatedWith: groupPublicKey, authenticated: false)
-                            ]
-                        }
-                        
-                        return [ SnodeAPI.getClosedGroupMessagesFromDefaultNamespace(from: snode, associatedWith: groupPublicKey) ]
-                    }()
-                    
-                    return when(resolved: promises)
+                    return SnodeAPI
+                        .getMessages(
+                            in: [ .legacyClosedGroup ],
+                            from: snode,
+                            associatedWith: groupPublicKey
+                        )
                         .then(on: queue) { messageResults -> Promise<Void> in
                             guard
                                 (calledFromBackgroundPoller && isBackgroundPollValid()) ||
@@ -185,20 +175,12 @@ public final class ClosedGroupPoller {
                             var promises: [Promise<Void>] = []
                             var jobToRun: Job? = nil
                             let allMessages: [SnodeReceivedMessage] = messageResults
-                                .reduce([]) { result, next in
-                                    switch next {
-                                        case .fulfilled(let data): return result.appending(contentsOf: data.0)
-                                        default: return result
-                                    }
-                                }
+                                .values
+                                .compactMap { $0.data?.messages }
+                                .reduce([], +)
                             let allHashes: [String] = messageResults
-                                .reduce([]) { result, next in
-                                    switch next {
-                                        case .fulfilled(let data): return result.appending(data.1)
-                                        default: return result
-                                    }
-                                }
-                                .compactMap { $0 }
+                                .values
+                                .compactMap { $0.data?.lastHash }
                             var messageCount: Int = 0
                             var hadValidHashUpdate: Bool = false
                             
