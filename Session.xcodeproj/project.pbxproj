@@ -586,7 +586,7 @@
 		FD245C54285065E000B966DD /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33FDAF1255A580500E217F9 /* ThumbnailService.swift */; };
 		FD245C55285065E500B966DD /* OpenGroupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3DB66AB260ACA42001EFC55 /* OpenGroupManager.swift */; };
 		FD245C56285065EA00B966DD /* SNProto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C2A7822553AAF200C340D1 /* SNProto.swift */; };
-		FD245C57285065F100B966DD /* Poller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33FDB3A255A580B00E217F9 /* Poller.swift */; };
+		FD245C57285065F100B966DD /* CurrentUserPoller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33FDB3A255A580B00E217F9 /* CurrentUserPoller.swift */; };
 		FD245C58285065F700B966DD /* OpenGroupServerIdLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3C907427E83AC200CD579F /* OpenGroupServerIdLookup.swift */; };
 		FD245C59285065FC00B966DD /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C2A7702553A41E00C340D1 /* ControlMessage.swift */; };
 		FD245C5A2850660100B966DD /* LinkPreviewDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33FDBA8255A581500E217F9 /* LinkPreviewDraft.swift */; };
@@ -606,7 +606,7 @@
 		FD245C6C2850669200B966DD /* MessageReceiveJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = C352A31225574F5200338F3E /* MessageReceiveJob.swift */; };
 		FD245C6D285066A400B966DD /* NotifyPushServerJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = C352A32E2557549C00338F3E /* NotifyPushServerJob.swift */; };
 		FD26FA512919F9CE005801D8 /* GroupDeleteMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA502919F9CE005801D8 /* GroupDeleteMessage.swift */; };
-		FD26FA53291CACA9005801D8 /* BatchRequestInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC4386A27B4E88F00C60D73 /* BatchRequestInfo.swift */; };
+		FD26FA53291CACA9005801D8 /* BatchResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC4386A27B4E88F00C60D73 /* BatchResponse.swift */; };
 		FD26FA54291CAD31005801D8 /* Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD83B9CD27D17A04005E1583 /* Request.swift */; };
 		FD26FA55291CAD44005801D8 /* HTTPQueryParam.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC4385027B4807400C60D73 /* HTTPQueryParam.swift */; };
 		FD26FA57291CADAE005801D8 /* HTTPQueryParam+OpenGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA56291CADAE005801D8 /* HTTPQueryParam+OpenGroup.swift */; };
@@ -622,7 +622,7 @@
 		FD26FA6D291DADAE005801D8 /* SnodeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA6C291DADAE005801D8 /* SnodeRequest.swift */; };
 		FD26FA6F291DB171005801D8 /* ONSResolveRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA6E291DB171005801D8 /* ONSResolveRequest.swift */; };
 		FD26FA71291DB253005801D8 /* OxenDaemonRPCRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA70291DB253005801D8 /* OxenDaemonRPCRequest.swift */; };
-		FD26FA73291DB5F3005801D8 /* BatchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA72291DB5F3005801D8 /* BatchRequest.swift */; };
+		FD26FA73291DB5F3005801D8 /* SnodeBatchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA72291DB5F3005801D8 /* SnodeBatchRequest.swift */; };
 		FD26FA75291DBC8B005801D8 /* ONSResolveResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA74291DBC8B005801D8 /* ONSResolveResponse.swift */; };
 		FD26FA77291DE2C7005801D8 /* SnodeResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA76291DE2C7005801D8 /* SnodeResponse.swift */; };
 		FD26FA79291DEDD7005801D8 /* GetMessagesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD26FA78291DEDD7005801D8 /* GetMessagesRequest.swift */; };
@@ -781,6 +781,10 @@
 		FD87DCFE28B7582C00AF0F98 /* BlockedContactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD87DCFD28B7582C00AF0F98 /* BlockedContactsViewModel.swift */; };
 		FD87DD0028B820F200AF0F98 /* BlockedContactCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD87DCFF28B820F200AF0F98 /* BlockedContactCell.swift */; };
 		FD87DD0428B8727D00AF0F98 /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD87DD0328B8727D00AF0F98 /* Configuration.swift */; };
+		FD8ECF40292AF07900C0D1BB /* Poller.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF3F292AF07900C0D1BB /* Poller.swift */; };
+		FD8ECF42292B340D00C0D1BB /* SOGSBatchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF41292B340D00C0D1BB /* SOGSBatchRequest.swift */; };
+		FD8ECF44292B397E00C0D1BB /* SendMessageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */; };
+		FD8ECF46292B4BD500C0D1BB /* SendMessageResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */; };
 		FD90040F2818AB6D00ABAAF6 /* GetSnodePoolJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD90040E2818AB6D00ABAAF6 /* GetSnodePoolJob.swift */; };
 		FD9004122818ABDC00ABAAF6 /* Job.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B73F280402C4004C14C5 /* Job.swift */; };
 		FD9004142818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */; };
@@ -1419,7 +1423,7 @@
 		C33FDB29255A580A00E217F9 /* NSData+Image.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSData+Image.h"; sourceTree = "<group>"; };
 		C33FDB34255A580B00E217F9 /* ClosedGroupPoller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClosedGroupPoller.swift; sourceTree = "<group>"; };
 		C33FDB38255A580B00E217F9 /* OWSBackgroundTask.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OWSBackgroundTask.h; sourceTree = "<group>"; };
-		C33FDB3A255A580B00E217F9 /* Poller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Poller.swift; sourceTree = "<group>"; };
+		C33FDB3A255A580B00E217F9 /* CurrentUserPoller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CurrentUserPoller.swift; sourceTree = "<group>"; };
 		C33FDB3B255A580B00E217F9 /* NSNotificationCenter+OWS.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSNotificationCenter+OWS.h"; sourceTree = "<group>"; };
 		C33FDB3F255A580C00E217F9 /* String+SSK.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "String+SSK.swift"; sourceTree = "<group>"; };
 		C33FDB40255A580C00E217F9 /* SignalIOSProto.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignalIOSProto.swift; sourceTree = "<group>"; };
@@ -1723,7 +1727,7 @@
 		FD26FA6C291DADAE005801D8 /* SnodeRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeRequest.swift; sourceTree = "<group>"; };
 		FD26FA6E291DB171005801D8 /* ONSResolveRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ONSResolveRequest.swift; sourceTree = "<group>"; };
 		FD26FA70291DB253005801D8 /* OxenDaemonRPCRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OxenDaemonRPCRequest.swift; sourceTree = "<group>"; };
-		FD26FA72291DB5F3005801D8 /* BatchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchRequest.swift; sourceTree = "<group>"; };
+		FD26FA72291DB5F3005801D8 /* SnodeBatchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeBatchRequest.swift; sourceTree = "<group>"; };
 		FD26FA74291DBC8B005801D8 /* ONSResolveResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ONSResolveResponse.swift; sourceTree = "<group>"; };
 		FD26FA76291DE2C7005801D8 /* SnodeResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeResponse.swift; sourceTree = "<group>"; };
 		FD26FA78291DEDD7005801D8 /* GetMessagesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetMessagesRequest.swift; sourceTree = "<group>"; };
@@ -1878,6 +1882,10 @@
 		FD87DCFD28B7582C00AF0F98 /* BlockedContactsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedContactsViewModel.swift; sourceTree = "<group>"; };
 		FD87DCFF28B820F200AF0F98 /* BlockedContactCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedContactCell.swift; sourceTree = "<group>"; };
 		FD87DD0328B8727D00AF0F98 /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Configuration.swift; sourceTree = "<group>"; };
+		FD8ECF3F292AF07900C0D1BB /* Poller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Poller.swift; sourceTree = "<group>"; };
+		FD8ECF41292B340D00C0D1BB /* SOGSBatchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SOGSBatchRequest.swift; sourceTree = "<group>"; };
+		FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageRequest.swift; sourceTree = "<group>"; };
+		FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageResponse.swift; sourceTree = "<group>"; };
 		FD90040E2818AB6D00ABAAF6 /* GetSnodePoolJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetSnodePoolJob.swift; sourceTree = "<group>"; };
 		FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _002_SetupStandardJobs.swift; sourceTree = "<group>"; };
 		FDA8EAFD280E8B78002B68E5 /* FailedMessageSendsJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FailedMessageSendsJob.swift; sourceTree = "<group>"; };
@@ -1917,7 +1925,7 @@
 		FDC4386427B4DE7600C60D73 /* RoomPollInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPollInfo.swift; sourceTree = "<group>"; };
 		FDC4386627B4E10E00C60D73 /* Capabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capabilities.swift; sourceTree = "<group>"; };
 		FDC4386827B4E6B700C60D73 /* String+Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Utlities.swift"; sourceTree = "<group>"; };
-		FDC4386A27B4E88F00C60D73 /* BatchRequestInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchRequestInfo.swift; sourceTree = "<group>"; };
+		FDC4386A27B4E88F00C60D73 /* BatchResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchResponse.swift; sourceTree = "<group>"; };
 		FDC4387127B5BB3B00C60D73 /* FileUploadResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileUploadResponse.swift; sourceTree = "<group>"; };
 		FDC4387327B5BB9B00C60D73 /* Promise+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Promise+Utilities.swift"; sourceTree = "<group>"; };
 		FDC4387727B5C35400C60D73 /* SendMessageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageRequest.swift; sourceTree = "<group>"; };
@@ -2523,7 +2531,7 @@
 				C3C2A5D92553860B00C340D1 /* JSON.swift */,
 				FD83B9CD27D17A04005E1583 /* Request.swift */,
 				FDC438B027BB159600C60D73 /* RequestInfo.swift */,
-				FDC4386A27B4E88F00C60D73 /* BatchRequestInfo.swift */,
+				FDC4386A27B4E88F00C60D73 /* BatchResponse.swift */,
 				FD26FA5F291CB098005801D8 /* ResponseInfo.swift */,
 				C33FDAF2255A580500E217F9 /* ProxiedContentDownloader.swift */,
 				C3C2A5BC255385EE00C340D1 /* HTTP.swift */,
@@ -2794,9 +2802,10 @@
 		C32C59F8256DB5A6003C73A2 /* Pollers */ = {
 			isa = PBXGroup;
 			children = (
+				FD8ECF3F292AF07900C0D1BB /* Poller.swift */,
 				C33FDB34255A580B00E217F9 /* ClosedGroupPoller.swift */,
 				C3DB66C2260ACCE6001EFC55 /* OpenGroupPoller.swift */,
-				C33FDB3A255A580B00E217F9 /* Poller.swift */,
+				C33FDB3A255A580B00E217F9 /* CurrentUserPoller.swift */,
 			);
 			path = Pollers;
 			sourceTree = "<group>";
@@ -4081,6 +4090,7 @@
 		FDC4381827B34EAD00C60D73 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				FD8ECF41292B340D00C0D1BB /* SOGSBatchRequest.swift */,
 				FDC4386627B4E10E00C60D73 /* Capabilities.swift */,
 				FDC4385C27B4C18900C60D73 /* Room.swift */,
 				FDC4386427B4DE7600C60D73 /* RoomPollInfo.swift */,
@@ -4181,13 +4191,15 @@
 		FDC438AF27BB158500C60D73 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				FD26FA72291DB5F3005801D8 /* BatchRequest.swift */,
 				FD26FA6C291DADAE005801D8 /* SnodeRequest.swift */,
 				FD26FA76291DE2C7005801D8 /* SnodeResponse.swift */,
+				FD26FA72291DB5F3005801D8 /* SnodeBatchRequest.swift */,
 				FD26FA6E291DB171005801D8 /* ONSResolveRequest.swift */,
 				FD26FA74291DBC8B005801D8 /* ONSResolveResponse.swift */,
 				FD26FA78291DEDD7005801D8 /* GetMessagesRequest.swift */,
 				FD26FA7C291E0B10005801D8 /* GetMessagesResponse.swift */,
+				FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */,
+				FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */,
 				FD09796827F6BEA700936362 /* SwarmSnode.swift */,
 				FD77289B284DDCE10018502F /* SnodePoolResponse.swift */,
 				FD17D7E027F67BD400122BE0 /* SnodeReceivedMessage.swift */,
@@ -5342,7 +5354,7 @@
 				FD09796927F6BEA700936362 /* SwarmSnode.swift in Sources */,
 				C3C2A5E02553860B00C340D1 /* Threading.swift in Sources */,
 				C3C2A5BF255385EE00C340D1 /* SnodeMessage.swift in Sources */,
-				FD26FA73291DB5F3005801D8 /* BatchRequest.swift in Sources */,
+				FD26FA73291DB5F3005801D8 /* SnodeBatchRequest.swift in Sources */,
 				FD17D7E127F67BD400122BE0 /* SnodeReceivedMessage.swift in Sources */,
 				FDC438B927BB161E00C60D73 /* OnionRequestAPIVersion.swift in Sources */,
 				FD7728A0284EF5810018502F /* SnodeAPIError.swift in Sources */,
@@ -5373,7 +5385,9 @@
 				FD6A7A6D2818C61500035AC1 /* _002_SetupStandardJobs.swift in Sources */,
 				FD17D7B327F51E5B00122BE0 /* SSKSetting.swift in Sources */,
 				FD17D7AE27F41C4300122BE0 /* SnodeReceivedMessageInfo.swift in Sources */,
+				FD8ECF44292B397E00C0D1BB /* SendMessageRequest.swift in Sources */,
 				C3C2A5C3255385EE00C340D1 /* OnionRequestAPI.swift in Sources */,
+				FD8ECF46292B4BD500C0D1BB /* SendMessageResponse.swift in Sources */,
 				FD90040F2818AB6D00ABAAF6 /* GetSnodePoolJob.swift in Sources */,
 				FD17D7D427F6584600122BE0 /* OnionRequestAPIError.swift in Sources */,
 				FD26FA71291DB253005801D8 /* OxenDaemonRPCRequest.swift in Sources */,
@@ -5414,7 +5428,7 @@
 				FD71160228C8255900B47552 /* UIControl+Combine.swift in Sources */,
 				FD9004152818B46300ABAAF6 /* JobRunner.swift in Sources */,
 				C3A7211A2558BCA10043A11F /* DiffieHellman.swift in Sources */,
-				FD26FA53291CACA9005801D8 /* BatchRequestInfo.swift in Sources */,
+				FD26FA53291CACA9005801D8 /* BatchResponse.swift in Sources */,
 				C3A7225E2558C38D0043A11F /* Promise+Retaining.swift in Sources */,
 				FD17D7CA27F546D900122BE0 /* _001_InitialSetupMigration.swift in Sources */,
 				C3D9E4D12567777D0040E4F3 /* OWSMediaUtils.swift in Sources */,
@@ -5536,7 +5550,7 @@
 				FDF0B7472804F0CE004C14C5 /* DisappearingMessagesJob.swift in Sources */,
 				FDF0B73C27FFD3D6004C14C5 /* LinkPreview.swift in Sources */,
 				FD09797527FAB64300936362 /* ProfileManager.swift in Sources */,
-				FD245C57285065F100B966DD /* Poller.swift in Sources */,
+				FD245C57285065F100B966DD /* CurrentUserPoller.swift in Sources */,
 				FDA8EAFE280E8B78002B68E5 /* FailedMessageSendsJob.swift in Sources */,
 				FD245C6A2850666F00B966DD /* FileServerAPI.swift in Sources */,
 				FDC4386927B4E6B800C60D73 /* String+Utlities.swift in Sources */,
@@ -5576,6 +5590,7 @@
 				FD245C59285065FC00B966DD /* ControlMessage.swift in Sources */,
 				B8DE1FB626C22FCB0079C9CE /* CallMessage.swift in Sources */,
 				FD245C50285065C700B966DD /* VisibleMessage+Quote.swift in Sources */,
+				FD8ECF42292B340D00C0D1BB /* SOGSBatchRequest.swift in Sources */,
 				FD5C7307284F103B0029977D /* MessageReceiver+MessageRequests.swift in Sources */,
 				C3A71D0B2558989C0043A11F /* MessageWrapper.swift in Sources */,
 				FDE77F6B280FEB28002CFC5D /* ControlMessageProcessRecord.swift in Sources */,
@@ -5669,6 +5684,7 @@
 				FD5C72F9284F0E880029977D /* MessageReceiver+TypingIndicators.swift in Sources */,
 				FD5C7303284F0FA50029977D /* MessageReceiver+Calls.swift in Sources */,
 				FD83B9C927D0487A005E1583 /* SendDirectMessageResponse.swift in Sources */,
+				FD8ECF40292AF07900C0D1BB /* Poller.swift in Sources */,
 				FD37F5682918D458005A5E92 /* MessageReceiver+ClosedGroups.swift in Sources */,
 				FDC438AA27BB12BB00C60D73 /* UserModeratorRequest.swift in Sources */,
 				FD245C54285065E000B966DD /* ThumbnailService.swift in Sources */,

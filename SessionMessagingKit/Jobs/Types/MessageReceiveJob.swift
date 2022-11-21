@@ -7,6 +7,8 @@ import SessionUtilitiesKit
 
 public enum MessageReceiveJob: JobExecutor {
     public static var maxFailureCount: Int = 10
+    /// Note: This will sometimes be `Message.nonThreadMessageId`, it's not actually used as a foreign key
+    /// just garbage collection so doesn't need to resolve to a proper thread id
     public static var requiresThreadId: Bool = true
     public static let requiresInteractionId: Bool = false
     

@@ -111,9 +111,6 @@ public final class SnodeAPI {
     }
     
     private static func setSwarm(to newValue: Set<Snode>, for publicKey: String, persist: Bool = true) {
-        #if DEBUG
-        dispatchPrecondition(condition: .onQueue(Threading.workQueue))
-        #endif
         swarmCache.mutate { $0[publicKey] = newValue }
         
         guard persist else { return }
@@ -124,9 +121,6 @@ public final class SnodeAPI {
     }
     
     public static func dropSnodeFromSwarmIfNeeded(_ snode: Snode, publicKey: String) {
-        #if DEBUG
-        dispatchPrecondition(condition: .onQueue(Threading.workQueue))
-        #endif
         let swarmOrNil = swarmCache.wrappedValue[publicKey]
         guard var swarm = swarmOrNil, let index = swarm.firstIndex(of: snode) else { return }
         swarm.remove(at: index)
@@ -226,7 +220,8 @@ public final class SnodeAPI {
                                 )
                             )
                         ),
-                        to: snode
+                        to: snode,
+                        associatedWith: nil
                     )
                     .decoded(as: ONSResolveResponse.self, on: Threading.workQueue)
                 }
@@ -288,153 +283,8 @@ public final class SnodeAPI {
 
     // MARK: - Retrieve
     
-//    // Not in use until we can batch delete and store config messages
-//    public static func getConfigMessages(from snode: Snode, associatedWith publicKey: String) -> Promise<([SnodeReceivedMessage], String?)> {
-//        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
-//
-//        Threading.workQueue.async {
-//            getMessagesWithAuthentication(from: snode, associatedWith: publicKey, namespace: .config)
-//                .done2 {
-//                    seal.fulfill($0)
-//                }
-//                .catch2 {
-//                    seal.reject($0)
-//                }
-//        }
-//
-//        return promise
-//    }
-//
-//    public static func getMessages(from snode: Snode, associatedWith publicKey: String, authenticated: Bool = true) -> Promise<([SnodeReceivedMessage], String?)> {
-//        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
-//
-//        Threading.workQueue.async {
-//            let retrievePromise = (authenticated ?
-//                getMessagesWithAuthentication(from: snode, associatedWith: publicKey, namespace: .default) :
-//                getMessagesUnauthenticated(from: snode, associatedWith: publicKey)
-//            )
-//
-//            retrievePromise
-//                .done2 { seal.fulfill($0) }
-//                .catch2 { seal.reject($0) }
-//        }
-//
-//        return promise
-//    }
-//
-//    public static func getClosedGroupMessagesFromDefaultNamespace(from snode: Snode, associatedWith publicKey: String) -> Promise<([SnodeReceivedMessage], String?)> {
-//        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
-//
-//        Threading.workQueue.async {
-//            getMessagesUnauthenticated(from: snode, associatedWith: publicKey, namespace: .default)
-//                .done2 { seal.fulfill($0) }
-//                .catch2 { seal.reject($0) }
-//        }
-//
-//        return promise
-//    }
-//
-//    private static func getMessagesWithAuthentication(
-//        from snode: Snode,
-//        associatedWith publicKey: String,
-//        namespace: SnodeAPI.Namespace
-//    ) -> Promise<([SnodeReceivedMessage], String?)> {
-//        /// **Note:** All authentication logic is only apply to 1-1 chats, the reason being that we can't currently support it yet for
-//        /// closed groups. The Storage Server requires an ed25519 key pair, but we don't have that for our closed groups.
-//        guard let userED25519KeyPair: Box.KeyPair = Storage.shared.read({ db in Identity.fetchUserEd25519KeyPair(db) }) else {
-//            return Promise(error: SnodeAPIError.noKeyPair)
-//        }
-//
-//        // Get last message hash
-//        SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(for: snode, namespace: namespace, associatedWith: publicKey)
-//        let lastHash = SnodeReceivedMessageInfo.fetchLastNotExpired(for: snode, namespace: namespace, associatedWith: publicKey)?.hash ?? ""
-//
-//        // Construct signature
-//        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
-//        let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
-//        let namespaceVerificationString = (namespace == .default ? "" : "\(namespace.rawValue)")
-//
-//        guard
-//            let verificationData = ("retrieve" + namespaceVerificationString + String(timestamp)).data(using: String.Encoding.utf8),
-//            let signature = sodium.wrappedValue.sign.signature(message: Bytes(verificationData), secretKey: userED25519KeyPair.secretKey)
-//        else { return Promise(error: SnodeAPIError.signingFailed) }
-//
-//        // Make the request
-//        let parameters: JSON = [
-//            "pubKey": Features.useTestnet ? publicKey.removingIdPrefixIfNeeded() : publicKey,
-//            "namespace": namespace.rawValue,
-//            "lastHash": lastHash,
-//            "timestamp": timestamp,
-//            "pubkey_ed25519": ed25519PublicKey,
-//            "signature": signature.toBase64()
-//        ]
-//
-//        return invoke(.getMessages, on: snode, associatedWith: publicKey, parameters: parameters)
-//            .map { responseData -> [SnodeReceivedMessage] in
-//                guard
-//                    let responseJson: JSON = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON,
-//                    let rawMessages: [JSON] = responseJson["messages"] as? [JSON]
-//                else {
-//                    return []
-//                }
-//
-//                return rawMessages
-//                    .compactMap { rawMessage -> SnodeReceivedMessage? in
-//                        SnodeReceivedMessage(
-//                            snode: snode,
-//                            publicKey: publicKey,
-//                            namespace: namespace,
-//                            rawMessage: rawMessage
-//                        )
-//                    }
-//            }
-//            .map { ($0, lastHash) }
-//    }
-//
-//    private static func getMessagesUnauthenticated(
-//        from snode: Snode,
-//        associatedWith publicKey: String,
-//        namespace: SnodeAPI.Namespace = .legacyClosedGroup
-//    ) -> Promise<([SnodeReceivedMessage], String?)> {
-//        // Get last message hash
-//        SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(for: snode, namespace: namespace, associatedWith: publicKey)
-//        let lastHash = SnodeReceivedMessageInfo.fetchLastNotExpired(for: snode, namespace: namespace, associatedWith: publicKey)?.hash ?? ""
-//
-//        // Make the request
-//        var parameters: JSON = [
-//            "pubKey": (Features.useTestnet ? publicKey.removingIdPrefixIfNeeded() : publicKey),
-//            "lastHash": lastHash
-//        ]
-//
-//        // Don't include namespace if polling for 0 with no authentication
-//        if namespace != .default {
-//            parameters["namespace"] = namespace.rawValue
-//        }
-//
-//        return invoke(.getMessages, on: snode, associatedWith: publicKey, parameters: parameters)
-//            .map { responseData -> [SnodeReceivedMessage] in
-//                guard
-//                    let responseJson: JSON = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON,
-//                    let rawMessages: [JSON] = responseJson["messages"] as? [JSON]
-//                else {
-//                    return []
-//                }
-//
-//                return rawMessages
-//                    .compactMap { rawMessage -> SnodeReceivedMessage? in
-//                        SnodeReceivedMessage(
-//                            snode: snode,
-//                            publicKey: publicKey,
-//                            namespace: namespace,
-//                            rawMessage: rawMessage
-//                        )
-//                    }
-//            }
-//            .map { ($0, lastHash) }
-//    }
-    
     public static func getMessages(
-        in namespaces: [SnodeAPI.Namespace] = [.default],
+        in namespaces: [SnodeAPI.Namespace],
         from snode: Snode,
         associatedWith publicKey: String
     ) -> Promise<[SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)]> {
@@ -469,11 +319,11 @@ public final class SnodeAPI {
             var userED25519KeyPair: Box.KeyPair?
             
             do {
-                let requests: [SnodeAPIBatchRequestInfoType] = try namespaces
-                    .map { namespace -> SnodeAPIBatchRequestInfoType in
+                let requests: [SnodeAPI.BatchRequest.Info] = try namespaces
+                    .map { namespace -> SnodeAPI.BatchRequest.Info in
                         // Check if this namespace requires authentication
-                        guard namespace.requiresAuthentication else {
-                            return BatchRequestInfo(
+                        guard namespace.requiresReadAuthentication else {
+                            return BatchRequest.Info(
                                 request: SnodeRequest(
                                     endpoint: .getMessages,
                                     body: GetMessagesRequest(
@@ -511,7 +361,7 @@ public final class SnodeAPI {
                         
                         userED25519KeyPair = maybeKeyPair
                         
-                        return BatchRequestInfo(
+                        return BatchRequest.Info(
                             request: SnodeRequest(
                                 endpoint: .getMessages,
                                 body: GetMessagesRequest(
@@ -533,7 +383,8 @@ public final class SnodeAPI {
                         endpoint: .batch,
                         body: BatchRequest(requests: requests)
                     ),
-                    to: snode
+                    to: snode,
+                    associatedWith: publicKey
                 )
                 .decoded(as: responseTypes, on: Threading.workQueue)//, using: dependencies)    // TODO: Dependencies
                 .map2 { batchResponse -> [SnodeAPI.Namespace: (ResponseInfoType, ([SnodeReceivedMessage], String?)?)] in
@@ -574,185 +425,79 @@ public final class SnodeAPI {
         return promise
     }
     
-//    public static func getMessagesSpecial(
-//        from snode: Snode,
-//        associatedWith publicKey: String
-//    ) -> Promise<[Int: (ResponseInfoType, ([SnodeReceivedMessage], String?))]> {
-//        // Prune old message hashes
-//        SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(for: snode, namespace: .default, associatedWith: publicKey)
-//        SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(for: snode, namespace: .legacyClosedGroup, associatedWith: publicKey)
-//
-//        // Generate the requests
-//        let requests: [SnodeAPIBatchRequestInfoType] = [
-//            BatchRequestInfo(
-//                request: SnodeRequest(
-//                    endpoint: .getMessages,
-//                    body: GetMessagesRequest(
-//                        pubKey: (Features.useTestnet ? publicKey.removingIdPrefixIfNeeded() : publicKey),
-//                        lastHash: (SnodeReceivedMessageInfo
-//                            .fetchLastNotExpired(
-//                                for: snode,
-//                                namespace: .default,
-//                                associatedWith: publicKey
-//                            )?
-//                            .hash)
-//                            .defaulting(to: ""),
-//                        namespace: nil // Don't include namespace if polling for 0 with no authentication
-//                    )
-//                ),
-//                responseType: ONSResolveResponse.self
-//            ),
-//            BatchRequestInfo(
-//                request: SnodeRequest(
-//                    endpoint: .getMessages,
-//                    body: GetMessagesRequest(
-//                        pubKey: (Features.useTestnet ? publicKey.removingIdPrefixIfNeeded() : publicKey),
-//                        lastHash: (SnodeReceivedMessageInfo
-//                            .fetchLastNotExpired(
-//                                for: snode,
-//                                namespace: .legacyClosedGroup,
-//                                associatedWith: publicKey
-//                            )?
-//                            .hash)
-//                            .defaulting(to: ""),
-//                        namespace: .legacyClosedGroup
-//                    )
-//                ),
-//                responseType: ONSResolveResponse.self
-//            )
-//        ]
-//        let responseTypes = requests.map { $0.responseType }
-//
-//        let promise = send(
-//            request: SnodeRequest(
-//                endpoint: .batch,
-//                body: BatchRequest(
-//                    requests: requests
-//                )
-//            ),
-//            to: snode
-//        )
-//        .map2 { _, data -> [Int: (ResponseInfoType, ([SnodeReceivedMessage], String?))] in
-//            print("ASDA, \(data)")
-//            throw HTTPError.generic
-//        }
-//
-//        promise.catch2 { error in
-//            print("ASD \(error)")
-//        }
-//
-//        return promise
-////        .decoded(as: responseTypes, on: Threading.workQueue)//, using: dependencies)
-////        .mapRequestsToHashMap(requests)
-//
-////        .map { responseData -> [SnodeReceivedMessage] in
-////            guard
-////                let responseJson: JSON = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON,
-////                let rawMessages: [JSON] = responseJson["messages"] as? [JSON]
-////            else {
-////                return []
-////            }
-////
-////            return rawMessages
-////                .compactMap { rawMessage -> SnodeReceivedMessage? in
-////                    SnodeReceivedMessage(
-////                        snode: snode,
-////                        publicKey: publicKey,
-////                        namespace: namespace,
-////                        rawMessage: rawMessage
-////                    )
-////                }
-////        }
-////        .map { ($0, lastHash) }
-//    }
-    
     // MARK: Store
     
-    public static func sendMessage(_ message: SnodeMessage, isClosedGroupMessage: Bool, isConfigMessage: Bool) -> Promise<Set<Promise<Data>>> {
-        return sendMessageUnauthenticated(message, isClosedGroupMessage: isClosedGroupMessage)
-    }
-    
-    // Not in use until we can batch delete and store config messages
-    private static func sendMessageWithAuthentication(_ message: SnodeMessage, namespace: Int) -> Promise<Set<Promise<Data>>> {
-        guard
-            let messageData: Data = try? JSONEncoder().encode(message),
-            let messageJson: JSON = try? JSONSerialization.jsonObject(with: messageData, options: [ .fragmentsAllowed ]) as? JSON
-        else { return Promise(error: HTTPError.invalidJSON) }
-        
-        guard let userED25519KeyPair: Box.KeyPair = Storage.shared.read({ db in Identity.fetchUserEd25519KeyPair(db) }) else {
-            return Promise(error: SnodeAPIError.noKeyPair)
-        }
-        
-        // Construct signature
-        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
-        let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
-        
-        guard
-            let verificationData = ("store" + String(namespace) + String(timestamp)).data(using: String.Encoding.utf8),
-            let signature = sodium.wrappedValue.sign.signature(message: Bytes(verificationData), secretKey: userED25519KeyPair.secretKey)
-        else { return Promise(error: SnodeAPIError.signingFailed) }
-        
-        // Make the request
-        let (promise, seal) = Promise<Set<Promise<Data>>>.pending()
-        let publicKey = (Features.useTestnet ? message.recipient.removingIdPrefixIfNeeded() : message.recipient)
+    public static func sendMessage(
+        _ message: SnodeMessage,
+        in namespace: Namespace
+    ) -> Promise<Set<Promise<(any ResponseInfoType, SendMessagesResponse)>>> {
+        let (promise, seal) = Promise<Set<Promise<(any ResponseInfoType, SendMessagesResponse)>>>.pending()
+        let publicKey: String = (Features.useTestnet ?
+            message.recipient.removingIdPrefixIfNeeded() :
+            message.recipient
+        )
         
         Threading.workQueue.async {
             getTargetSnodes(for: publicKey)
-                .map2 { targetSnodes in
-                    var parameters: JSON = messageJson
-                    parameters["namespace"] = namespace
-                    parameters["sig_timestamp"] = timestamp
-                    parameters["pubkey_ed25519"] = ed25519PublicKey
-                    parameters["signature"] = signature.toBase64()
-                    
-                    return Set(targetSnodes.map { targetSnode in
-                        attempt(maxRetryCount: maxRetryCount, recoveringOn: Threading.workQueue) {
-                            invoke(.sendMessage, on: targetSnode, associatedWith: publicKey, parameters: parameters)
-                        }
-                    })
-                }
-                .done2 { seal.fulfill($0) }
-                .catch2 { seal.reject($0) }
-        }
-        
-        return promise
-    }
-    
-    private static func sendMessageUnauthenticated(_ message: SnodeMessage, isClosedGroupMessage: Bool) -> Promise<Set<Promise<Data>>> {
-        guard
-            let messageData: Data = try? JSONEncoder().encode(message),
-            let messageJson: JSON = try? JSONSerialization.jsonObject(with: messageData, options: [ .fragmentsAllowed ]) as? JSON
-        else { return Promise(error: HTTPError.invalidJSON) }
-        
-        let (promise, seal) = Promise<Set<Promise<Data>>>.pending()
-        let publicKey = Features.useTestnet ? message.recipient.removingIdPrefixIfNeeded() : message.recipient
-        
-        Threading.workQueue.async {
-            getTargetSnodes(for: publicKey)
-                .map2 { targetSnodes in
-                    var rawResponsePromises: Set<Promise<Data>> = Set()
-                    var parameters: JSON = messageJson
-                    parameters["namespace"] = (isClosedGroupMessage ? SnodeAPI.Namespace.legacyClosedGroup : SnodeAPI.Namespace.default).rawValue
-                    
-                    for targetSnode in targetSnodes {
-                        let rawResponsePromise = attempt(maxRetryCount: maxRetryCount, recoveringOn: Threading.workQueue) {
-                            invoke(.sendMessage, on: targetSnode, associatedWith: publicKey, parameters: parameters)
-                        }
-                        rawResponsePromises.insert(rawResponsePromise)
-                    }
-                    
-                    // Send closed group messages to default namespace as well
-                    if hardfork == 19 && softfork == 0 && isClosedGroupMessage {
-                        parameters["namespace"] = SnodeAPI.Namespace.default.rawValue
-                        for targetSnode in targetSnodes {
-                            let rawResponsePromise = attempt(maxRetryCount: maxRetryCount, recoveringOn: Threading.workQueue) {
-                                invoke(.sendMessage, on: targetSnode, associatedWith: publicKey, parameters: parameters)
+                .map2 { targetSnodes -> Set<Promise<(any ResponseInfoType, SendMessagesResponse)>> in
+                    targetSnodes
+                        .map { targetSnode in
+                            attempt(maxRetryCount: maxRetryCount, recoveringOn: Threading.workQueue) {
+                                guard namespace.requiresWriteAuthentication else {
+                                    return SnodeAPI
+                                        .send(
+                                            request: SnodeRequest(
+                                                endpoint: .sendMessage,
+                                                body: SendMessageRequest(
+                                                    message: message,
+                                                    namespace: namespace
+                                                )
+                                            ),
+                                            to: targetSnode,
+                                            associatedWith: publicKey
+                                        )
+                                        .decoded(as: SendMessagesResponse.self, on: Threading.workQueue)
+                                }
+                                
+                                guard let userED25519KeyPair: Box.KeyPair = Storage.shared.read({ db in Identity.fetchUserEd25519KeyPair(db) }) else {
+                                    return Promise(error: SnodeAPIError.noKeyPair)
+                                }
+                                
+                                // Generate the signature
+                                let timestamp = UInt64(
+                                    Int64(floor(Date().timeIntervalSince1970 * 1000)) +
+                                    SnodeAPI.clockOffset.wrappedValue
+                                )
+                                let verificationBytes: [UInt8] = SnodeAPI.Endpoint.sendMessage.rawValue.bytes
+                                    .appending(contentsOf: namespace.verificationString.bytes)
+                                    .appending(contentsOf: "\(timestamp)".data(using: .ascii)?.bytes)
+                                
+                                guard
+                                    let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
+                                        message: verificationBytes,
+                                        secretKey: userED25519KeyPair.secretKey
+                                    )
+                                else { return Promise(error: SnodeAPIError.signingFailed) }
+                                
+                                return SnodeAPI
+                                    .send(
+                                        request: SnodeRequest(
+                                            endpoint: .sendMessage,
+                                            body: SendMessageRequest(
+                                                message: message,
+                                                namespace: namespace,
+                                                timestamp: timestamp,
+                                                pubKeyEd25519: userED25519KeyPair.publicKey.toHexString(),
+                                                signature: signatureBytes.toBase64()
+                                            )
+                                        ),
+                                        to: targetSnode,
+                                        associatedWith: publicKey
+                                    )
+                                    .decoded(as: SendMessagesResponse.self, on: Threading.workQueue)
                             }
-                            rawResponsePromises.insert(rawResponsePromise)
                         }
-                    }
-                    
-                    return rawResponsePromises
+                        .asSet()
                 }
                 .done2 { seal.fulfill($0) }
                 .catch2 { seal.reject($0) }
@@ -1159,7 +904,7 @@ public final class SnodeAPI {
     private static func send<T: Encodable>(
         request: SnodeRequest<T>,
         to snode: Snode,
-        associatedWith publicKey: String? = nil,
+        associatedWith publicKey: String?,
         using dependencies: SSKDependencies = SSKDependencies()
     ) -> Promise<(ResponseInfoType, Data?)> {
         guard let payload: Data = try? request.generateBody() else {

@@ -7,159 +7,193 @@ import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
-public final class Poller {
-    private var isPolling: Atomic<Bool> = Atomic(false)
-    private var usedSnodes = Set<Snode>()
-    private var pollCount = 0
+public class Poller {
+    private var timers: Atomic<[String: Timer]> = Atomic([:])
+    internal var isPolling: Atomic<[String: Bool]> = Atomic([:])
+    internal var pollCount: Atomic<[String: Int]> = Atomic([:])
+    internal var failureCount: Atomic<[String: Int]> = Atomic([:])
 
     // MARK: - Settings
     
-    private static let pollInterval: TimeInterval = 1.5
-    private static let retryInterval: TimeInterval = 0.25
-    private static let maxRetryInterval: TimeInterval = 15
-    
-    /// After polling a given snode this many times we always switch to a new one.
-    ///
-    /// The reason for doing this is that sometimes a snode will be giving us successful responses while
-    /// it isn't actually getting messages from other snodes.
-    private static let maxPollCount: UInt = 6
-
-    // MARK: - Error
-    
-    private enum Error: LocalizedError {
-        case pollLimitReached
-
-        var localizedDescription: String {
-            switch self {
-                case .pollLimitReached: return "Poll limit reached for current snode."
-            }
-        }
+    /// The namespaces which this poller queries
+    internal var namespaces: [SnodeAPI.Namespace] {
+        preconditionFailure("abstract class - override in subclass")
     }
-
+    
+    /// The number of times the poller can poll before swapping to a new snode
+    internal var maxNodePollCount: UInt {
+        preconditionFailure("abstract class - override in subclass")
+    }
+    
     // MARK: - Public API
     
     public init() {}
     
-    public func startIfNeeded() {
-        guard !isPolling.wrappedValue else { return }
+    public func stopAllPollers() {
+        let pollers: [String] = Array(isPolling.wrappedValue.keys)
         
-        SNLog("Started polling.")
-        isPolling.mutate { $0 = true }
-        setUpPolling()
+        pollers.forEach { groupPublicKey in
+            self.stopPolling(for: groupPublicKey)
+        }
     }
-
-    public func stop() {
-        SNLog("Stopped polling.")
-        isPolling.mutate { $0 = false }
-        usedSnodes.removeAll()
+    
+    public func stopPolling(for publicKey: String) {
+        isPolling.mutate { $0[publicKey] = false }
+        timers.mutate { $0[publicKey]?.invalidate() }
+    }
+    
+    // MARK: - Abstract Methods
+    
+    /// The name for this poller to appear in the logs
+    internal func pollerName(for publicKey: String) -> String {
+        preconditionFailure("abstract class - override in subclass")
+    }
+    
+    internal func nextPollDelay(for publicKey: String) -> TimeInterval {
+        preconditionFailure("abstract class - override in subclass")
+    }
+    
+    internal func getSnodeForPolling(
+        for publicKey: String,
+        on queue: DispatchQueue
+    ) -> Promise<Snode> {
+        preconditionFailure("abstract class - override in subclass")
+    }
+    
+    internal func handlePollError(_ error: Error, for publicKey: String) {
+        preconditionFailure("abstract class - override in subclass")
     }
 
     // MARK: - Private API
     
-    private func setUpPolling(delay: TimeInterval = Poller.retryInterval) {
-        guard isPolling.wrappedValue else { return }
+    internal func startIfNeeded(for publicKey: String) {
+        guard isPolling.wrappedValue[publicKey] != true else { return }
         
-        Threading.pollerQueue.async {
-            let _ = SnodeAPI.getSwarm(for: getUserHexEncodedPublicKey())
-                .then(on: Threading.pollerQueue) { [weak self] _ -> Promise<Void> in
-                    let (promise, seal) = Promise<Void>.pending()
-                    
-                    self?.usedSnodes.removeAll()
-                    self?.pollNextSnode(seal: seal)
-                    
-                    return promise
-                }
-                .done(on: Threading.pollerQueue) { [weak self] in
-                    guard self?.isPolling.wrappedValue == true else { return }
-                    
-                    Timer.scheduledTimerOnMainThread(withTimeInterval: Poller.retryInterval, repeats: false) { _ in
-                        self?.setUpPolling()
-                    }
-                }
-                .catch(on: Threading.pollerQueue) { [weak self] _ in
-                    guard self?.isPolling.wrappedValue == true else { return }
-                    
-                    let nextDelay: TimeInterval = min(Poller.maxRetryInterval, (delay * 1.2))
-                    Timer.scheduledTimerOnMainThread(withTimeInterval: nextDelay, repeats: false) { _ in
-                        self?.setUpPolling()
-                    }
-                }
-        }
-    }
-
-    private func pollNextSnode(seal: Resolver<Void>) {
-        let userPublicKey = getUserHexEncodedPublicKey()
-        let swarm = SnodeAPI.swarmCache.wrappedValue[userPublicKey] ?? []
-        let unusedSnodes = swarm.subtracting(usedSnodes)
-        
-        guard !unusedSnodes.isEmpty else {
-            seal.fulfill(())
-            return
-        }
-        
-        // randomElement() uses the system's default random generator, which is cryptographically secure
-        let nextSnode = unusedSnodes.randomElement()!
-        usedSnodes.insert(nextSnode)
-        
-        Poller.pollRecursively(nextSnode, poller: self)
-            .done2 {
-                seal.fulfill(())
-            }
-            .catch2 { [weak self] error in
-                if let error = error as? Error, error == .pollLimitReached {
-                    self?.pollCount = 0
-                }
-                else if UserDefaults.sharedLokiProject?[.isMainAppActive] != true {
-                    // Do nothing when an error gets throws right after returning from the background (happens frequently)
-                }
-                else {
-                    SNLog("Polling \(nextSnode) failed; dropping it and switching to next snode.")
-                    SnodeAPI.dropSnodeFromSwarmIfNeeded(nextSnode, publicKey: userPublicKey)
-                }
-                
-                Threading.pollerQueue.async {
-                    self?.pollNextSnode(seal: seal)
-                }
-            }
+        // Might be a race condition that the setUpPolling finishes too soon,
+        // and the timer is not created, if we mark the group as is polling
+        // after setUpPolling. So the poller may not work, thus misses messages
+        isPolling.mutate { $0[publicKey] = true }
+        setUpPolling(for: publicKey)
     }
     
-    private static func pollRecursively(_ snode: Snode, poller: Poller? = nil) -> Promise<Void> {
-        guard poller?.isPolling.wrappedValue == true else { return Promise { $0.fulfill(()) } }
+    /// We want to initially trigger a poll against the target service node and then run the recursive polling,
+    /// if an error is thrown during the poll then this should automatically restart the polling
+    internal func setUpPolling(for publicKey: String) {
+        guard isPolling.wrappedValue[publicKey] == true else { return }
         
-        return Poller.poll(snode, poller: poller)
-            .then(on: Threading.pollerQueue) { _ in
-                poller?.pollCount += 1
-                
-                guard (poller?.pollCount ?? 0) < Poller.maxPollCount else {
-                    throw Error.pollLimitReached
+        let namespaces: [SnodeAPI.Namespace] = self.namespaces
+        
+        Threading.pollerQueue.async { [weak self] in
+            self?.getSnodeForPolling(for: publicKey, on: Threading.pollerQueue)
+                .then(on: Threading.pollerQueue) { snode in
+                    Poller.poll(
+                        namespaces: namespaces,
+                        from: snode,
+                        for: publicKey,
+                        on: Threading.pollerQueue,
+                        poller: self
+                    )
                 }
+                .done(on: Threading.pollerQueue) { _ in
+                    self?.pollRecursively(for: publicKey)
+                }
+                .catch(on: Threading.pollerQueue) { error in
+                    guard self?.isPolling.wrappedValue[publicKey] == true else { return }
+                    
+                    self?.handlePollError(error, for: publicKey)
+                }
+        }
+    }
+    
+    private func pollRecursively(for publicKey: String) {
+        guard isPolling.wrappedValue[publicKey] == true else { return }
+        
+        let namespaces: [SnodeAPI.Namespace] = self.namespaces
+        let nextPollInterval: TimeInterval = nextPollDelay(for: publicKey)
+        
+        timers.mutate {
+            $0[publicKey] = Timer.scheduledTimerOnMainThread(
+                withTimeInterval: nextPollInterval,
+                repeats: false
+            ) { [weak self] timer in
+                timer.invalidate()
                 
-                return withDelay(Poller.pollInterval, completionQueue: Threading.pollerQueue) {
-                    guard poller?.isPolling.wrappedValue == true else {
-                        return Promise { $0.fulfill(()) }
-                    }
-
-                    return Poller.pollRecursively(snode, poller: poller)
+                Threading.pollerQueue.async {
+                    self?.getSnodeForPolling(for: publicKey, on: Threading.pollerQueue)
+                        .then(on: Threading.pollerQueue) { snode in
+                            Poller.poll(
+                                namespaces: namespaces,
+                                from: snode,
+                                for: publicKey,
+                                on: Threading.pollerQueue,
+                                poller: self
+                            )
+                        }
+                        .done(on: Threading.pollerQueue) { [weak self] _ in
+                            let maxNodePollCount: UInt = (self?.maxNodePollCount ?? 0)
+                            
+                            // If we have polled this service node more than the
+                            // maximum allowed then throw an error so the parent
+                            // loop can restart the polling
+                            if maxNodePollCount > 0 {
+                                let pollCount: Int = (self?.pollCount.wrappedValue[publicKey] ?? 0)
+                                self?.pollCount.mutate { $0[publicKey] = (pollCount + 1) }
+                                
+                                guard pollCount < maxNodePollCount else {
+                                    let newSnodeNextPollInterval: TimeInterval = (self?.nextPollDelay(for: publicKey) ?? nextPollInterval)
+                                    
+                                    self?.timers.mutate {
+                                        $0[publicKey] = Timer.scheduledTimerOnMainThread(
+                                            withTimeInterval: newSnodeNextPollInterval,
+                                            repeats: false
+                                        ) { [weak self] timer in
+                                            timer.invalidate()
+                                            
+                                            self?.pollCount.mutate { $0[publicKey] = 0 }
+                                            self?.setUpPolling(for: publicKey)
+                                        }
+                                    }
+                                    return
+                                }
+                            }
+                            
+                            // Otherwise just loop
+                            self?.pollRecursively(for: publicKey)
+                        }
+                        .catch(on: Threading.pollerQueue) { [weak self] error in
+                            self?.handlePollError(error, for: publicKey)
+                        }
                 }
             }
+        }
     }
-
+    
     public static func poll(
-        _ snode: Snode,
-        on queue: DispatchQueue? = nil,
+        namespaces: [SnodeAPI.Namespace],
+        from snode: Snode,
+        for publicKey: String,
+        on queue: DispatchQueue,
         calledFromBackgroundPoller: Bool = false,
         isBackgroundPollValid: @escaping (() -> Bool) = { true },
         poller: Poller? = nil
     ) -> Promise<Void> {
-        guard poller?.isPolling.wrappedValue == true else { return Promise { $0.fulfill(()) } }
+        // If the polling has been cancelled then don't continue
+        guard
+            (calledFromBackgroundPoller && isBackgroundPollValid()) ||
+            poller?.isPolling.wrappedValue[publicKey] == true
+        else { return Promise.value(()) }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey()
+        let pollerName: String = (
+            poller?.pollerName(for: publicKey) ??
+            "poller with public key \(publicKey)"
+        )
         
-        return SnodeAPI.getMessages(from: snode, associatedWith: userPublicKey)
-            .then(on: (queue ?? Threading.pollerQueue)) { namespacedResults -> Promise<Void> in
+        // Fetch the messages
+        return SnodeAPI.getMessages(in: namespaces, from: snode, associatedWith: publicKey)
+            .then(on: queue) { namespacedResults -> Promise<Void> in
                 guard
                     (calledFromBackgroundPoller && isBackgroundPollValid()) ||
-                    poller?.isPolling.wrappedValue == true
+                        poller?.isPolling.wrappedValue[publicKey] == true
                 else { return Promise.value(()) }
                 
                 let allMessagesCount: Int = namespacedResults
@@ -169,7 +203,7 @@ public final class Poller {
                 // No need to do anything if there are no messages
                 guard allMessagesCount > 0 else {
                     if !calledFromBackgroundPoller {
-                        SNLog("Received no new messages")
+                        SNLog("Received no new messages in \(pollerName)")
                     }
                     return Promise.value(())
                 }
@@ -254,7 +288,7 @@ public final class Poller {
                         )
                     }
                     else if !calledFromBackgroundPoller {
-                        SNLog("Received \(messageCount) new message\(messageCount == 1 ? "" : "s") (duplicates: \(allMessagesCount - messageCount))")
+                        SNLog("Received \(messageCount) new message\(messageCount == 1 ? "" : "s") in \(pollerName) (duplicates: \(allMessagesCount - messageCount))")
                     }
                 }
                 
@@ -268,12 +302,12 @@ public final class Poller {
                     // Note: In the background we just want jobs to fail silently
                     MessageReceiveJob.run(
                         job,
-                        queue: (queue ?? Threading.pollerQueue),
+                        queue: queue,
                         success: { _, _ in seal.fulfill(()) },
                         failure: { _, _, _ in seal.fulfill(()) },
                         deferred: { _ in seal.fulfill(()) }
                     )
-
+                    
                     return promise
                 }
                 

@@ -54,8 +54,8 @@ public enum OpenGroupAPI {
             .defaulting(to: [])
 
         // Generate the requests
-        let requestResponseType: [BatchRequestInfoType] = [
-            HTTP.BatchRequestInfo(
+        let requestResponseType: [BatchRequest.Info] = [
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -71,7 +71,7 @@ public enum OpenGroupAPI {
                 .filter(OpenGroup.Columns.roomToken != "")
                 .fetchAll(db))
                 .defaulting(to: [])
-                .flatMap { openGroup -> [BatchRequestInfoType] in
+                .flatMap { openGroup -> [BatchRequest.Info] in
                     let shouldRetrieveRecentMessages: Bool = (
                         openGroup.sequenceNumber == 0 || (
                             // If it's the first poll for this launch and it's been longer than
@@ -83,14 +83,14 @@ public enum OpenGroupAPI {
                     )
                     
                     return [
-                        HTTP.BatchRequestInfo(
+                        BatchRequest.Info(
                             request: Request<NoBody, Endpoint>(
                                 server: server,
                                 endpoint: .roomPollInfo(openGroup.roomToken, openGroup.infoUpdates)
                             ),
                             responseType: RoomPollInfo.self
                         ),
-                        HTTP.BatchRequestInfo(
+                        BatchRequest.Info(
                             request: Request<NoBody, Endpoint>(
                                 server: server,
                                 endpoint: (shouldRetrieveRecentMessages ?
@@ -113,7 +113,7 @@ public enum OpenGroupAPI {
                 !capabilities.contains(.blind) ? [] :
                 [
                     // Inbox
-                    HTTP.BatchRequestInfo(
+                    BatchRequest.Info(
                         request: Request<NoBody, Endpoint>(
                             server: server,
                             endpoint: (lastInboxMessageId == 0 ?
@@ -125,7 +125,7 @@ public enum OpenGroupAPI {
                     ),
                     
                     // Outbox
-                    HTTP.BatchRequestInfo(
+                    BatchRequest.Info(
                         request: Request<NoBody, Endpoint>(
                             server: server,
                             endpoint: (lastOutboxMessageId == 0 ?
@@ -151,10 +151,9 @@ public enum OpenGroupAPI {
     private static func batch(
         _ db: Database,
         server: String,
-        requests: [BatchRequestInfoType],
+        requests: [BatchRequest.Info],
         using dependencies: SMKDependencies = SMKDependencies()
     ) -> Promise<[Endpoint: (ResponseInfoType, Codable?)]> {
-        let requestBody: HTTP.BatchRequest = requests.map { $0.toSubRequest() }
         let responseTypes = requests.map { $0.responseType }
         
         return OpenGroupAPI
@@ -164,7 +163,7 @@ public enum OpenGroupAPI {
                     method: .post,
                     server: server,
                     endpoint: Endpoint.batch,
-                    body: requestBody
+                    body: BatchRequest(requests: requests)
                 ),
                 using: dependencies
             )
@@ -184,10 +183,9 @@ public enum OpenGroupAPI {
     private static func sequence(
         _ db: Database,
         server: String,
-        requests: [BatchRequestInfoType],
+        requests: [BatchRequest.Info],
         using dependencies: SMKDependencies = SMKDependencies()
     ) -> Promise<[Endpoint: (ResponseInfoType, Codable?)]> {
-        let requestBody: HTTP.BatchRequest = requests.map { $0.toSubRequest() }
         let responseTypes = requests.map { $0.responseType }
         
         return OpenGroupAPI
@@ -197,7 +195,7 @@ public enum OpenGroupAPI {
                     method: .post,
                     server: server,
                     endpoint: Endpoint.sequence,
-                    body: requestBody
+                    body: BatchRequest(requests: requests)
                 ),
                 using: dependencies
             )
@@ -315,9 +313,9 @@ public enum OpenGroupAPI {
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
     ) -> Promise<(capabilities: (info: ResponseInfoType, data: Capabilities), room: (info: ResponseInfoType, data: Room))> {
-        let requestResponseType: [BatchRequestInfoType] = [
+        let requestResponseType: [BatchRequest.Info] = [
             // Get the latest capabilities for the server (in case it's a new server or the cached ones are stale)
-            HTTP.BatchRequestInfo(
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -326,7 +324,7 @@ public enum OpenGroupAPI {
             ),
             
             // And the room info
-            HTTP.BatchRequestInfo(
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .room(roomToken)
@@ -379,9 +377,9 @@ public enum OpenGroupAPI {
         on server: String,
         using dependencies: SMKDependencies = SMKDependencies()
     ) -> Promise<(capabilities: (info: ResponseInfoType, data: Capabilities), rooms: (info: ResponseInfoType, data: [Room]))> {
-        let requestResponseType: [BatchRequestInfoType] = [
+        let requestResponseType: [BatchRequest.Info] = [
             // Get the latest capabilities for the server (in case it's a new server or the cached ones are stale)
-            HTTP.BatchRequestInfo(
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .capabilities
@@ -390,7 +388,7 @@ public enum OpenGroupAPI {
             ),
             
             // And the room info
-            HTTP.BatchRequestInfo(
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     server: server,
                     endpoint: .rooms
@@ -1216,8 +1214,8 @@ public enum OpenGroupAPI {
         )
         
         // Generate the requests
-        let requestResponseType: [BatchRequestInfoType] = [
-            HTTP.BatchRequestInfo(
+        let requestResponseType: [BatchRequest.Info] = [
+            BatchRequest.Info(
                 request: Request<UserBanRequest, Endpoint>(
                     method: .post,
                     server: server,
@@ -1225,7 +1223,7 @@ public enum OpenGroupAPI {
                     body: banRequestBody
                 )
             ),
-            HTTP.BatchRequestInfo(
+            BatchRequest.Info(
                 request: Request<NoBody, Endpoint>(
                     method: .delete,
                     server: server,

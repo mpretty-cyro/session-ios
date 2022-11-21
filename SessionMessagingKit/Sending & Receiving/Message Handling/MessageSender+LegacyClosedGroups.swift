@@ -114,7 +114,7 @@ extension MessageSender {
         ).inserted(db)
         
         // Start polling
-        ClosedGroupPoller.shared.startPolling(for: groupPublicKey)
+        ClosedGroupPoller.shared.startIfNeeded(for: groupPublicKey)
         
         return when(fulfilled: promises).map2 { thread }
     }

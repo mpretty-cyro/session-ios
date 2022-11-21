@@ -208,8 +208,10 @@ public final class MessageSender {
         SnodeAPI
             .sendMessage(
                 snodeMessage,
-                isClosedGroupMessage: (kind == .closedGroupMessage),
-                isConfigMessage: (message is ConfigurationMessage)
+                in: (kind == .closedGroupMessage ?
+                    .legacyClosedGroup :
+                    .default
+                )
             )
             .done(on: DispatchQueue.global(qos: .default)) { promises in
                 let promiseCount = promises.count
@@ -217,13 +219,12 @@ public final class MessageSender {
                 var errorCount = 0
 
                 promises.forEach {
-                    let _ = $0.done(on: DispatchQueue.global(qos: .default)) { responseData in
+                    let _ = $0.done(on: DispatchQueue.global(qos: .default)) { _, responseData in
                         guard !isSuccess else { return } // Succeed as soon as the first promise succeeds
                         isSuccess = true
 
                         Storage.shared.write { db in
-                            let responseJson: JSON? = try? JSONSerialization.jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? JSON
-                            message.serverHash = (responseJson?["hash"] as? String)
+                            message.serverHash = responseData.hash
                             
                             try MessageSender.handleSuccessfulMessageSend(
                                 db,

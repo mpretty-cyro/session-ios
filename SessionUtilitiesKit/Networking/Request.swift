@@ -14,16 +14,16 @@ public protocol EndpointType: Hashable {
 // MARK: - Request
 
 public struct Request<T: Encodable, Endpoint: EndpointType> {
-    let method: HTTPMethod
+    public let method: HTTPMethod
     public let server: String
-    let endpoint: Endpoint
-    let queryParameters: [HTTPQueryParam: String]
-    let headers: [HTTPHeader: String]
+    public let endpoint: Endpoint
+    public let queryParameters: [HTTPQueryParam: String]
+    public let headers: [HTTPHeader: String]
     /// This is the body value sent during the request
     ///
     /// **Warning:** The `bodyData` value should be used to when making the actual request instead of this as there
     /// is custom handling for certain data types
-    let body: T?
+    public let body: T?
     
     // MARK: - Initialization
 
@@ -74,7 +74,7 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
     
     // MARK: - Request Generation
     
-    var urlPathAndParamsString: String {
+    public var urlPathAndParamsString: String {
         return [
             "/\(endpoint.path)",
             queryParameters

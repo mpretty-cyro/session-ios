@@ -22,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     private var loadingViewController: LoadingViewController?
     
     /// This needs to be a lazy variable to ensure it doesn't get initialized before it actually needs to be used
-    lazy var poller: Poller = Poller()
+    lazy var poller: CurrentUserPoller = CurrentUserPoller()
     
     // MARK: - Lifecycle
 
@@ -559,7 +559,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     public func startPollersIfNeeded(shouldStartGroupPollers: Bool = true) {
         guard Identity.userExists() else { return }
         
-        poller.startIfNeeded()
+        poller.start()
         
         guard shouldStartGroupPollers else { return }
         
@@ -569,7 +569,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     
     public func stopPollers(shouldStopUserPoller: Bool = true) {
         if shouldStopUserPoller {
-            poller.stop()
+            poller.stopAllPollers()
         }
         
         ClosedGroupPoller.shared.stopAllPollers()

@@ -11,11 +11,16 @@ public extension SnodeAPI {
         
         // MARK: Variables
         
-        var requiresAuthentication: Bool {
+        var requiresReadAuthentication: Bool {
             switch self {
                 case .legacyClosedGroup: return false
                 default: return true
             }
+        }
+        
+        var requiresWriteAuthentication: Bool {
+            // Not in use until we can batch delete and store config messages
+            return false
         }
         
         var verificationString: String {
