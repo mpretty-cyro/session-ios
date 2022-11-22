@@ -92,30 +92,6 @@ public enum HTTP {
     public static func execute(
         _ method: HTTPMethod,
         _ url: String,
-        parameters: JSON?,
-        timeout: TimeInterval = HTTP.defaultTimeout,
-        useSeedNodeURLSession: Bool = false
-    ) -> Promise<Data> {
-        if let parameters = parameters {
-            do {
-                guard JSONSerialization.isValidJSONObject(parameters) else {
-                    return Promise(error: HTTPError.invalidJSON)
-                }
-                let body = try JSONSerialization.data(withJSONObject: parameters, options: [ .fragmentsAllowed ])
-                return execute(method, url, body: body, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-            }
-            catch (let error) {
-                return Promise(error: error)
-            }
-        }
-        else {
-            return execute(method, url, body: nil, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-        }
-    }
-
-    public static func execute(
-        _ method: HTTPMethod,
-        _ url: String,
         body: Data?,
         timeout: TimeInterval = HTTP.defaultTimeout,
         useSeedNodeURLSession: Bool = false

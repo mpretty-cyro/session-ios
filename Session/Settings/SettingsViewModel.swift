@@ -95,8 +95,20 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     // MARK: - Navigation
     
     lazy var navState: AnyPublisher<NavState, Never> = {
-        isEditing
-            .map { isEditing in (isEditing ? .editing : .standard) }
+        Publishers
+            .CombineLatest(
+                isEditing
+                    .map { isEditing in isEditing },
+                textChanged
+                    .handleEvents(
+                        receiveOutput: { [weak self] value, _ in
+                            self?.editedDisplayName = value
+                        }
+                    )
+                    .filter { _ in false }
+                    .prepend((nil, .profileName))
+            )
+            .map { isEditing, _ -> NavState in (isEditing ? .editing : .standard) }
             .removeDuplicates()
             .prepend(.standard)     // Initial value
             .eraseToAnyPublisher()

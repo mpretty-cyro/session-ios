@@ -3,7 +3,7 @@
 import Foundation
 
 extension SnodeAPI {
-    public struct ONSResolveRequest: Codable, Equatable {
+    public struct ONSResolveRequest: Encodable {
         enum CodingKeys: String, CodingKey {
             case type
             case base64EncodedNameHash = "name_hash"

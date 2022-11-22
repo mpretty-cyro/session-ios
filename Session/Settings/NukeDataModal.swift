@@ -162,7 +162,7 @@ final class NukeDataModal: Modal {
     private func clearEntireAccount(presentedViewController: UIViewController) {
         ModalActivityIndicatorViewController
             .present(fromViewController: presentedViewController, canCancel: false) { [weak self] _ in
-                SnodeAPI.clearAllData()
+                SnodeAPI.deleteAllMessages()
                     .done(on: DispatchQueue.main) { confirmations in
                         self?.dismiss(animated: true, completion: nil) // Dismiss the loader
                         

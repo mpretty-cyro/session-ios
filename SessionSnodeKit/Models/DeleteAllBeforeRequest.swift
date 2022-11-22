@@ -3,34 +3,32 @@
 import Foundation
 
 extension SnodeAPI {
-    public class GetMessagesRequest: SnodeAuthenticatedRequestBody {
+    public class DeleteAllBeforeRequest: SnodeAuthenticatedRequestBody {
         enum CodingKeys: String, CodingKey {
-            case lastHash = "last_hash"
+            case beforeMs = "before"
             case namespace
         }
         
-        let lastHash: String
+        let beforeMs: UInt64
         let namespace: SnodeAPI.Namespace?
         
         // MARK: - Init
         
         public init(
-            lastHash: String,
+            beforeMs: UInt64,
             namespace: SnodeAPI.Namespace?,
             pubkey: String,
-            subkey: String?,
             timestampMs: UInt64,
             ed25519PublicKey: [UInt8],
             ed25519SecretKey: [UInt8]
         ) {
-            self.lastHash = lastHash
+            self.beforeMs = beforeMs
             self.namespace = namespace
             
             super.init(
                 pubkey: pubkey,
                 ed25519PublicKey: ed25519PublicKey,
                 ed25519SecretKey: ed25519SecretKey,
-                subkey: subkey,
                 timestampMs: timestampMs
             )
         }
@@ -40,8 +38,14 @@ extension SnodeAPI {
         override public func encode(to encoder: Encoder) throws {
             var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
             
-            try container.encode(lastHash, forKey: .lastHash)
-            try container.encodeIfPresent(namespace, forKey: .namespace)
+            try container.encode(beforeMs, forKey: .beforeMs)
+            
+            // If no namespace is specified it defaults to the default namespace only (namespace
+            // 0), so instead in this case we want to explicitly delete from `all` namespaces
+            switch namespace {
+                case .some(let namespace): try container.encode(namespace, forKey: .namespace)
+                case .none: try container.encode("all", forKey: .namespace)
+            }
             
             try super.encode(to: encoder)
         }
@@ -49,13 +53,18 @@ extension SnodeAPI {
         // MARK: - Abstract Methods
         
         override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("retrieve" || namespace || timestamp)` (if using a non-0
-            /// namespace), or `("retrieve" || timestamp)` when fetching from the default namespace.  Both
-            /// namespace and timestamp are the base10 expressions of the relevant values.  Must be base64
-            /// encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getMessages.rawValue.bytes
-                .appending(contentsOf: namespace?.verificationString.bytes)
-                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
+            /// Ed25519 signature of `("delete_before" || namespace || before)`, signed by
+            /// `pubkey`.  Must be base64 encoded (json) or bytes (OMQ).  `namespace` is the stringified
+            /// version of the given non-default namespace parameter (i.e. "-42" or "all"), or the empty
+            /// string for the default namespace (whether explicitly given or not).
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteAllBefore.rawValue.bytes
+                .appending(
+                    contentsOf: (namespace == nil ?
+                        "all" :
+                        namespace?.verificationString
+                    )?.bytes
+                )
+                .appending(contentsOf: "\(beforeMs)".data(using: .ascii)?.bytes)
             
             guard
                 let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(

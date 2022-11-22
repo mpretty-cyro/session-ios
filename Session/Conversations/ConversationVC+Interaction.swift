@@ -1828,7 +1828,7 @@ extension ConversationVC:
                     deleteRemotely(
                         from: self,
                         request: SnodeAPI
-                            .deleteMessage(
+                            .deleteMessages(
                                 publicKey: threadId,
                                 serverHashes: [serverHash]
                             )

@@ -6,11 +6,11 @@ import SessionUtilitiesKit
 public struct SnodeRequest<T: Encodable>: Encodable {
     private enum CodingKeys: String, CodingKey {
         case method
-        case params
+        case body = "params"
     }
     
     internal let endpoint: SnodeAPI.Endpoint
-    internal let params: T
+    internal let body: T
     
     // MARK: - Initialization
     
@@ -19,7 +19,7 @@ public struct SnodeRequest<T: Encodable>: Encodable {
         body: T
     ) {
         self.endpoint = endpoint
-        self.params = body
+        self.body = body
     }
     
     // MARK: - Codable
@@ -28,13 +28,6 @@ public struct SnodeRequest<T: Encodable>: Encodable {
         var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
 
         try container.encode(endpoint.rawValue, forKey: .method)
-        try container.encode(params, forKey: .params)
-    }
-    
-    // MARK: - Functions
-    // TODO: Is this needed?
-    
-    public func generateBody() throws -> Data {
-        return try JSONEncoder().encode(self)
+        try container.encode(body, forKey: .body)
     }
 }

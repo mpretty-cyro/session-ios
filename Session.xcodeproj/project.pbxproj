@@ -785,6 +785,26 @@
 		FD8ECF42292B340D00C0D1BB /* SOGSBatchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF41292B340D00C0D1BB /* SOGSBatchRequest.swift */; };
 		FD8ECF44292B397E00C0D1BB /* SendMessageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */; };
 		FD8ECF46292B4BD500C0D1BB /* SendMessageResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */; };
+		FD8ECF48292C287500C0D1BB /* UpdateExpiryRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF47292C287500C0D1BB /* UpdateExpiryRequest.swift */; };
+		FD8ECF4A292C2A7300C0D1BB /* DeleteMessagesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF49292C2A7300C0D1BB /* DeleteMessagesRequest.swift */; };
+		FD8ECF4C292C2AC200C0D1BB /* RevokeSubkeyRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF4B292C2AC200C0D1BB /* RevokeSubkeyRequest.swift */; };
+		FD8ECF4E292C2AF800C0D1BB /* DeleteAllMessagesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF4D292C2AF800C0D1BB /* DeleteAllMessagesRequest.swift */; };
+		FD8ECF50292C2B2B00C0D1BB /* DeleteAllBeforeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF4F292C2B2B00C0D1BB /* DeleteAllBeforeRequest.swift */; };
+		FD8ECF52292C2CAE00C0D1BB /* UpdateExpiryAllRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF51292C2CAE00C0D1BB /* UpdateExpiryAllRequest.swift */; };
+		FD8ECF54292C2DB000C0D1BB /* SnodeAuthenticatedRequestBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF53292C2DB000C0D1BB /* SnodeAuthenticatedRequestBody.swift */; };
+		FD8ECF56292C327700C0D1BB /* LegacyGetMessagesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF55292C327700C0D1BB /* LegacyGetMessagesRequest.swift */; };
+		FD8ECF58292C350500C0D1BB /* LegacySendMessageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF57292C350500C0D1BB /* LegacySendMessageRequest.swift */; };
+		FD8ECF5A292C431B00C0D1BB /* GetSwarmRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF59292C431B00C0D1BB /* GetSwarmRequest.swift */; };
+		FD8ECF5C292C469100C0D1BB /* UpdateExpiryResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF5B292C469100C0D1BB /* UpdateExpiryResponse.swift */; };
+		FD8ECF5E292C478900C0D1BB /* SnodeRecursiveResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF5D292C478900C0D1BB /* SnodeRecursiveResponse.swift */; };
+		FD8ECF60292C4B2400C0D1BB /* SnodeSwarmItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF5F292C4B2400C0D1BB /* SnodeSwarmItem.swift */; };
+		FD8ECF62292C4C8200C0D1BB /* DeleteMessagesResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF61292C4C8200C0D1BB /* DeleteMessagesResponse.swift */; };
+		FD8ECF64292C4D6600C0D1BB /* DeleteAllMessagesResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF63292C4D6600C0D1BB /* DeleteAllMessagesResponse.swift */; };
+		FD8ECF66292C6F8200C0D1BB /* DeleteAllBeforeResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF65292C6F8200C0D1BB /* DeleteAllBeforeResponse.swift */; };
+		FD8ECF68292C72BA00C0D1BB /* UpdateExpiryAllResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF67292C72B900C0D1BB /* UpdateExpiryAllResponse.swift */; };
+		FD8ECF6A292C74A000C0D1BB /* RevokeSubkeyResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF69292C74A000C0D1BB /* RevokeSubkeyResponse.swift */; };
+		FD8ECF6C292C9B6400C0D1BB /* GetNetworkTimestampResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF6B292C9B6400C0D1BB /* GetNetworkTimestampResponse.swift */; };
+		FD8ECF6E292C9EA100C0D1BB /* GetServiceNodesRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF6D292C9EA100C0D1BB /* GetServiceNodesRequest.swift */; };
 		FD90040F2818AB6D00ABAAF6 /* GetSnodePoolJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD90040E2818AB6D00ABAAF6 /* GetSnodePoolJob.swift */; };
 		FD9004122818ABDC00ABAAF6 /* Job.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B73F280402C4004C14C5 /* Job.swift */; };
 		FD9004142818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */; };
@@ -1886,6 +1906,26 @@
 		FD8ECF41292B340D00C0D1BB /* SOGSBatchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SOGSBatchRequest.swift; sourceTree = "<group>"; };
 		FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageRequest.swift; sourceTree = "<group>"; };
 		FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageResponse.swift; sourceTree = "<group>"; };
+		FD8ECF47292C287500C0D1BB /* UpdateExpiryRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateExpiryRequest.swift; sourceTree = "<group>"; };
+		FD8ECF49292C2A7300C0D1BB /* DeleteMessagesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteMessagesRequest.swift; sourceTree = "<group>"; };
+		FD8ECF4B292C2AC200C0D1BB /* RevokeSubkeyRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevokeSubkeyRequest.swift; sourceTree = "<group>"; };
+		FD8ECF4D292C2AF800C0D1BB /* DeleteAllMessagesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAllMessagesRequest.swift; sourceTree = "<group>"; };
+		FD8ECF4F292C2B2B00C0D1BB /* DeleteAllBeforeRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAllBeforeRequest.swift; sourceTree = "<group>"; };
+		FD8ECF51292C2CAE00C0D1BB /* UpdateExpiryAllRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateExpiryAllRequest.swift; sourceTree = "<group>"; };
+		FD8ECF53292C2DB000C0D1BB /* SnodeAuthenticatedRequestBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeAuthenticatedRequestBody.swift; sourceTree = "<group>"; };
+		FD8ECF55292C327700C0D1BB /* LegacyGetMessagesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyGetMessagesRequest.swift; sourceTree = "<group>"; };
+		FD8ECF57292C350500C0D1BB /* LegacySendMessageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySendMessageRequest.swift; sourceTree = "<group>"; };
+		FD8ECF59292C431B00C0D1BB /* GetSwarmRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetSwarmRequest.swift; sourceTree = "<group>"; };
+		FD8ECF5B292C469100C0D1BB /* UpdateExpiryResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateExpiryResponse.swift; sourceTree = "<group>"; };
+		FD8ECF5D292C478900C0D1BB /* SnodeRecursiveResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeRecursiveResponse.swift; sourceTree = "<group>"; };
+		FD8ECF5F292C4B2400C0D1BB /* SnodeSwarmItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeSwarmItem.swift; sourceTree = "<group>"; };
+		FD8ECF61292C4C8200C0D1BB /* DeleteMessagesResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteMessagesResponse.swift; sourceTree = "<group>"; };
+		FD8ECF63292C4D6600C0D1BB /* DeleteAllMessagesResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAllMessagesResponse.swift; sourceTree = "<group>"; };
+		FD8ECF65292C6F8200C0D1BB /* DeleteAllBeforeResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAllBeforeResponse.swift; sourceTree = "<group>"; };
+		FD8ECF67292C72B900C0D1BB /* UpdateExpiryAllResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateExpiryAllResponse.swift; sourceTree = "<group>"; };
+		FD8ECF69292C74A000C0D1BB /* RevokeSubkeyResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevokeSubkeyResponse.swift; sourceTree = "<group>"; };
+		FD8ECF6B292C9B6400C0D1BB /* GetNetworkTimestampResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetNetworkTimestampResponse.swift; sourceTree = "<group>"; };
+		FD8ECF6D292C9EA100C0D1BB /* GetServiceNodesRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetServiceNodesRequest.swift; sourceTree = "<group>"; };
 		FD90040E2818AB6D00ABAAF6 /* GetSnodePoolJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetSnodePoolJob.swift; sourceTree = "<group>"; };
 		FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _002_SetupStandardJobs.swift; sourceTree = "<group>"; };
 		FDA8EAFD280E8B78002B68E5 /* FailedMessageSendsJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FailedMessageSendsJob.swift; sourceTree = "<group>"; };
@@ -3758,7 +3798,6 @@
 		FD26FA69291DA692005801D8 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
-				FD26FA70291DB253005801D8 /* OxenDaemonRPCRequest.swift */,
 				C3C2A5BE255385EE00C340D1 /* SnodeAPI.swift */,
 				C3C2A5BD255385EE00C340D1 /* Notification+OnionRequestAPI.swift */,
 				C3C2A5BA255385ED00C340D1 /* OnionRequestAPI.swift */,
@@ -4193,17 +4232,38 @@
 			children = (
 				FD26FA6C291DADAE005801D8 /* SnodeRequest.swift */,
 				FD26FA76291DE2C7005801D8 /* SnodeResponse.swift */,
+				FD8ECF5D292C478900C0D1BB /* SnodeRecursiveResponse.swift */,
+				FD8ECF5F292C4B2400C0D1BB /* SnodeSwarmItem.swift */,
+				FD8ECF53292C2DB000C0D1BB /* SnodeAuthenticatedRequestBody.swift */,
 				FD26FA72291DB5F3005801D8 /* SnodeBatchRequest.swift */,
-				FD26FA6E291DB171005801D8 /* ONSResolveRequest.swift */,
-				FD26FA74291DBC8B005801D8 /* ONSResolveResponse.swift */,
 				FD26FA78291DEDD7005801D8 /* GetMessagesRequest.swift */,
+				FD8ECF55292C327700C0D1BB /* LegacyGetMessagesRequest.swift */,
 				FD26FA7C291E0B10005801D8 /* GetMessagesResponse.swift */,
 				FD8ECF43292B397E00C0D1BB /* SendMessageRequest.swift */,
+				FD8ECF57292C350500C0D1BB /* LegacySendMessageRequest.swift */,
 				FD8ECF45292B4BD500C0D1BB /* SendMessageResponse.swift */,
+				FD8ECF49292C2A7300C0D1BB /* DeleteMessagesRequest.swift */,
+				FD8ECF61292C4C8200C0D1BB /* DeleteMessagesResponse.swift */,
+				FD8ECF4D292C2AF800C0D1BB /* DeleteAllMessagesRequest.swift */,
+				FD8ECF63292C4D6600C0D1BB /* DeleteAllMessagesResponse.swift */,
+				FD8ECF4F292C2B2B00C0D1BB /* DeleteAllBeforeRequest.swift */,
+				FD8ECF65292C6F8200C0D1BB /* DeleteAllBeforeResponse.swift */,
+				FD8ECF47292C287500C0D1BB /* UpdateExpiryRequest.swift */,
+				FD8ECF5B292C469100C0D1BB /* UpdateExpiryResponse.swift */,
+				FD8ECF51292C2CAE00C0D1BB /* UpdateExpiryAllRequest.swift */,
+				FD8ECF67292C72B900C0D1BB /* UpdateExpiryAllResponse.swift */,
+				FD8ECF4B292C2AC200C0D1BB /* RevokeSubkeyRequest.swift */,
+				FD8ECF69292C74A000C0D1BB /* RevokeSubkeyResponse.swift */,
 				FD09796827F6BEA700936362 /* SwarmSnode.swift */,
 				FD77289B284DDCE10018502F /* SnodePoolResponse.swift */,
 				FD17D7E027F67BD400122BE0 /* SnodeReceivedMessage.swift */,
 				C3C2A5B6255385EC00C340D1 /* SnodeMessage.swift */,
+				FD8ECF6B292C9B6400C0D1BB /* GetNetworkTimestampResponse.swift */,
+				FD8ECF59292C431B00C0D1BB /* GetSwarmRequest.swift */,
+				FD26FA70291DB253005801D8 /* OxenDaemonRPCRequest.swift */,
+				FD26FA6E291DB171005801D8 /* ONSResolveRequest.swift */,
+				FD26FA74291DBC8B005801D8 /* ONSResolveResponse.swift */,
+				FD8ECF6D292C9EA100C0D1BB /* GetServiceNodesRequest.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -5357,8 +5417,10 @@
 				FD26FA73291DB5F3005801D8 /* SnodeBatchRequest.swift in Sources */,
 				FD17D7E127F67BD400122BE0 /* SnodeReceivedMessage.swift in Sources */,
 				FDC438B927BB161E00C60D73 /* OnionRequestAPIVersion.swift in Sources */,
+				FD8ECF52292C2CAE00C0D1BB /* UpdateExpiryAllRequest.swift in Sources */,
 				FD7728A0284EF5810018502F /* SnodeAPIError.swift in Sources */,
 				FD26FA75291DBC8B005801D8 /* ONSResolveResponse.swift in Sources */,
+				FD8ECF62292C4C8200C0D1BB /* DeleteMessagesResponse.swift in Sources */,
 				C3C2A5C0255385EE00C340D1 /* Snode.swift in Sources */,
 				FD26FA6B291DA6BC005801D8 /* SSKDependencies.swift in Sources */,
 				FD17D7A027F40CC800122BE0 /* _001_InitialSetupMigration.swift in Sources */,
@@ -5369,22 +5431,40 @@
 				FD17D7AA27F41BF500122BE0 /* SnodeSet.swift in Sources */,
 				FD17D7A427F40F8100122BE0 /* _003_YDBToGRDBMigration.swift in Sources */,
 				FD26FA7B291DF8F3005801D8 /* SnodeAPINamespace.swift in Sources */,
+				FD8ECF6E292C9EA100C0D1BB /* GetServiceNodesRequest.swift in Sources */,
 				C3C2A5DC2553860B00C340D1 /* Promise+Threading.swift in Sources */,
 				C3C2A5C4255385EE00C340D1 /* OnionRequestAPI+Encryption.swift in Sources */,
 				FD17D7D227F5797A00122BE0 /* SnodeAPIEndpoint.swift in Sources */,
 				C3C2A5DE2553860B00C340D1 /* String+Trimming.swift in Sources */,
+				FD8ECF56292C327700C0D1BB /* LegacyGetMessagesRequest.swift in Sources */,
 				C3C2A5DB2553860B00C340D1 /* Promise+Hashing.swift in Sources */,
+				FD8ECF54292C2DB000C0D1BB /* SnodeAuthenticatedRequestBody.swift in Sources */,
 				FD26FA6D291DADAE005801D8 /* SnodeRequest.swift in Sources */,
+				FD8ECF50292C2B2B00C0D1BB /* DeleteAllBeforeRequest.swift in Sources */,
+				FD8ECF5A292C431B00C0D1BB /* GetSwarmRequest.swift in Sources */,
 				C3C2A5E42553860B00C340D1 /* Data+Utilities.swift in Sources */,
+				FD8ECF68292C72BA00C0D1BB /* UpdateExpiryAllResponse.swift in Sources */,
+				FD8ECF58292C350500C0D1BB /* LegacySendMessageRequest.swift in Sources */,
+				FD8ECF5C292C469100C0D1BB /* UpdateExpiryResponse.swift in Sources */,
+				FD8ECF6C292C9B6400C0D1BB /* GetNetworkTimestampResponse.swift in Sources */,
 				FD17D7A727F41AF000122BE0 /* SSKLegacy.swift in Sources */,
 				FD39353628F7C3390084DADA /* _004_FlagMessageHashAsDeletedOrInvalid.swift in Sources */,
+				FD8ECF60292C4B2400C0D1BB /* SnodeSwarmItem.swift in Sources */,
 				FD26FA79291DEDD7005801D8 /* GetMessagesRequest.swift in Sources */,
 				C3C2A5C2255385EE00C340D1 /* Configuration.swift in Sources */,
+				FD8ECF66292C6F8200C0D1BB /* DeleteAllBeforeResponse.swift in Sources */,
+				FD8ECF6A292C74A000C0D1BB /* RevokeSubkeyResponse.swift in Sources */,
 				FD26FA7D291E0B10005801D8 /* GetMessagesResponse.swift in Sources */,
+				FD8ECF48292C287500C0D1BB /* UpdateExpiryRequest.swift in Sources */,
+				FD8ECF4C292C2AC200C0D1BB /* RevokeSubkeyRequest.swift in Sources */,
 				FD17D7D827F658E200122BE0 /* OnionRequestAPIDestination.swift in Sources */,
 				FD6A7A6D2818C61500035AC1 /* _002_SetupStandardJobs.swift in Sources */,
+				FD8ECF4E292C2AF800C0D1BB /* DeleteAllMessagesRequest.swift in Sources */,
+				FD8ECF64292C4D6600C0D1BB /* DeleteAllMessagesResponse.swift in Sources */,
 				FD17D7B327F51E5B00122BE0 /* SSKSetting.swift in Sources */,
 				FD17D7AE27F41C4300122BE0 /* SnodeReceivedMessageInfo.swift in Sources */,
+				FD8ECF4A292C2A7300C0D1BB /* DeleteMessagesRequest.swift in Sources */,
+				FD8ECF5E292C478900C0D1BB /* SnodeRecursiveResponse.swift in Sources */,
 				FD8ECF44292B397E00C0D1BB /* SendMessageRequest.swift in Sources */,
 				C3C2A5C3255385EE00C340D1 /* OnionRequestAPI.swift in Sources */,
 				FD8ECF46292B4BD500C0D1BB /* SendMessageResponse.swift in Sources */,

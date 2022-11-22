@@ -41,15 +41,15 @@ internal extension SnodeAPI {
             
             let endpoint: SnodeAPI.Endpoint
             
-            /// The `jsonBodyEncoder` is used to avoid having to make `BatchSubRequest` a generic type (haven't found a good way
-            /// to keep `BatchSubRequest` encodable using protocols unfortunately so need this work around)
+            /// The `jsonBodyEncoder` is used to avoid having to make `BatchSubRequest` a generic type (haven't found
+            /// a good way to keep `BatchSubRequest` encodable using protocols unfortunately so need this work around)
             private let jsonBodyEncoder: ((inout KeyedEncodingContainer<CodingKeys>, CodingKeys) throws -> ())?
             
             init<T: Encodable>(request: SnodeRequest<T>) {
                 self.endpoint = request.endpoint
                 
-                self.jsonBodyEncoder = { [params = request.params] container, key in
-                    try container.encode(params, forKey: key)
+                self.jsonBodyEncoder = { [body = request.body] container, key in
+                    try container.encode(body, forKey: key)
                 }
             }
             

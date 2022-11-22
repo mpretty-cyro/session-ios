@@ -3,18 +3,19 @@
 import Foundation
 
 public struct OxenDaemonRPCRequest<T: Encodable>: Encodable {
+    private enum CodingKeys: String, CodingKey {
+        case endpoint
+        case body = "params"
+    }
+    
     private let endpoint: String
-    private let params: T
+    private let body: T
     
     public init(
         endpoint: SnodeAPI.Endpoint,
         body: T
     ) {
         self.endpoint = endpoint.rawValue
-        self.params = body
-    }
-    
-    public func generateBody() throws -> Data {
-        return try JSONEncoder().encode(self)
+        self.body = body
     }
 }

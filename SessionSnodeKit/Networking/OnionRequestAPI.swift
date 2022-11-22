@@ -7,16 +7,8 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public protocol OnionRequestAPIType {
-    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPI.Endpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
-    
     static func sendOnionRequest(_ payload: Data, to snode: Snode) -> Promise<(ResponseInfoType, Data?)>
-    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)>
-}
-
-public extension OnionRequestAPIType {
-    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)> {
-        sendOnionRequest(request, to: server, using: .v4, with: x25519PublicKey)
-    }
+    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(ResponseInfoType, Data?)>
 }
 
 /// See the "Onion Requests" section of [The Session Whitepaper](https://arxiv.org/pdf/2002.04609.pdf) for more information.
@@ -372,34 +364,6 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     
     /// Sends an onion request to `snode`. Builds new paths as needed.
     public static func sendOnionRequest(
-        to snode: Snode,
-        invoking method: SnodeAPI.Endpoint,
-        with parameters: JSON,
-        associatedWith publicKey: String? = nil
-    ) -> Promise<Data> {
-        let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
-        
-        guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
-            return Promise(error: HTTPError.invalidJSON)
-        }
-        
-        /// **Note:** Currently the service nodes only support V3 Onion Requests
-        return sendOnionRequest(with: payload, to: OnionRequestAPIDestination.snode(snode), version: .v3)
-            .map { _, maybeData in
-                guard let data: Data = maybeData else { throw HTTPError.invalidResponse }
-                
-                return data
-            }
-            .recover2 { error -> Promise<Data> in
-                guard case OnionRequestAPIError.httpRequestFailedAtDestination(let statusCode, let data, _) = error else {
-                    throw error
-                }
-                
-                throw SnodeAPI.handleError(withStatusCode: statusCode, data: data, forSnode: snode, associatedWith: publicKey) ?? error
-            }
-    
-    /// Sends an onion request to `snode`. Builds new paths as needed.
-    public static func sendOnionRequest(
         _ payload: Data,
         to snode: Snode
     ) -> Promise<(ResponseInfoType, Data?)> {
@@ -415,7 +379,6 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     public static func sendOnionRequest(
         _ request: URLRequest,
         to server: String,
-        using version: OnionRequestAPIVersion = .v4,
         with x25519PublicKey: String
     ) -> Promise<(ResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
@@ -424,19 +387,19 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         
         let scheme: String? = url.scheme
         let port: UInt16? = url.port.map { UInt16($0) }
-        // TODO: Is 'generatePayload' ONLY used for this endpoint? Potentially clear out some logic if it's not used for Snode requests?
-        guard let payload: Data = generatePayload(for: request, with: version) else {
+        
+        guard let payload: Data = generateV4Payload(for: request) else {
             return Promise(error: OnionRequestAPIError.invalidRequestInfo)
         }
         
         let destination = OnionRequestAPIDestination.server(
             host: host,
-            target: version.rawValue,
+            target: OnionRequestAPIVersion.v4.rawValue,
             x25519PublicKey: x25519PublicKey,
             scheme: scheme,
             port: port
         )
-        let promise = sendOnionRequest(with: payload, to: destination, version: version)
+        let promise = sendOnionRequest(with: payload, to: destination, version: .v4)
         promise.catch2 { error in
             SNLog("Couldn't reach server: \(url) due to error: \(error).")
         }
@@ -569,79 +532,40 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     
     // MARK: - Version Handling
     
-    private static func generatePayload(for request: URLRequest, with version: OnionRequestAPIVersion) -> Data? {
+    private static func generateV4Payload(for request: URLRequest) -> Data? {
         guard let url = request.url else { return nil }
         
-        switch version {
-            // V2 and V3 Onion Requests have the same structure
-            case .v2, .v3:
-                var rawHeaders = request.allHTTPHeaderFields ?? [:]
-                rawHeaders.removeValue(forKey: "User-Agent")
-                var headers: JSON = rawHeaders.mapValues { value in
-                    switch value.lowercased() {
-                        case "true": return true
-                        case "false": return false
-                        default: return value
-                    }
-                }
-                
-                var endpoint = url.path.removingPrefix("/")
-                if let query = url.query { endpoint += "?\(query)" }
-                let bodyAsString: String
-                
-                if let body: Data = request.httpBody {
-                    headers["Content-Type"] = "application/json"    // Assume data is JSON
-                    bodyAsString = (String(data: body, encoding: .utf8) ?? "null")
-                }
-                else {
-                    bodyAsString = "null"
-                }
-                
-                let payload: JSON = [
-                    "body" : bodyAsString,
-                    "endpoint" : endpoint,
-                    "method" : request.httpMethod!,
-                    "headers" : headers
-                ]
-                
-                guard let jsonData: Data = try? JSONSerialization.data(withJSONObject: payload, options: []) else { return nil }
-                
-                return jsonData
-                
-            // V4 Onion Requests have a very different structure
-            case .v4:
-                // Note: We need to remove the leading forward slash unless we are explicitly hitting
-                // a legacy endpoint (in which case we need it to ensure the request signing works
-                // correctly
-                let endpoint: String = url.path
-                    .appending(url.query.map { value in "?\(value)" })
-                
-                let requestInfo: HTTP.RequestInfo = HTTP.RequestInfo(
-                    method: (request.httpMethod ?? "GET"),   // The default (if nil) is 'GET'
-                    endpoint: endpoint,
-                    headers: (request.allHTTPHeaderFields ?? [:])
-                        .setting(
-                            "Content-Type",
-                            (request.httpBody == nil ? nil :
-                                // Default to JSON if not defined
-                                ((request.allHTTPHeaderFields ?? [:])["Content-Type"] ?? "application/json")
-                            )
-                        )
-                        .removingValue(forKey: "User-Agent")
+        // Note: We need to remove the leading forward slash unless we are explicitly hitting
+        // a legacy endpoint (in which case we need it to ensure the request signing works
+        // correctly
+        let endpoint: String = url.path
+            .appending(url.query.map { value in "?\(value)" })
+        
+        let requestInfo: HTTP.RequestInfo = HTTP.RequestInfo(
+            method: (request.httpMethod ?? "GET"),   // The default (if nil) is 'GET'
+            endpoint: endpoint,
+            headers: (request.allHTTPHeaderFields ?? [:])
+                .setting(
+                    "Content-Type",
+                    (request.httpBody == nil ? nil :
+                        // Default to JSON if not defined
+                        ((request.allHTTPHeaderFields ?? [:])["Content-Type"] ?? "application/json")
+                    )
                 )
-                
-                /// Generate the Bencoded payload in the form `l{requestInfoLength}:{requestInfo}{bodyLength}:{body}e`
-                guard let requestInfoData: Data = try? JSONEncoder().encode(requestInfo) else { return nil }
-                guard let prefixData: Data = "l\(requestInfoData.count):".data(using: .ascii), let suffixData: Data = "e".data(using: .ascii) else {
-                    return nil
-                }
-                
-                if let body: Data = request.httpBody, let bodyCountData: Data = "\(body.count):".data(using: .ascii) {
-                    return (prefixData + requestInfoData + bodyCountData + body + suffixData)
-                }
-                
-                return (prefixData + requestInfoData + suffixData)
+                .removingValue(forKey: "User-Agent")
+        )
+        
+        /// Generate the Bencoded payload in the form `l{requestInfoLength}:{requestInfo}{bodyLength}:{body}e`
+        guard let requestInfoData: Data = try? JSONEncoder().encode(requestInfo) else { return nil }
+        guard let prefixData: Data = "l\(requestInfoData.count):".data(using: .ascii), let suffixData: Data = "e".data(using: .ascii) else {
+            return nil
         }
+        
+        if let body: Data = request.httpBody, let bodyCountData: Data = "\(body.count):".data(using: .ascii) {
+            return (prefixData + requestInfoData + bodyCountData + body + suffixData)
+        }
+        
+        return (prefixData + requestInfoData + suffixData)
     }
     
     private static func handleResponse(

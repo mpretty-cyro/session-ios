@@ -3,35 +3,31 @@
 import Foundation
 
 extension SnodeAPI {
-    public class GetMessagesRequest: SnodeAuthenticatedRequestBody {
+    public class DeleteMessagesRequest: SnodeAuthenticatedRequestBody {
         enum CodingKeys: String, CodingKey {
-            case lastHash = "last_hash"
-            case namespace
+            case messageHashes = "messages"
+            case requireSuccessfulDeletion = "required"
         }
         
-        let lastHash: String
-        let namespace: SnodeAPI.Namespace?
+        let messageHashes: [String]
+        let requireSuccessfulDeletion: Bool
         
         // MARK: - Init
         
         public init(
-            lastHash: String,
-            namespace: SnodeAPI.Namespace?,
+            messageHashes: [String],
+            requireSuccessfulDeletion: Bool,
             pubkey: String,
-            subkey: String?,
-            timestampMs: UInt64,
             ed25519PublicKey: [UInt8],
             ed25519SecretKey: [UInt8]
         ) {
-            self.lastHash = lastHash
-            self.namespace = namespace
+            self.messageHashes = messageHashes
+            self.requireSuccessfulDeletion = requireSuccessfulDeletion
             
             super.init(
                 pubkey: pubkey,
                 ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
-                subkey: subkey,
-                timestampMs: timestampMs
+                ed25519SecretKey: ed25519SecretKey
             )
         }
         
@@ -40,8 +36,12 @@ extension SnodeAPI {
         override public func encode(to encoder: Encoder) throws {
             var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
             
-            try container.encode(lastHash, forKey: .lastHash)
-            try container.encodeIfPresent(namespace, forKey: .namespace)
+            try container.encode(messageHashes, forKey: .messageHashes)
+            
+            // Omitting the value is the same as false so omit to save data
+            if requireSuccessfulDeletion {
+                try container.encode(requireSuccessfulDeletion, forKey: .requireSuccessfulDeletion)
+            }
             
             try super.encode(to: encoder)
         }
@@ -49,13 +49,11 @@ extension SnodeAPI {
         // MARK: - Abstract Methods
         
         override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("retrieve" || namespace || timestamp)` (if using a non-0
-            /// namespace), or `("retrieve" || timestamp)` when fetching from the default namespace.  Both
-            /// namespace and timestamp are the base10 expressions of the relevant values.  Must be base64
+            /// Ed25519 signature of `("delete" || messages...)`; this signs the value constructed
+            /// by concatenating "delete" and all `messages` values, using `pubkey` to sign.  Must be base64
             /// encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getMessages.rawValue.bytes
-                .appending(contentsOf: namespace?.verificationString.bytes)
-                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteMessages.rawValue.bytes
+                .appending(contentsOf: messageHashes.joined().bytes)
             
             guard
                 let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
