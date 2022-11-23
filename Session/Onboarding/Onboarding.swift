@@ -8,38 +8,46 @@ import SessionUtilitiesKit
 import SessionMessagingKit
 
 enum Onboarding {
-    
     enum Flow {
         case register, recover, link
         
         func preregister(with seed: Data, ed25519KeyPair: Sign.KeyPair, x25519KeyPair: ECKeyPair) {
             let userDefaults = UserDefaults.standard
-            Identity.store(seed: seed, ed25519KeyPair: ed25519KeyPair, x25519KeyPair: x25519KeyPair)
             let x25519PublicKey = x25519KeyPair.hexEncodedPublicKey
             
             Storage.shared.write { db in
+                // Store the users identity seeds
+                try Identity.store(
+                    db,
+                    seed: seed,
+                    ed25519KeyPair: ed25519KeyPair,
+                    x25519KeyPair: x25519KeyPair
+                )
+                
+                // Create and approve a contact for the current user (so the 'Note to Self'
+                // thread behaves correctly
                 try Contact(id: x25519PublicKey)
                     .with(
                         isApproved: true,
                         didApproveMe: true
                     )
                     .save(db)
+                
+                // Create the 'Note to Self' thread (not visible by default)
+                try SessionThread
+                    .fetchOrCreate(db, id: x25519PublicKey, variant: .contact)
+                    .save(db)
+                
+                
+                // No need to show the seed again if the user is restoring or linking
+                db[.hasViewedSeed] = (self == .recover || self == .link)
             }
             
-            switch self {
-                case .register:
-                    Storage.shared.write { db in db[.hasViewedSeed] = false }
-                    // Set hasSyncedInitialConfiguration to true so that when we hit the
-                    // home screen a configuration sync is triggered (yes, the logic is a
-                    // bit weird). This is needed so that if the user registers and
-                    // immediately links a device, there'll be a configuration in their swarm.
-                    userDefaults[.hasSyncedInitialConfiguration] = true
-                        
-                case .recover, .link:
-                    // No need to show it again if the user is restoring or linking
-                    Storage.shared.write { db in db[.hasViewedSeed] = true }
-                    userDefaults[.hasSyncedInitialConfiguration] = false
-            }
+            // Set hasSyncedInitialConfiguration to true so that when we hit the
+            // home screen a configuration sync is triggered (yes, the logic is a
+            // bit weird). This is needed so that if the user registers and
+            // immediately links a device, there'll be a configuration in their swarm.
+            userDefaults[.hasSyncedInitialConfiguration] = (self == .register)
             
             switch self {
                 case .register, .recover:

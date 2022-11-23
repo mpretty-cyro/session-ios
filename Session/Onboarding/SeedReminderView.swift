@@ -82,8 +82,11 @@ final class SeedReminderView: UIView {
         
         // Set up button
         let button = SessionButton(style: .bordered, size: .small)
-        button.setTitle("continue_2".localized(), for: UIControl.State.normal)
-        button.set(.width, to: 96)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        button.setTitle("continue_2".localized(), for: .normal)
+        button.widthAnchor
+            .constraint(greaterThanOrEqualToConstant: 96)
+            .isActive = true
         button.addTarget(self, action: #selector(handleContinueButtonTapped), for: UIControl.Event.touchUpInside)
         
         // Set up content stack view

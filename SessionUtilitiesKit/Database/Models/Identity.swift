@@ -69,14 +69,17 @@ public extension Identity {
         return (ed25519KeyPair: ed25519KeyPair, x25519KeyPair: x25519KeyPair)
     }
 
-    static func store(seed: Data, ed25519KeyPair: Sign.KeyPair, x25519KeyPair: ECKeyPair) {
-        Storage.shared.write { db in
-            try Identity(variant: .seed, data: seed).save(db)
-            try Identity(variant: .ed25519SecretKey, data: Data(ed25519KeyPair.secretKey)).save(db)
-            try Identity(variant: .ed25519PublicKey, data: Data(ed25519KeyPair.publicKey)).save(db)
-            try Identity(variant: .x25519PrivateKey, data: x25519KeyPair.privateKey).save(db)
-            try Identity(variant: .x25519PublicKey, data: x25519KeyPair.publicKey).save(db)
-        }
+    static func store(
+        _ db: Database,
+        seed: Data,
+        ed25519KeyPair: Sign.KeyPair,
+        x25519KeyPair: ECKeyPair
+    ) throws {
+        try Identity(variant: .seed, data: seed).save(db)
+        try Identity(variant: .ed25519SecretKey, data: Data(ed25519KeyPair.secretKey)).save(db)
+        try Identity(variant: .ed25519PublicKey, data: Data(ed25519KeyPair.publicKey)).save(db)
+        try Identity(variant: .x25519PrivateKey, data: x25519KeyPair.privateKey).save(db)
+        try Identity(variant: .x25519PublicKey, data: x25519KeyPair.publicKey).save(db)
     }
     
     static func userExists(_ db: Database? = nil) -> Bool {
