@@ -121,6 +121,8 @@ public enum ThemeManager {
     public static func applySavedTheme() {
         ThemeManager.primaryColor = Storage.shared[.themePrimaryColor].defaulting(to: Theme.PrimaryColor.green)
         ThemeManager.currentTheme = Storage.shared[.theme].defaulting(to: Theme.classicDark)
+        
+        updateAllUI()
     }
     
     public static func applyNavigationStyling() {
@@ -169,6 +171,10 @@ public enum ThemeManager {
                 NSAttributedString.Key.foregroundColor: textPrimary
             ]
             
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            
             // Apply the button item appearance as well
             let barButtonItemAppearance = UIBarButtonItemAppearance(style: .plain)
             barButtonItemAppearance.normal.titleTextAttributes = [ .foregroundColor: textPrimary ]
@@ -179,8 +185,12 @@ public enum ThemeManager {
             appearance.backButtonAppearance = barButtonItemAppearance
             appearance.doneButtonAppearance = barButtonItemAppearance
             
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            // And the TabBar appearance
+            let tabBarApperance = UITabBarAppearance()
+            tabBarApperance.configureWithOpaqueBackground()
+            tabBarApperance.backgroundColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
+            UITabBar.appearance().scrollEdgeAppearance = tabBarApperance
+            UITabBar.appearance().standardAppearance = tabBarApperance
         }
         
         // Note: 'UINavigationBar.appearance' only affects newly created nav bars so we need
@@ -245,6 +255,7 @@ public enum ThemeManager {
             ]
             
             navController.navigationBar.standardAppearance = appearance
+            navController.navigationBar.compactAppearance = appearance
             navController.navigationBar.scrollEdgeAppearance = appearance
         }
     }

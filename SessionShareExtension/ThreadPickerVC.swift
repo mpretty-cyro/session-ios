@@ -14,7 +14,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
     private var dataChangeObservable: DatabaseCancellable?
     private var hasLoadedInitialData: Bool = false
     
-    var shareVC: ShareVC?
+    var shareNavController: ShareNavController?
     
     // MARK: - Intialization
     
@@ -150,7 +150,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         
-        guard let attachments: [SignalAttachment] = ShareVC.attachmentPrepPromise?.value else { return }
+        guard let attachments: [SignalAttachment] = ShareNavController.attachmentPrepPromise?.value else { return }
         
         let approvalVC: UINavigationController = AttachmentApprovalViewController.wrappedInNavController(
             threadId: self.viewModel.viewData[indexPath.row].threadId,
@@ -177,16 +177,16 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
             messageText
         )
         
-        shareVC?.dismiss(animated: true, completion: nil)
+        shareNavController?.dismiss(animated: true, completion: nil)
         
-        ModalActivityIndicatorViewController.present(fromViewController: shareVC!, canCancel: false, message: "vc_share_sending_message".localized()) { activityIndicator in
+        ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "vc_share_sending_message".localized()) { activityIndicator in
             // Resume database
             NotificationCenter.default.post(name: Database.resumeNotification, object: self)
             Storage.shared
                 .writeAsync { [weak self] db -> Promise<Void> in
                     guard let thread: SessionThread = try SessionThread.fetchOne(db, id: threadId) else {
                         activityIndicator.dismiss { }
-                        self?.shareVC?.shareViewFailed(error: MessageSenderError.noThread)
+                        self?.shareNavController?.shareViewFailed(error: MessageSenderError.noThread)
                         return Promise(error: MessageSenderError.noThread)
                     }
                     
@@ -236,13 +236,13 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                     // Suspend the database
                     NotificationCenter.default.post(name: Database.suspendNotification, object: self)
                     activityIndicator.dismiss { }
-                    self?.shareVC?.shareViewWasCompleted()
+                    self?.shareNavController?.shareViewWasCompleted()
                 }
                 .catch { [weak self] error in
                     // Suspend the database
                     NotificationCenter.default.post(name: Database.suspendNotification, object: self)
                     activityIndicator.dismiss { }
-                    self?.shareVC?.shareViewFailed(error: error)
+                    self?.shareNavController?.shareViewFailed(error: error)
                 }
         }
     }

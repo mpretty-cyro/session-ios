@@ -6,7 +6,7 @@ import PromiseKit
 import SignalUtilitiesKit
 import SessionUIKit
 
-final class ShareVC: UINavigationController, ShareViewDelegate {
+final class ShareNavController: UINavigationController, ShareViewDelegate {
     private var areVersionMigrationsComplete = false
     public static var attachmentPrepPromise: Promise<[SignalAttachment]>?
     
@@ -182,7 +182,7 @@ final class ShareVC: UINavigationController, ShareViewDelegate {
     
     private func showMainContent() {
         let threadPickerVC: ThreadPickerVC = ThreadPickerVC()
-        threadPickerVC.shareVC = self
+        threadPickerVC.shareNavController = self
         
         setViewControllers([ threadPickerVC ], animated: false)
         
@@ -199,7 +199,7 @@ final class ShareVC: UINavigationController, ShareViewDelegate {
                     activityIndicator.dismiss { }
                 }
         }
-        ShareVC.attachmentPrepPromise = promise
+        ShareNavController.attachmentPrepPromise = promise
     }
     
     func shareViewWasUnlocked() {
@@ -376,7 +376,7 @@ final class ShareVC: UINavigationController, ShareViewDelegate {
                 continue
             }
             
-            if let itemProviders = ShareVC.preferredItemProviders(inputItem: inputItem) {
+            if let itemProviders = ShareNavController.preferredItemProviders(inputItem: inputItem) {
                 return Promise.value(itemProviders)
             }
         }
@@ -423,7 +423,7 @@ final class ShareVC: UINavigationController, ShareViewDelegate {
         // * UTIs aren't very descriptive (there are far more MIME types than UTI types)
         //   so in the case of file attachments we try to refine the attachment type
         //   using the file extension.
-        guard let srcUtiType = ShareVC.utiType(itemProvider: itemProvider) else {
+        guard let srcUtiType = ShareNavController.utiType(itemProvider: itemProvider) else {
             let error = ShareViewControllerError.unsupportedMedia
             return Promise(error: error)
         }
@@ -550,7 +550,7 @@ final class ShareVC: UINavigationController, ShareViewDelegate {
 
         Logger.debug("building DataSource with url: \(url), utiType: \(utiType)")
 
-        guard let dataSource = ShareVC.createDataSource(utiType: utiType, url: url, customFileName: loadedItem.customFileName) else {
+        guard let dataSource = ShareNavController.createDataSource(utiType: utiType, url: url, customFileName: loadedItem.customFileName) else {
             let error = ShareViewControllerError.assertionError(description: "Unable to read attachment data")
             return Promise(error: error)
         }
