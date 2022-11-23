@@ -78,6 +78,7 @@ internal enum Theme_OceanLight: ThemeColors {
         
         // ConversationButton
         .conversationButton_background: .oceanLight7,
+        .conversationButton_typeIcon: .oceanLight2,
         .conversationButton_unreadBackground: .oceanLight6,
         .conversationButton_unreadStripBackground: .primary,
         .conversationButton_unreadBubbleBackground: .primary,

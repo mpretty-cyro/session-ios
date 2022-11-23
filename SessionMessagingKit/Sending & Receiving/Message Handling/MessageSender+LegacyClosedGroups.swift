@@ -517,7 +517,7 @@ extension MessageSender {
             .map { _ in }
         
         // Update the group (if the admin leaves the group is disbanded)
-        let wasAdminUser: Bool = try GroupMember
+        let wasAdminUser: Bool = GroupMember
             .filter(GroupMember.Columns.groupId == thread.id)
             .filter(GroupMember.Columns.profileId == userPublicKey)
             .filter(GroupMember.Columns.role == GroupMember.Role.admin)

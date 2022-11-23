@@ -38,7 +38,10 @@ public enum MentionUtilities {
         attributes: [NSAttributedString.Key: Any]
     ) -> NSAttributedString {
         guard
-            let regex: NSRegularExpression = try? NSRegularExpression(pattern: "@[0-9a-fA-F]{66}", options: [])
+            let regex: NSRegularExpression = try? NSRegularExpression(
+                pattern: "@([0-9a-fA-F]{66}|\("MENTION_EVERYONE".localized())|\("MENTION_ADMIN".localized()))",
+                options: []
+            )
         else {
             return NSAttributedString(string: string)
         }
@@ -62,9 +65,13 @@ public enum MentionUtilities {
             
             let publicKey: String = String(string[range].dropFirst()) // Drop the @
             let isCurrentUser: Bool = currentUserPublicKeys.contains(publicKey)
+            let isEveryone: Bool = (publicKey == "MENTION_EVERYONE".localized())
+            let isAdmin: Bool = (publicKey == "MENTION_ADMIN".localized())
             
             guard let targetString: String = {
                 guard !isCurrentUser else { return "MEDIA_GALLERY_SENDER_NAME_YOU".localized() }
+                guard !isEveryone else { return "MENTION_EVERYONE".localized() }
+                guard !isAdmin else { return "MENTION_ADMIN".localized() }
                 guard let displayName: String = Profile.displayNameNoFallback(id: publicKey, threadVariant: threadVariant) else {
                     lastMatchEnd = (match.range.location + match.range.length)
                     return nil

@@ -166,6 +166,7 @@ public indirect enum ThemeValue: Hashable {
     
     // ConversationButton
     case conversationButton_background
+    case conversationButton_typeIcon
     case conversationButton_unreadBackground
     case conversationButton_unreadStripBackground
     case conversationButton_unreadBubbleBackground

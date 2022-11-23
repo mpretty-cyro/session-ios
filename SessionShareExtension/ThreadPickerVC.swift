@@ -197,7 +197,12 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                         variant: .standardOutgoing,
                         body: body,
                         timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000)),
-                        hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: body),
+                        hasMention: Interaction.isUserMentioned(
+                            db,
+                            threadId: threadId,
+                            threadVariant: thread.variant,
+                            body: body
+                        ),
                         expiresInSeconds: try? DisappearingMessagesConfiguration
                             .select(.durationSeconds)
                             .filter(id: threadId)

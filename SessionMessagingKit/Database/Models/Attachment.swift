@@ -57,6 +57,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         case uploading
         case uploaded
         
+        case notScheduled = 50
         case invalid = 100
     }
     

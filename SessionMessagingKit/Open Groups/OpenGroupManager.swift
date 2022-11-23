@@ -838,24 +838,27 @@ public final class OpenGroupManager: NSObject {
     
     /// This method specifies if the given publicKey is a moderator or an admin within a specified Open Group
     public static func isUserModeratorOrAdmin(
-        _ publicKey: String,
+        _ publicKey: String?,
         for roomToken: String?,
         on server: String?,
         using dependencies: OGMDependencies = OGMDependencies()
     ) -> Bool {
-        guard let roomToken: String = roomToken, let server: String = server else { return false }
+        guard
+            let publicKey: String = publicKey,
+            let roomToken: String = roomToken,
+            let server: String = server
+        else { return false }
 
         let groupId: String = OpenGroup.idFor(roomToken: roomToken, server: server)
         let targetRoles: [GroupMember.Role] = [.moderator, .admin]
         
         return dependencies.storage
             .read { db in
-                let isDirectModOrAdmin: Bool = (try? GroupMember
+                let isDirectModOrAdmin: Bool = GroupMember
                     .filter(GroupMember.Columns.groupId == groupId)
                     .filter(GroupMember.Columns.profileId == publicKey)
                     .filter(targetRoles.contains(GroupMember.Columns.role))
-                    .isNotEmpty(db))
-                    .defaulting(to: false)
+                    .isNotEmpty(db)
                 
                 // If the publicKey provided matches a mod or admin directly then just return immediately
                 if isDirectModOrAdmin { return true }
@@ -909,12 +912,11 @@ public final class OpenGroupManager: NSObject {
                             SessionId(.blinded, publicKey: blindedKeyPair.publicKey).hexString
                         ])
                         
-                        return (try? GroupMember
+                        return GroupMember
                             .filter(GroupMember.Columns.groupId == groupId)
                             .filter(possibleKeys.contains(GroupMember.Columns.profileId))
                             .filter(targetRoles.contains(GroupMember.Columns.role))
-                            .isNotEmpty(db))
-                            .defaulting(to: false)
+                            .isNotEmpty(db)
                 }
             }
             .defaulting(to: false)

@@ -6,15 +6,28 @@ import SignalUtilitiesKit
 import SessionMessagingKit
 
 public final class FullConversationCell: UITableViewCell {
+    private static let conversationTypeImageHeight: CGFloat = 12
     public static let unreadCountViewSize: CGFloat = 20
     private static let statusIndicatorSize: CGFloat = 14
     
     // MARK: - UI
     
+    private lazy var conversationTypeImageViewWidthConstraint: NSLayoutConstraint = conversationTypeImageView.set(.width, to: 0)
+    
     private let accentLineView: UIView = UIView()
 
     private lazy var profilePictureView: ProfilePictureView = ProfilePictureView()
 
+    private let conversationTypeImageView: UIImageView = {
+        let result: UIImageView = UIImageView()
+        result.themeTintColor = .conversationButton_typeIcon
+        result.contentMode = .scaleAspectFit
+        result.isHidden = true
+        result.set(.height, to: FullConversationCell.conversationTypeImageHeight)
+        
+        return result
+    }()
+    
     private lazy var displayNameLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
@@ -175,7 +188,7 @@ public final class FullConversationCell: UITableViewCell {
         
         // Label stack view
         let topLabelSpacer = UIView.hStretchingSpacer()
-        [ displayNameLabel, isPinnedIcon, unreadCountView, hasMentionView, topLabelSpacer, timestampLabel ].forEach{ view in
+        [ conversationTypeImageView, displayNameLabel, isPinnedIcon, unreadCountView, hasMentionView, topLabelSpacer, timestampLabel ].forEach{ view in
             topLabelStackView.addArrangedSubview(view)
         }
         
@@ -244,6 +257,7 @@ public final class FullConversationCell: UITableViewCell {
             additionalProfile: cellViewModel.additionalProfile
         )
         
+        setupConversationTypeImage(for: cellViewModel)
         isPinnedIcon.isHidden = true
         unreadCountView.isHidden = true
         hasMentionView.isHidden = true
@@ -294,6 +308,7 @@ public final class FullConversationCell: UITableViewCell {
             additionalProfile: cellViewModel.additionalProfile
         )
         
+        setupConversationTypeImage(for: cellViewModel)
         isPinnedIcon.isHidden = true
         unreadCountView.isHidden = true
         hasMentionView.isHidden = true
@@ -354,6 +369,7 @@ public final class FullConversationCell: UITableViewCell {
             accentLineView.alpha = (unreadCount > 0 ? 1 : 0.0001) // Setting the alpha to exactly 0 causes an issue on iOS 12
         }
         
+        setupConversationTypeImage(for: cellViewModel)
         isPinnedIcon.isHidden = !cellViewModel.threadIsPinned
         unreadCountView.isHidden = (unreadCount <= 0)
         unreadCountLabel.text = (unreadCount < 10000 ? "\(unreadCount)" : "9999+")
@@ -423,6 +439,24 @@ public final class FullConversationCell: UITableViewCell {
         if let isPinned: Bool = isPinned {
             isPinnedIcon.isHidden = !isPinned
         }
+    }
+    
+    // MARK: - Conversation type image
+    
+    private func setupConversationTypeImage(for cellViewModel: SessionThreadViewModel) {
+        let targetImage: UIImage? = {
+            switch cellViewModel.threadVariant {
+                case .closedGroup: return UIImage(named: "Group")?.withRenderingMode(.alwaysTemplate)
+                case .openGroup: return UIImage(named: "Globe")?.withRenderingMode(.alwaysTemplate)
+                case .contact: return nil
+            }
+        }()
+        conversationTypeImageView.isHidden = (cellViewModel.threadVariant == .contact)
+        conversationTypeImageView.image = targetImage
+        conversationTypeImageViewWidthConstraint.constant = (
+            ((targetImage?.size.width ?? 1) / (targetImage?.size.height ?? 1)) *
+            FullConversationCell.conversationTypeImageHeight
+        )
     }
     
     // MARK: - Snippet generation

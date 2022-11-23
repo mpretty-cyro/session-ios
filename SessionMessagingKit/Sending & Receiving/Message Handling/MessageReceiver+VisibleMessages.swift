@@ -116,6 +116,7 @@ extension MessageReceiver {
                 hasMention: Interaction.isUserMentioned(
                     db,
                     threadId: thread.id,
+                    threadVariant: thread.variant,
                     body: message.text,
                     quoteAuthorId: dataMessage.quote?.author
                 ),
@@ -236,29 +237,36 @@ extension MessageReceiver {
             ).save(db)
         }
         
-        // Start attachment downloads if needed (ie. trusted contact or group thread)
-        // FIXME: Replace this to check the `autoDownloadAttachments` flag we are adding to threads
-        let isContactTrusted: Bool = ((try? Contact.fetchOne(db, id: sender))?.isTrusted ?? false)
-
-        if isContactTrusted || thread.variant != .contact {
-            attachments
+        // Auto start attachment downloads if needed
+        if thread.autoDownloadAttachments == true {
+            let attachentIds: [String] = attachments
                 .map { $0.id }
                 .appending(quote?.attachmentId)
                 .appending(linkPreview?.attachmentId)
-                .forEach { attachmentId in
-                    JobRunner.add(
-                        db,
-                        job: Job(
-                            variant: .attachmentDownload,
-                            threadId: thread.id,
-                            interactionId: interactionId,
-                            details: AttachmentDownloadJob.Details(
-                                attachmentId: attachmentId
-                            )
-                        ),
-                        canStartJob: isMainAppActive
-                    )
-                }
+            
+            // Mark them as pending downloads
+            try Attachment
+                .filter(ids: attachentIds)
+                .updateAll(
+                    db,
+                    Attachment.Columns.state.set(to: Attachment.State.pendingDownload)
+                )
+            
+            // Add download jobs
+            attachentIds.forEach { attachmentId in
+                JobRunner.add(
+                    db,
+                    job: Job(
+                        variant: .attachmentDownload,
+                        threadId: thread.id,
+                        interactionId: interactionId,
+                        details: AttachmentDownloadJob.Details(
+                            attachmentId: attachmentId
+                        )
+                    ),
+                    canStartJob: isMainAppActive
+                )
+            }
         }
         
         // Cancel any typing indicators if needed

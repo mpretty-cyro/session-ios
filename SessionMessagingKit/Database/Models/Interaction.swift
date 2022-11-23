@@ -653,6 +653,7 @@ public extension Interaction {
     static func isUserMentioned(
         _ db: Database,
         threadId: String,
+        threadVariant: SessionThread.Variant,
         body: String?,
         quoteAuthorId: String? = nil
     ) -> Bool {
@@ -660,22 +661,55 @@ public extension Interaction {
             getUserHexEncodedPublicKey(db)
         ]
         
-        // If the thread is an open group then add the blinded id as a key to check
-        if let openGroup: OpenGroup = try? OpenGroup.fetchOne(db, id: threadId) {
-            let sodium: Sodium = Sodium()
-            
-            if
-                let userEd25519KeyPair: Box.KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                let blindedKeyPair: Box.KeyPair = sodium.blindedKeyPair(
-                    serverPublicKey: openGroup.publicKey,
-                    edKeyPair: userEd25519KeyPair,
-                    genericHash: sodium.genericHash
-                )
-            {
-                publicKeysToCheck.append(
-                    SessionId(.blinded, publicKey: blindedKeyPair.publicKey).hexString
-                )
-            }
+        switch threadVariant {
+            case .contact: break
+                
+            case .closedGroup:
+                // If it's a closed group and the body contains the '@everyone' tag then just
+                // consider it as a mention
+                if (body ?? "").contains("@\("MENTION_EVERYONE".localized())") {
+                    return true
+                }
+                
+                // If it's a closed group and the body contains the '@admin' tag then check if
+                // the user is an admin, and if so consider it a mention
+                if
+                    (body ?? "").contains("@\("MENTION_ADMIN".localized())") &&
+                    GroupMember
+                        .filter(
+                            GroupMember.Columns.groupId == threadId &&
+                            GroupMember.Columns.profileId == publicKeysToCheck[0] &&
+                            GroupMember.Columns.role == GroupMember.Role.admin
+                        )
+                        .isNotEmpty(db)
+                {
+                    return true
+                }
+                
+            case .openGroup:
+                // If the thread is an open group then add the blinded id as a key to check
+                if
+                    let openGroupPublicKey: String = try? OpenGroup
+                        .filter(id: threadId)
+                        .select(.publicKey)
+                        .asRequest(of: String.self)
+                        .fetchOne(db)
+                {
+                    let sodium: Sodium = Sodium()
+                    
+                    if
+                        let userEd25519KeyPair: Box.KeyPair = Identity.fetchUserEd25519KeyPair(db),
+                        let blindedKeyPair: Box.KeyPair = sodium.blindedKeyPair(
+                            serverPublicKey: openGroupPublicKey,
+                            edKeyPair: userEd25519KeyPair,
+                            genericHash: sodium.genericHash
+                        )
+                    {
+                        publicKeysToCheck.append(
+                            SessionId(.blinded, publicKey: blindedKeyPair.publicKey).hexString
+                        )
+                    }
+                }
         }
         
         // A user is mentioned if their public key is in the body of a message or one of their messages
@@ -703,10 +737,9 @@ public extension Interaction {
                         .asRequest(of: Attachment.DescriptionInfo.self)
                         .fetchOne(db),
                     attachmentCount: try? attachments.fetchCount(db),
-                    isOpenGroupInvitation: (try? linkPreview
+                    isOpenGroupInvitation: linkPreview
                         .filter(LinkPreview.Columns.variant == LinkPreview.Variant.openGroupInvitation)
-                        .isNotEmpty(db))
-                        .defaulting(to: false)
+                        .isNotEmpty(db)
                 )
 
             case .infoMediaSavedNotification, .infoScreenshotNotification, .infoCall:

@@ -342,9 +342,6 @@
 "vc_conversation_settings_copy_session_id_button_title" = "Kopiraj Session ID";
 "vc_conversation_input_prompt" = "Poruka";
 "vc_conversation_voice_message_cancel_message" = "Pomakni za odustajanje";
-"modal_download_attachment_title" = "Vjeruj %@?";
-"modal_download_attachment_explanation" = "Jeste li sigurni da želite preuzeti medije koje je poslao %@?";
-"modal_download_button_title" = "Preuzmi";
 "modal_open_url_title" = "Otvori poveznicu?";
 "modal_open_url_explanation" = "Jeste li sigurni da želite otvoriti %@?";
 "modal_open_url_button_title" = "Otvori";
@@ -643,3 +640,15 @@
 "ADD_ADMIN_EXPLANATION_MANY" = "Are you sure you want to add %@ and %@ others as admins? This cannot be undone.";
 "ADD_ADMIN_NO_NON_ADMINS" = "There are no users without admin permissions in this group.";
 "REMOVE_AVATAR" = "Remove";
+"MENTION_EVERYONE" = "everyone";
+"MENTION_EVERYONE_DESCRIPTION" = "Notify everyone in this group";
+"MENTION_ADMIN" = "admin";
+"MENTION_ADMIN_DESCRIPTION" = "Notify admins in this group";
+"THREAD_AUTO_DOWNLOAD_ALERT_TITLE" = "Auto Download?";
+"THREAD_AUTO_DOWNLOAD_ALERT_DESCRIPTION" = "Would you like to automatically download all files from %@?";
+"THREAD_AUTO_DOWNLOAD_SETTING_TITLE" = "Auto Download Media?";
+"THREAD_AUTO_DOWNLOAD_SETTING_DESCRIPTION" = "Automatically download media and files from this chat.";
+"ATTACHMENT_DOWNLOAD_INFO" = "Tap to download %@";
+"ATTACHMENT_DOWNLOAD_INFO_MULTIPLE" = "Tap to download %d %@";
+"ACTION_YES" = "Yes";
+"ACTION_NO" = "No";

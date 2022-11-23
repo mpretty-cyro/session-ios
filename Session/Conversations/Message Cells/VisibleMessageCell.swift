@@ -445,8 +445,13 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             return
         }
         
-        // If it's an incoming media message and the thread isn't trusted then show the placeholder view
-        if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming && !cellViewModel.threadIsTrusted {
+        // If it's an incoming media message and none of the attachments have been scheduled for
+        // download then assume the user has auto download disabled and show 'tap to download'
+        if
+            cellViewModel.cellType != .textOnlyMessage &&
+            cellViewModel.variant == .standardIncoming &&
+            (cellViewModel.attachments ?? []).allSatisfy({ $0.state == .notScheduled })
+        {
             let mediaPlaceholderView = MediaPlaceholderView(cellViewModel: cellViewModel, textColor: bodyLabelTextColor)
             bubbleView.addSubview(mediaPlaceholderView)
             mediaPlaceholderView.pin(to: bubbleView)
@@ -698,18 +703,17 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
     }
     
     override func dynamicUpdate(with cellViewModel: MessageViewModel, playbackInfo: ConversationViewModel.PlaybackInfo?) {
-        guard cellViewModel.variant != .standardIncomingDeleted else { return }
+        guard
+            cellViewModel.variant != .standardIncomingDeleted,
+            let attachments: [Attachment] = cellViewModel.attachments
+        else { return }
         
-        // If it's an incoming media message and the thread isn't trusted then show the placeholder view
-        if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming && !cellViewModel.threadIsTrusted {
-            return
-        }
-
         switch cellViewModel.cellType {
             case .audio:
-                guard let attachment: Attachment = cellViewModel.attachments?.first(where: { $0.isAudio }) else {
-                    return
-                }
+                guard
+                    let attachment: Attachment = attachments.first(where: { $0.isAudio }),
+                    (attachment.state == .downloaded || attachment.state == .uploaded)
+                else { return }
                 
                 self.voiceMessageView?.update(
                     with: attachment,

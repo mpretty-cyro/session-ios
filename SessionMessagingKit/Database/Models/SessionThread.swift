@@ -31,6 +31,7 @@ public struct SessionThread: Codable, Identifiable, Equatable, FetchableRecord, 
         case notificationSound
         case mutedUntilTimestamp
         case onlyNotifyForMentions
+        case autoDownloadAttachments
     }
     
     public enum Variant: Int, Codable, Hashable, DatabaseValueConvertible {
@@ -73,6 +74,9 @@ public struct SessionThread: Codable, Identifiable, Equatable, FetchableRecord, 
     /// A flag indicating whether the thread should only notify for mentions
     public let onlyNotifyForMentions: Bool
     
+    /// A flag indicating whether the thread should automatically download attachments
+    public let autoDownloadAttachments: Bool?
+    
     // MARK: - Relationships
     
     public var contact: QueryInterfaceRequest<Contact> {
@@ -110,7 +114,8 @@ public struct SessionThread: Codable, Identifiable, Equatable, FetchableRecord, 
         messageDraft: String? = nil,
         notificationSound: Preferences.Sound? = nil,
         mutedUntilTimestamp: TimeInterval? = nil,
-        onlyNotifyForMentions: Bool = false
+        onlyNotifyForMentions: Bool = false,
+        autoDownloadAttachments: Bool = false
     ) {
         self.id = id
         self.variant = variant
@@ -121,6 +126,7 @@ public struct SessionThread: Codable, Identifiable, Equatable, FetchableRecord, 
         self.notificationSound = notificationSound
         self.mutedUntilTimestamp = mutedUntilTimestamp
         self.onlyNotifyForMentions = onlyNotifyForMentions
+        self.autoDownloadAttachments = autoDownloadAttachments
     }
     
     // MARK: - Custom Database Interaction
@@ -146,7 +152,8 @@ public extension SessionThread {
             messageDraft: messageDraft,
             notificationSound: notificationSound,
             mutedUntilTimestamp: mutedUntilTimestamp,
-            onlyNotifyForMentions: onlyNotifyForMentions
+            onlyNotifyForMentions: onlyNotifyForMentions,
+            autoDownloadAttachments: (autoDownloadAttachments ?? false)
         )
     }
 }

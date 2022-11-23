@@ -80,7 +80,8 @@ public enum MessageSendJob: JobExecutor {
                         guard attachment.downloadUrl != Attachment.nonMediaQuoteFileId else { return false }
                         
                         switch attachment.state {
-                            case .uploading, .pendingDownload, .downloading, .failedUpload, .downloaded:
+                            case .uploading, .notScheduled, .pendingDownload,
+                                .downloading, .failedUpload, .downloaded:
                                 return true
                                 
                             default: return false

@@ -90,7 +90,7 @@ extension MessageReceiver {
         
         // Only need to do the remaining work if the current user is an admin within the group
         guard
-            try GroupMember
+            GroupMember
                 .filter(GroupMember.Columns.profileId == userPubilicKey)
                 .filter(GroupMember.Columns.role == GroupMember.Role.admin)
                 .isNotEmpty(db)

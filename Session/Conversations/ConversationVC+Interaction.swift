@@ -439,7 +439,12 @@ extension ConversationVC:
                     variant: .standardOutgoing,
                     body: text,
                     timestampMs: sentTimestampMs,
-                    hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: text),
+                    hasMention: Interaction.isUserMentioned(
+                        db,
+                        threadId: threadId,
+                        threadVariant: thread.variant,
+                        body: text
+                    ),
                     expiresInSeconds: try? DisappearingMessagesConfiguration
                         .select(.durationSeconds)
                         .filter(id: threadId)
@@ -562,7 +567,12 @@ extension ConversationVC:
                     variant: .standardOutgoing,
                     body: text,
                     timestampMs: sentTimestampMs,
-                    hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: text),
+                    hasMention: Interaction.isUserMentioned(
+                        db,
+                        threadId: threadId,
+                        threadVariant: thread.variant,
+                        body: text
+                    ),
                     expiresInSeconds: try? DisappearingMessagesConfiguration
                         .select(.durationSeconds)
                         .filter(id: threadId)
@@ -674,9 +684,13 @@ extension ConversationVC:
         
         mentions.append(mentionInfo)
         
+        let mentionValue: String = (
+            mentionInfo.profile?.displayName(for: self.viewModel.threadData.threadVariant) ??
+            mentionInfo.customName
+        ).defaulting(to: "")
         let newText: String = snInputView.text.replacingCharacters(
             in: currentMentionStartIndex...,
-            with: "@\(mentionInfo.profile.displayName(for: self.viewModel.threadData.threadVariant)) "
+            with: "@\(mentionValue) "
         )
         
         snInputView.text = newText
@@ -684,7 +698,7 @@ extension ConversationVC:
         snInputView.hideMentionsUI()
         
         mentions = mentions.filter { mentionInfo -> Bool in
-            newText.contains(mentionInfo.profile.displayName(for: self.viewModel.threadData.threadVariant))
+            newText.contains(mentionValue)
         }
     }
     
@@ -735,8 +749,12 @@ extension ConversationVC:
     func replaceMentions(in text: String) -> String {
         var result = text
         for mention in mentions {
-            guard let range = result.range(of: "@\(mention.profile.displayName(for: mention.threadVariant))") else { continue }
-            result = result.replacingCharacters(in: range, with: "@\(mention.profile.id)")
+            guard
+                let mentionProfile: Profile = mention.profile,
+                let range = result.range(of: "@\(mentionProfile.displayName(for: mention.threadVariant))")
+            else { continue }
+            
+            result = result.replacingCharacters(in: range, with: "@\(mentionProfile.id)")
         }
         
         return result
@@ -836,33 +854,73 @@ extension ConversationVC:
             return
         }
         
-        // If it's an incoming media message and the thread isn't trusted then show the placeholder view
-        if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming && !cellViewModel.threadIsTrusted {
-            let message: String = String(
-                format: "modal_download_attachment_explanation".localized(),
-                cellViewModel.authorName
-            )
-            let confirmationModal: ConfirmationModal = ConfirmationModal(
-                info: ConfirmationModal.Info(
-                    title: String(
-                        format: "modal_download_attachment_title".localized(),
-                        cellViewModel.authorName
-                    ),
-                    attributedExplanation: NSAttributedString(string: message)
-                        .adding(
-                            attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
-                            range: (message as NSString).range(of: cellViewModel.authorName)
-                        ),
-                    confirmTitle: "modal_download_button_title".localized(),
-                    dismissOnConfirm: false // Custom dismissal logic
-                ) { [weak self] _ in
-                    self?.viewModel.trustContact()
-                    self?.dismiss(animated: true, completion: nil)
-                }
-            )
-            
-            present(confirmationModal, animated: true, completion: nil)
-            return
+        // If it's an incoming attachment then check what state it's in
+        if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming {
+            switch viewModel.threadData.threadAutoDownloadAttachments {
+                // If the user hasn't specified an auto download behaviour then ask
+                case .none:
+                    let threadName: String = viewModel.threadData.displayName
+                    let message: String = String(
+                        format: "THREAD_AUTO_DOWNLOAD_ALERT_DESCRIPTION".localized(),
+                        threadName
+                    )
+                    let confirmationModal: ConfirmationModal = ConfirmationModal(
+                        info: ConfirmationModal.Info(
+                            title: "THREAD_AUTO_DOWNLOAD_ALERT_TITLE".localized(),
+                            attributedExplanation: NSAttributedString(string: message)
+                                .adding(
+                                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
+                                    range: (message as NSString).range(of: threadName)
+                                ),
+                            confirmTitle: "ACTION_YES".localized(),
+                            cancelTitle: "ACTION_NO".localized(),
+                            dismissOnConfirm: false // Custom dismissal logic
+                        ) { [weak self] _ in
+                            self?.viewModel.enableAutoDownload()
+                            self?.dismiss(animated: true, completion: nil)
+                        }
+                    )
+                    
+                    present(confirmationModal, animated: true, completion: nil)
+                    return
+                    
+                // If the user has set the auto-download setting then check if there are any
+                // downloads which haven't been started, if so start them, otherwise just go
+                // to standard rendering
+                default:
+                    let threadId: String = self.viewModel.threadData.threadId
+                    
+                    guard
+                        let attachmentIds: [String] = cellViewModel.attachments?
+                            .filter({ $0.state == .notScheduled })
+                            .map({ $0.id }),
+                        !attachmentIds.isEmpty
+                    else { break }
+                    
+                    Storage.shared.writeAsync { db in
+                        try Attachment
+                            .filter(ids: attachmentIds)
+                            .updateAll(
+                                db,
+                                Attachment.Columns.state.set(to: Attachment.State.pendingDownload)
+                            )
+                        
+                        attachmentIds.forEach { attachmentId in
+                            JobRunner.add(
+                                db,
+                                job: Job(
+                                    variant: .attachmentDownload,
+                                    threadId: threadId,
+                                    interactionId: cellViewModel.id,
+                                    details: AttachmentDownloadJob.Details(
+                                        attachmentId: attachmentId
+                                    )
+                                )
+                            )
+                        }
+                    }
+                    return
+            }
         }
         
         switch cellViewModel.cellType {
@@ -891,11 +949,18 @@ extension ConversationVC:
                     // Failed uploads should be handled via the "resend" process instead
                     case .failedUpload: break
                         
-                    case .failedDownload:
+                    case .notScheduled, .failedDownload:
                         let threadId: String = self.viewModel.threadData.threadId
                         
                         // Retry downloading the failed attachment
                         Storage.shared.writeAsync { db in
+                            try Attachment
+                                .filter(id: mediaView.attachment.id)
+                                .updateAll(
+                                    db,
+                                    Attachment.Columns.state.set(to: Attachment.State.pendingDownload)
+                                )
+                            
                             JobRunner.add(
                                 db,
                                 job: Job(

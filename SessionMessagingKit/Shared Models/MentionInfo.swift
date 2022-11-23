@@ -7,13 +7,35 @@ public struct MentionInfo: FetchableRecord, Decodable {
     fileprivate static let threadVariantKey: SQL = SQL(stringLiteral: CodingKeys.threadVariant.stringValue)
     fileprivate static let openGroupServerKey: SQL = SQL(stringLiteral: CodingKeys.openGroupServer.stringValue)
     fileprivate static let openGroupRoomTokenKey: SQL = SQL(stringLiteral: CodingKeys.openGroupRoomToken.stringValue)
+    fileprivate static let customNameKey: SQL = SQL(stringLiteral: CodingKeys.customName.stringValue)
+    fileprivate static let customDescriptionKey: SQL = SQL(stringLiteral: CodingKeys.customDescription.stringValue)
     
     fileprivate static let profileString: String = CodingKeys.profile.stringValue
     
-    public let profile: Profile
+    public let profile: Profile?
     public let threadVariant: SessionThread.Variant
     public let openGroupServer: String?
     public let openGroupRoomToken: String?
+    public let customName: String?
+    public let customDescription: String?
+    
+    // MARK: - Initialization
+    
+    public init(
+        profile: Profile? = nil,
+        threadVariant: SessionThread.Variant,
+        openGroupServer: String? = nil,
+        openGroupRoomToken: String? = nil,
+        customName: String? = nil,
+        customDescription: String? = nil
+    ) {
+        self.profile = profile
+        self.threadVariant = threadVariant
+        self.openGroupServer = openGroupServer
+        self.openGroupRoomToken = openGroupRoomToken
+        self.customName = customName
+        self.customDescription = customDescription
+    }
 }
 
 public extension MentionInfo {
@@ -46,7 +68,9 @@ public extension MentionInfo {
                         MAX(\(interaction[.timestampMs])),  -- Want the newest interaction (for sorting)
                         \(SQL("\(threadVariant) AS \(MentionInfo.threadVariantKey)")),
                         \(openGroup[.server]) AS \(MentionInfo.openGroupServerKey),
-                        \(openGroup[.roomToken]) AS \(MentionInfo.openGroupRoomTokenKey)
+                        \(openGroup[.roomToken]) AS \(MentionInfo.openGroupRoomTokenKey),
+                        NULL AS \(MentionInfo.customNameKey),
+                        NULL AS \(MentionInfo.customDescriptionKey)
                     
                     FROM \(Profile.self)
                     JOIN \(Interaction.self) ON (
@@ -77,7 +101,9 @@ public extension MentionInfo {
                     MAX(\(interaction[.timestampMs])),  -- Want the newest interaction (for sorting)
                     \(SQL("\(threadVariant) AS \(MentionInfo.threadVariantKey)")),
                     \(openGroup[.server]) AS \(MentionInfo.openGroupServerKey),
-                    \(openGroup[.roomToken]) AS \(MentionInfo.openGroupRoomTokenKey)
+                    \(openGroup[.roomToken]) AS \(MentionInfo.openGroupRoomTokenKey),
+                    NULL AS \(MentionInfo.customNameKey),
+                    NULL AS \(MentionInfo.customDescriptionKey)
                 
                 FROM \(profileFullTextSearch)
                 JOIN \(Profile.self) ON (

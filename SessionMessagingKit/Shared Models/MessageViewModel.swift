@@ -14,7 +14,7 @@ fileprivate typealias TypingIndicatorInfo = MessageViewModel.TypingIndicatorInfo
 public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, Hashable, Identifiable, Differentiable {
     public static let threadIdKey: SQL = SQL(stringLiteral: CodingKeys.threadId.stringValue)
     public static let threadVariantKey: SQL = SQL(stringLiteral: CodingKeys.threadVariant.stringValue)
-    public static let threadIsTrustedKey: SQL = SQL(stringLiteral: CodingKeys.threadIsTrusted.stringValue)
+    public static let threadAutoDownloadAttachmentsKey: SQL = SQL(stringLiteral: CodingKeys.threadAutoDownloadAttachments.stringValue)
     public static let threadHasDisappearingMessagesEnabledKey: SQL = SQL(stringLiteral: CodingKeys.threadHasDisappearingMessagesEnabled.stringValue)
     public static let threadOpenGroupServerKey: SQL = SQL(stringLiteral: CodingKeys.threadOpenGroupServer.stringValue)
     public static let threadOpenGroupPublicKeyKey: SQL = SQL(stringLiteral: CodingKeys.threadOpenGroupPublicKey.stringValue)
@@ -61,7 +61,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     
     public let threadId: String
     public let threadVariant: SessionThread.Variant
-    public let threadIsTrusted: Bool
+    public let threadAutoDownloadAttachments: Bool?
     public let threadHasDisappearingMessagesEnabled: Bool
     public let threadOpenGroupServer: String?
     public let threadOpenGroupPublicKey: String?
@@ -152,7 +152,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         return MessageViewModel(
             threadId: self.threadId,
             threadVariant: self.threadVariant,
-            threadIsTrusted: self.threadIsTrusted,
+            threadAutoDownloadAttachments: self.threadAutoDownloadAttachments,
             threadHasDisappearingMessagesEnabled: self.threadHasDisappearingMessagesEnabled,
             threadOpenGroupServer: self.threadOpenGroupServer,
             threadOpenGroupPublicKey: self.threadOpenGroupPublicKey,
@@ -307,7 +307,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         return ViewModel(
             threadId: self.threadId,
             threadVariant: self.threadVariant,
-            threadIsTrusted: self.threadIsTrusted,
+            threadAutoDownloadAttachments: self.threadAutoDownloadAttachments,
             threadHasDisappearingMessagesEnabled: self.threadHasDisappearingMessagesEnabled,
             threadOpenGroupServer: self.threadOpenGroupServer,
             threadOpenGroupPublicKey: self.threadOpenGroupPublicKey,
@@ -502,7 +502,7 @@ public extension MessageViewModel {
     ) {
         self.threadId = "INVALID_THREAD_ID"
         self.threadVariant = .contact
-        self.threadIsTrusted = false
+        self.threadAutoDownloadAttachments = nil
         self.threadHasDisappearingMessagesEnabled = false
         self.threadOpenGroupServer = nil
         self.threadOpenGroupPublicKey = nil
@@ -629,7 +629,6 @@ public extension MessageViewModel {
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
             let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
             let recipientState: TypedTableAlias<RecipientState> = TypedTableAlias()
-            let contact: TypedTableAlias<Contact> = TypedTableAlias()
             let disappearingMessagesConfig: TypedTableAlias<DisappearingMessagesConfiguration> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
             let quote: TypedTableAlias<Quote> = TypedTableAlias()
@@ -655,8 +654,7 @@ public extension MessageViewModel {
                 SELECT
                     \(thread[.id]) AS \(ViewModel.threadIdKey),
                     \(thread[.variant]) AS \(ViewModel.threadVariantKey),
-                    -- Default to 'true' for non-contact threads
-                    IFNULL(\(contact[.isTrusted]), true) AS \(ViewModel.threadIsTrustedKey),
+                    \(thread[.autoDownloadAttachments]) AS \(ViewModel.threadAutoDownloadAttachmentsKey),
                     -- Default to 'false' when no contact exists
                     IFNULL(\(disappearingMessagesConfig[.isEnabled]), false) AS \(ViewModel.threadHasDisappearingMessagesEnabledKey),
                     \(openGroup[.server]) AS \(ViewModel.threadOpenGroupServerKey),
@@ -703,7 +701,6 @@ public extension MessageViewModel {
                 
                 FROM \(Interaction.self)
                 JOIN \(SessionThread.self) ON \(thread[.id]) = \(interaction[.threadId])
-                LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(interaction[.threadId])
                 LEFT JOIN \(Profile.self) AS \(threadProfileTableLiteral) ON \(threadProfileTableLiteral).\(profileIdColumnLiteral) = \(interaction[.threadId])
                 LEFT JOIN \(DisappearingMessagesConfiguration.self) ON \(disappearingMessagesConfig[.threadId]) = \(interaction[.threadId])
                 LEFT JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(interaction[.threadId])

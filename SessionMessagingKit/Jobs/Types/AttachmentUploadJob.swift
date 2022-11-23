@@ -44,7 +44,11 @@ public enum AttachmentUploadJob: JobExecutor {
         }
         
         // If the attachment is still pending download the hold off on running this job
-        guard attachment.state != .pendingDownload && attachment.state != .downloading else {
+        guard
+            attachment.state != .notScheduled &&
+            attachment.state != .pendingDownload &&
+            attachment.state != .downloading
+        else {
             deferred(job)
             return
         }

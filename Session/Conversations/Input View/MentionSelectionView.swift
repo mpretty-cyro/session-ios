@@ -85,10 +85,12 @@ final class MentionSelectionView: UIView, UITableViewDataSource, UITableViewDele
             with: candidates[indexPath.row].profile,
             threadVariant: candidates[indexPath.row].threadVariant,
             isUserModeratorOrAdmin: OpenGroupManager.isUserModeratorOrAdmin(
-                candidates[indexPath.row].profile.id,
+                candidates[indexPath.row].profile?.id,
                 for: candidates[indexPath.row].openGroupRoomToken,
                 on: candidates[indexPath.row].openGroupServer
             ),
+            customName: candidates[indexPath.row].customName,
+            customDescription: candidates[indexPath.row].customDescription,
             isLast: (indexPath.row == (candidates.count - 1))
         )
         
@@ -108,6 +110,10 @@ final class MentionSelectionView: UIView, UITableViewDataSource, UITableViewDele
 
 private extension MentionSelectionView {
     final class Cell: UITableViewCell {
+        class Identifier {}
+        
+        private var instanceIdentifier: Identifier = Identifier()
+        
         // MARK: - UI
         
         private lazy var profilePictureView: ProfilePictureView = ProfilePictureView()
@@ -189,22 +195,56 @@ private extension MentionSelectionView {
 
         // MARK: - Updating
         
+        override func prepareForReuse() {
+            super.prepareForReuse()
+            
+            instanceIdentifier = Identifier()
+        }
+        
         fileprivate func update(
-            with profile: Profile,
+            with profile: Profile?,
             threadVariant: SessionThread.Variant,
             isUserModeratorOrAdmin: Bool,
+            customName: String?,
+            customDescription: String?,
             isLast: Bool
         ) {
-            displayNameLabel.text = profile.displayName(for: threadVariant)
-            profilePictureView.update(
-                publicKey: profile.id,
-                threadVariant: threadVariant,
-                customImageData: nil,
-                profile: profile,
-                additionalProfile: nil
-            )
+            instanceIdentifier = Identifier()
+            profilePictureView.isHidden = (profile == nil)
             moderatorIconImageView.isHidden = !isUserModeratorOrAdmin
             separator.isHidden = isLast
+            
+            if let profile: Profile = profile {
+                displayNameLabel.text = profile.displayName(for: threadVariant)
+                profilePictureView.update(
+                    publicKey: profile.id,
+                    threadVariant: .contact,
+                    customImageData: nil,
+                    profile: profile,
+                    additionalProfile: nil
+                )
+            }
+            else if let customName: String = customName {
+                ThemeManager.onThemeChange(observer: instanceIdentifier) { [weak displayNameLabel] theme, primaryColor in
+                    guard let textSecondary: UIColor = theme.color(for: .textSecondary) else { return }
+                    
+                    displayNameLabel?.attributedText = NSMutableAttributedString()
+                        .appending(
+                            string: "@\(customName) ",
+                            attributes: [
+                                .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize),
+                                .foregroundColor: primaryColor.color
+                            ]
+                        )
+                        .appending(
+                            string: (customDescription ?? ""),
+                            attributes: [
+                                .font : UIFont.systemFont(ofSize: Values.smallFontSize),
+                                .foregroundColor: textSecondary
+                            ]
+                        )
+                }
+            }
         }
     }
 }

@@ -24,6 +24,7 @@ public struct Contact: Codable, Identifiable, Equatable, FetchableRecord, Persis
     public let id: String
     
     /// This flag is used to determine whether we should auto-download files sent by this contact.
+    @available(*, deprecated, message: "Use 'SessionThread.autoDownloadAttachments' instead")
     public let isTrusted: Bool
     
     /// This flag is used to determine whether message requests from this contact are approved

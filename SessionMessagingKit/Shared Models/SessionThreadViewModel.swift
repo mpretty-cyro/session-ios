@@ -26,6 +26,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let threadShouldBeVisibleKey: SQL = SQL(stringLiteral: CodingKeys.threadShouldBeVisible.stringValue)
     public static let threadIsPinnedKey: SQL = SQL(stringLiteral: CodingKeys.threadIsPinned.stringValue)
     public static let threadIsBlockedKey: SQL = SQL(stringLiteral: CodingKeys.threadIsBlocked.stringValue)
+    public static let threadAutoDownloadAttachmentsKey: SQL = SQL(stringLiteral: CodingKeys.threadAutoDownloadAttachments.stringValue)
     public static let threadMutedUntilTimestampKey: SQL = SQL(stringLiteral: CodingKeys.threadMutedUntilTimestamp.stringValue)
     public static let threadOnlyNotifyForMentionsKey: SQL = SQL(stringLiteral: CodingKeys.threadOnlyNotifyForMentions.stringValue)
     public static let threadMessageDraftKey: SQL = SQL(stringLiteral: CodingKeys.threadMessageDraft.stringValue)
@@ -198,6 +199,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public let threadShouldBeVisible: Bool?
     public let threadIsPinned: Bool
     public let threadIsBlocked: Bool?
+    public let threadAutoDownloadAttachments: Bool?
     public let threadMutedUntilTimestamp: TimeInterval?
     public let threadOnlyNotifyForMentions: Bool?
     public let threadMessageDraft: String?
@@ -375,6 +377,7 @@ public extension SessionThreadViewModel {
         self.threadShouldBeVisible = false
         self.threadIsPinned = false
         self.threadIsBlocked = nil
+        self.threadAutoDownloadAttachments = nil
         self.threadMutedUntilTimestamp = nil
         self.threadOnlyNotifyForMentions = nil
         self.threadMessageDraft = nil
@@ -438,6 +441,7 @@ public extension SessionThreadViewModel {
             threadShouldBeVisible: self.threadShouldBeVisible,
             threadIsPinned: self.threadIsPinned,
             threadIsBlocked: self.threadIsBlocked,
+            threadAutoDownloadAttachments: self.threadAutoDownloadAttachments,
             threadMutedUntilTimestamp: self.threadMutedUntilTimestamp,
             threadOnlyNotifyForMentions: self.threadOnlyNotifyForMentions,
             threadMessageDraft: self.threadMessageDraft,
@@ -490,6 +494,7 @@ public extension SessionThreadViewModel {
             threadShouldBeVisible: self.threadShouldBeVisible,
             threadIsPinned: self.threadIsPinned,
             threadIsBlocked: self.threadIsBlocked,
+            threadAutoDownloadAttachments: self.threadAutoDownloadAttachments,
             threadMutedUntilTimestamp: self.threadMutedUntilTimestamp,
             threadOnlyNotifyForMentions: self.threadOnlyNotifyForMentions,
             threadMessageDraft: self.threadMessageDraft,
@@ -803,7 +808,7 @@ public extension SessionThreadViewModel {
         /// parse and might throw
         ///
         /// Explicitly set default values for the fields ignored for search results
-        let numColumnsBeforeProfiles: Int = 14
+        let numColumnsBeforeProfiles: Int = 15
         let request: SQLRequest<ViewModel> = """
             SELECT
                 \(thread.alias[Column.rowID]) AS \(ViewModel.rowIdKey),
@@ -821,6 +826,7 @@ public extension SessionThreadViewModel {
         
                 \(thread[.isPinned]) AS \(ViewModel.threadIsPinnedKey),
                 \(contact[.isBlocked]) AS \(ViewModel.threadIsBlockedKey),
+                \(thread[.autoDownloadAttachments]) AS \(ViewModel.threadAutoDownloadAttachmentsKey),
                 \(thread[.mutedUntilTimestamp]) AS \(ViewModel.threadMutedUntilTimestampKey),
                 \(thread[.onlyNotifyForMentions]) AS \(ViewModel.threadOnlyNotifyForMentionsKey),
                 \(thread[.messageDraft]) AS \(ViewModel.threadMessageDraftKey),
@@ -912,7 +918,7 @@ public extension SessionThreadViewModel {
         /// parse and might throw
         ///
         /// Explicitly set default values for the fields ignored for search results
-        let numColumnsBeforeProfiles: Int = 9
+        let numColumnsBeforeProfiles: Int = 10
         let request: SQLRequest<ViewModel> = """
             SELECT
                 \(thread.alias[Column.rowID]) AS \(ViewModel.rowIdKey),
@@ -924,6 +930,7 @@ public extension SessionThreadViewModel {
                 
                 \(thread[.isPinned]) AS \(ViewModel.threadIsPinnedKey),
                 \(contact[.isBlocked]) AS \(ViewModel.threadIsBlockedKey),
+                \(thread[.autoDownloadAttachments]) AS \(ViewModel.threadAutoDownloadAttachmentsKey),
                 \(thread[.mutedUntilTimestamp]) AS \(ViewModel.threadMutedUntilTimestampKey),
                 \(thread[.onlyNotifyForMentions]) AS \(ViewModel.threadOnlyNotifyForMentionsKey),
         

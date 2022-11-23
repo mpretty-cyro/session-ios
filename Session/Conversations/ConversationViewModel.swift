@@ -107,7 +107,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         currentUserIsClosedGroupMember: (self.initialThreadVariant != .closedGroup ?
             nil :
             Storage.shared.read { db in
-                try GroupMember
+                GroupMember
                     .filter(GroupMember.Columns.groupId == self.threadId)
                     .filter(GroupMember.Columns.profileId == getUserHexEncodedPublicKey(db))
                     .filter(GroupMember.Columns.role == GroupMember.Role.standard)
@@ -179,13 +179,13 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         .filter { $0 != .wasRead }
                 ),
                 PagedData.ObservedChanges(
-                    table: Contact.self,
-                    columns: [.isTrusted],
+                    table: SessionThread.self,
+                    columns: [.autoDownloadAttachments],
                     joinToPagedType: {
                         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-                        let contact: TypedTableAlias<Contact> = TypedTableAlias()
+                        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
                         
-                        return SQL("LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(interaction[.threadId])")
+                        return SQL("LEFT JOIN \(SessionThread.self) ON \(thread[.id]) = \(interaction[.threadId])")
                     }()
                 ),
                 PagedData.ObservedChanges(
@@ -350,16 +350,41 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     .standard
                 )
                 
-                return (try MentionInfo
-                    .query(
-                        userPublicKey: userPublicKey,
-                        threadId: threadData.threadId,
-                        threadVariant: threadData.threadVariant,
-                        targetPrefix: targetPrefix,
-                        pattern: pattern
-                    )?
-                    .fetchAll(db))
-                    .defaulting(to: [])
+                let initialMentions: [MentionInfo] = {
+                    guard threadData.threadVariant == .closedGroup else { return [] }
+                    
+                    return [
+                        (!"MENTION_EVERYONE".localized().starts(with: query) ?
+                             nil :
+                             MentionInfo(
+                                 threadVariant: .closedGroup,
+                                 customName: "MENTION_EVERYONE".localized(),
+                                 customDescription: "MENTION_EVERYONE_DESCRIPTION".localized()
+                             )
+                        ),
+                        (!"MENTION_ADMIN".localized().starts(with: query) ?
+                            nil :
+                            MentionInfo(
+                                threadVariant: .closedGroup,
+                                customName: "MENTION_ADMIN".localized(),
+                                customDescription: "MENTION_ADMIN_DESCRIPTION".localized()
+                            )
+                        )
+                    ].compactMap { $0 }
+                }()
+                
+                return initialMentions
+                    .appending(
+                        contentsOf: try MentionInfo
+                            .query(
+                                userPublicKey: userPublicKey,
+                                threadId: threadData.threadId,
+                                threadVariant: threadData.threadVariant,
+                                targetPrefix: targetPrefix,
+                                pattern: pattern
+                            )?
+                            .fetchAll(db)
+                    )
             }
             .defaulting(to: [])
     }
@@ -442,34 +467,37 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
-    public func trustContact() {
-        guard self.threadData.threadVariant == .contact else { return }
-        
+    public func enableAutoDownload() {
         let threadId: String = self.threadId
         
         Storage.shared.writeAsync { db in
-            try Contact
+            try SessionThread
                 .filter(id: threadId)
-                .updateAll(db, Contact.Columns.isTrusted.set(to: true))
+                .updateAll(db, SessionThread.Columns.autoDownloadAttachments.set(to: true))
             
-            // Start downloading any pending attachments for this contact (UI will automatically be
+            // Start downloading any pending attachments for this thread (UI will automatically be
             // updated due to the database observation)
-            try Attachment
-                .stateInfo(authorId: threadId, state: .pendingDownload)
+            let attachmentDownloadInfo = try Attachment
+                .stateInfo(authorId: threadId, state: .notScheduled)
                 .fetchAll(db)
-                .forEach { attachmentDownloadInfo in
-                    JobRunner.add(
-                        db,
-                        job: Job(
-                            variant: .attachmentDownload,
-                            threadId: threadId,
-                            interactionId: attachmentDownloadInfo.interactionId,
-                            details: AttachmentDownloadJob.Details(
-                                attachmentId: attachmentDownloadInfo.attachmentId
-                            )
+            
+            try Attachment
+                .filter(ids: attachmentDownloadInfo.map { $0.attachmentId })
+                .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.pendingDownload))
+            
+            attachmentDownloadInfo.forEach { attachmentDownloadInfo in
+                JobRunner.add(
+                    db,
+                    job: Job(
+                        variant: .attachmentDownload,
+                        threadId: threadId,
+                        interactionId: attachmentDownloadInfo.interactionId,
+                        details: AttachmentDownloadJob.Details(
+                            attachmentId: attachmentDownloadInfo.attachmentId
                         )
                     )
-                }
+                )
+            }
         }
     }
     

@@ -78,6 +78,7 @@ internal enum Theme_ClassicDark: ThemeColors {
         
         // ConversationButton
         .conversationButton_background: .classicDark1,
+        .conversationButton_typeIcon: .classicDark5,
         .conversationButton_unreadBackground: .classicDark2,
         .conversationButton_unreadStripBackground: .primary,
         .conversationButton_unreadBubbleBackground: .classicDark3,

@@ -84,7 +84,7 @@ public class MediaView: UIView {
             addDownloadProgressIfNecessary()
             return
         }
-        guard attachment.state != .failedDownload else {
+        guard attachment.state != .notScheduled, attachment.state != .failedDownload else {
             configure(forError: .failed)
             return
         }

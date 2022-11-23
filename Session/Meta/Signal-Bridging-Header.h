@@ -22,7 +22,6 @@
 #import <SignalCoreKit/OWSLogs.h>
 #import <SignalCoreKit/Threading.h>
 #import <SessionMessagingKit/OWSAudioPlayer.h>
-#import <SignalUtilitiesKit/OWSFormat.h>
 #import <SignalUtilitiesKit/OWSViewController.h>
 #import <SignalUtilitiesKit/UIFont+OWS.h>
 #import <SessionUtilitiesKit/UIView+OWS.h>

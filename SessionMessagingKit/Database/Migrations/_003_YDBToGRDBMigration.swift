@@ -918,6 +918,7 @@ enum _003_YDBToGRDBMigration: Migration {
                                 hasMention: Interaction.isUserMentioned(
                                     db,
                                     threadId: threadId,
+                                    threadVariant: threadVariant,
                                     body: body,
                                     quoteAuthorId: quotedMessage?.authorId
                                 ),
@@ -1407,6 +1408,13 @@ enum _003_YDBToGRDBMigration: Migration {
                     return
                 }
                 
+                try Attachment
+                    .filter(id: legacyJob.attachmentID)
+                    .updateAll(
+                        db,
+                        Attachment.Columns.state.set(to: Attachment.State.pendingDownload)
+                    )
+                
                 _ = try Job(
                     failureCount: legacyJob.failureCount,
                     variant: .attachmentDownload,
@@ -1525,8 +1533,8 @@ enum _003_YDBToGRDBMigration: Migration {
                         default: return .downloaded
                     }
                 
-                // All other cases can just be set to 'pendingDownload'
-                default: return .pendingDownload
+                // All other cases can just be set to 'notScheduled'
+                default: return .notScheduled
             }
         }()
         let size: CGSize = {

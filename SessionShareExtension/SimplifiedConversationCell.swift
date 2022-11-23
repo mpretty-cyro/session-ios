@@ -6,6 +6,8 @@ import SessionMessagingKit
 import SignalUtilitiesKit
 
 final class SimplifiedConversationCell: UITableViewCell {
+    private static let conversationTypeImageHeight: CGFloat = 12
+    
     // MARK: - Initialization
     
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -19,6 +21,8 @@ final class SimplifiedConversationCell: UITableViewCell {
     }
     
     // MARK: - UI
+    
+    private lazy var conversationTypeImageViewWidthConstraint: NSLayoutConstraint = conversationTypeImageView.set(.width, to: 0)
     
     private lazy var stackView: UIStackView = {
         let stackView: UIStackView = UIStackView()
@@ -45,6 +49,26 @@ final class SimplifiedConversationCell: UITableViewCell {
         return view
     }()
     
+    private lazy var conversationTitleStackView: UIStackView = {
+        let stackView: UIStackView = UIStackView()
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.axis = .horizontal
+        stackView.alignment = .center
+        stackView.spacing = Values.smallSpacing
+        
+        return stackView
+    }()
+    
+    private let conversationTypeImageView: UIImageView = {
+        let result: UIImageView = UIImageView()
+        result.themeTintColor = .conversationButton_typeIcon
+        result.contentMode = .scaleAspectFit
+        result.isHidden = true
+        result.set(.height, to: SimplifiedConversationCell.conversationTypeImageHeight)
+        
+        return result
+    }()
+    
     private lazy var displayNameLabel: UILabel = {
         let result = UILabel()
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
@@ -67,8 +91,11 @@ final class SimplifiedConversationCell: UITableViewCell {
         
         stackView.addArrangedSubview(accentLineView)
         stackView.addArrangedSubview(profilePictureView)
-        stackView.addArrangedSubview(displayNameLabel)
-        stackView.addArrangedSubview(UIView.hSpacer(0))
+        stackView.addArrangedSubview(conversationTitleStackView)
+        
+        conversationTitleStackView.addArrangedSubview(conversationTypeImageView)
+        conversationTitleStackView.addArrangedSubview(displayNameLabel)
+        conversationTitleStackView.addArrangedSubview(UIView.hSpacer(0))
         
         setupLayout()
     }
@@ -84,6 +111,7 @@ final class SimplifiedConversationCell: UITableViewCell {
         profilePictureView.size = Values.mediumProfilePictureSize
         
         stackView.pin(to: self)
+        conversationTitleStackView.set(.height, to: .height, of: stackView)
     }
     
     // MARK: - Updating
@@ -98,5 +126,19 @@ final class SimplifiedConversationCell: UITableViewCell {
             additionalProfile: cellViewModel.additionalProfile
         )
         displayNameLabel.text = cellViewModel.displayName
+        
+        let targetImage: UIImage? = {
+            switch cellViewModel.threadVariant {
+                case .closedGroup: return UIImage(named: "Group")?.withRenderingMode(.alwaysTemplate)
+                case .openGroup: return UIImage(named: "Globe")?.withRenderingMode(.alwaysTemplate)
+                case .contact: return nil
+            }
+        }()
+        conversationTypeImageView.isHidden = (cellViewModel.threadVariant == .contact)
+        conversationTypeImageView.image = targetImage
+        conversationTypeImageViewWidthConstraint.constant = (
+            ((targetImage?.size.width ?? 1) / (targetImage?.size.height ?? 1)) *
+            SimplifiedConversationCell.conversationTypeImageHeight
+        )
     }
 }

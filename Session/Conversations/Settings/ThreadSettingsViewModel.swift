@@ -60,6 +60,7 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
         case allMedia
         case pinConversation
         case notifications
+        case autoDownloadAttachments
         
         case editGroup
         case addAdmins
@@ -538,6 +539,29 @@ class ThreadSettingsViewModel: SessionTableViewModel<ThreadSettingsViewModel.Nav
                                     )
                                 }
                             )
+                        ),
+                        
+                        SessionCell.Info(
+                            id: .autoDownloadAttachments,
+                            leftAccessory: .toggle(
+                                .boolValue(threadViewModel.threadAutoDownloadAttachments == true)
+                            ),
+                            title: "THREAD_AUTO_DOWNLOAD_SETTING_TITLE".localized(),
+                            subtitle: "THREAD_AUTO_DOWNLOAD_SETTING_DESCRIPTION".localized(),
+                            accessibilityIdentifier: "\(ThreadSettingsViewModel.self).auto_download_media",
+                            onTap: {
+                                let currentValue: Bool = (threadViewModel.threadAutoDownloadAttachments == true)
+                                
+                                dependencies.storage.writeAsync { db in
+                                    try SessionThread
+                                        .filter(id: threadId)
+                                        .updateAll(
+                                            db,
+                                            SessionThread.Columns.autoDownloadAttachments
+                                                .set(to: !currentValue)
+                                        )
+                                }
+                            }
                         ),
 
                         (threadVariant != .contact || threadViewModel.threadIsBlocked == true ? nil :

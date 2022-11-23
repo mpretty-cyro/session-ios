@@ -10,7 +10,7 @@ enum _011_AddClosedGroupInfo: Migration {
     static let target: TargetMigrations.Identifier = .messagingKit
     static let identifier: String = "AddClosedGroupInfo"
     static let needsConfigSync: Bool = false
-    static let minExpectedRunDuration: TimeInterval = 3
+    static let minExpectedRunDuration: TimeInterval = 0.5
     
     static func migrate(_ db: Database) throws {
         try db.alter(table: ClosedGroup.self) { t in

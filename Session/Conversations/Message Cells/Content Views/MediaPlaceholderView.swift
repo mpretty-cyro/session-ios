@@ -5,8 +5,7 @@ import SessionMessagingKit
 import SessionUIKit
 
 final class MediaPlaceholderView: UIView {
-    private static let iconSize: CGFloat = 24
-    private static let iconImageViewSize: CGFloat = 40
+    private static let iconImageViewSize: CGFloat = 18
     
     // MARK: - Lifecycle
     
@@ -28,40 +27,65 @@ final class MediaPlaceholderView: UIView {
         cellViewModel: MessageViewModel,
         textColor: ThemeValue
     ) {
-        let (iconName, attachmentDescription): (String, String) = {
-            guard
-                cellViewModel.variant == .standardIncoming,
-                let attachment: Attachment = cellViewModel.attachments?.first
-            else {
-                return ("actionsheet_document_black", "file") // Should never occur
-            }
-            
-            if attachment.isAudio { return ("attachment_audio", "audio") }
-            if attachment.isImage || attachment.isVideo { return ("actionsheet_camera_roll_black", "media") }
-            
-            return ("actionsheet_document_black", "file")
-        }()
-        
         // Image view
         let imageView = UIImageView(
-            image: UIImage(named: iconName)?
-                .resizedImage(
-                    to: CGSize(
-                        width: MediaPlaceholderView.iconSize,
-                        height: MediaPlaceholderView.iconSize
-                    )
-                )?
+            image: UIImage(named: "icon_attachment")?
                 .withRenderingMode(.alwaysTemplate)
         )
         imageView.themeTintColor = textColor
-        imageView.contentMode = .center
-        imageView.set(.width, to: MediaPlaceholderView.iconImageViewSize)
+        imageView.contentMode = .scaleAspectFit
+        imageView.set(
+            .width,
+            to: (
+                MediaPlaceholderView.iconImageViewSize *
+                ((imageView.image?.size.width ?? 1) / (imageView.image?.size.height ?? 1))
+            )
+        )
         imageView.set(.height, to: MediaPlaceholderView.iconImageViewSize)
         
-        // Body label
+        // Body label (if there are multiple attachments then add their types)
+        let attachments: [Attachment] = (cellViewModel.attachments ?? [])
+        let totalFileSize: UInt = attachments
+            .map { $0.byteCount }
+            .reduce(0, +)
+        let fileTypes: String = {
+            guard cellViewModel.variant == .standardIncoming else {
+                return "file\(attachments.count == 1 ? "" : "s")"
+            }
+            
+            if !attachments.contains(where: { !$0.isAudio }) { return "audio" }
+            if !attachments.contains(where: { !$0.isImage }) {
+                return "image\(attachments.count == 1 ? "" : "s")"
+            }
+            if !attachments.contains(where: { !$0.isVideo }) {
+                return "video\(attachments.count == 1 ? "" : "s")"
+            }
+            
+            return "file\(attachments.count == 1 ? "" : "s")"
+        }()
         let titleLabel = UILabel()
         titleLabel.font = .systemFont(ofSize: Values.mediumFontSize)
-        titleLabel.text = "Tap to download \(attachmentDescription)"
+        titleLabel.text = [
+            Format.fileSize(totalFileSize),
+            (attachments.count == 1 ?
+                nil :
+                String(
+                    format: "ATTACHMENT_DOWNLOAD_INFO_MULTIPLE".localized(),
+                    attachments.count,
+                    fileTypes
+                )
+            ),
+            (attachments.count > 1 ?
+                nil :
+                String(
+                    format: "ATTACHMENT_DOWNLOAD_INFO".localized(),
+                    fileTypes
+                )
+            )
+        ]
+        .compactMap { $0 }
+        .reversed(if: CurrentAppContext().isRTL)
+        .joined(separator: " • ")
         titleLabel.themeTextColor = textColor
         titleLabel.lineBreakMode = .byTruncatingTail
         
@@ -69,10 +93,12 @@ final class MediaPlaceholderView: UIView {
         let stackView = UIStackView(arrangedSubviews: [ imageView, titleLabel ])
         stackView.axis = .horizontal
         stackView.alignment = .center
+        stackView.spacing = Values.smallSpacing
         addSubview(stackView)
+        
         stackView.pin(.top, to: .top, of: self, withInset: Values.smallSpacing)
-        stackView.pin(.leading, to: .leading, of: self, withInset: Values.smallSpacing)
-        stackView.pin(.trailing, to: .trailing, of: self, withInset: -Values.largeSpacing)
+        stackView.pin(.leading, to: .leading, of: self, withInset: Values.mediumSpacing)
+        stackView.pin(.trailing, to: .trailing, of: self, withInset: -Values.mediumSpacing)
         stackView.pin(.bottom, to: .bottom, of: self, withInset: -Values.smallSpacing)
     }
 }
