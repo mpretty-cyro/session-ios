@@ -55,13 +55,13 @@ internal extension OpenGroupAPI {
             let path: String
             let headers: [String: String]?
             
-            /// The `jsonBodyEncoder` is used to avoid having to make `BatchSubRequest` a generic type (haven't found a good way
-            /// to keep `BatchSubRequest` encodable using protocols unfortunately so need this work around)
+            /// The `jsonBodyEncoder` is used to avoid having to make `Child` a generic type (haven't found a good way
+            /// to keep `Child` encodable using protocols unfortunately so need this work around)
             private let jsonBodyEncoder: ((inout KeyedEncodingContainer<CodingKeys>, CodingKeys) throws -> ())?
             private let b64: String?
             private let bytes: [UInt8]?
             
-            fileprivate init<T: Encodable, E: EndpointType>(request: Request<T, E>) {
+            internal init<T: Encodable, E: EndpointType>(request: Request<T, E>) {
                 self.method = request.method
                 self.path = request.urlPathAndParamsString
                 self.headers = (request.headers.isEmpty ? nil : request.headers.toHTTPHeaders())

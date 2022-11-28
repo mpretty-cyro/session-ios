@@ -195,7 +195,7 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                             )
                     )
                     
-                    viewModel.tableData.first?.elements.last?.onTap?(nil)
+                    viewModel.tableData.first?.elements.last?.onTap?()
                 }
                 
                 it("shows the save button") {

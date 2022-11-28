@@ -6,7 +6,7 @@ import SessionUtilitiesKit
 
 /// This migration replaces the old 'Contact.isTrusted' flag with a new 'SessionThread.autoDownloadAttachments' flag so it
 /// can be used across all types of conversations
-enum _012_AutoDownloadAttachments: Migration {
+enum _013_AutoDownloadAttachments: Migration {
     static let target: TargetMigrations.Identifier = .messagingKit
     static let identifier: String = "AutoDownloadAttachments"
     static let needsConfigSync: Bool = false

@@ -25,8 +25,9 @@ public enum SNMessagingKit { // Just to make the external API nice
                     _008_EmojiReacts.self,
                     _009_OpenGroupPermission.self,
                     _010_AddThreadIdToFTS.self,
-                    _011_AddClosedGroupInfo.self,
-                    _012_AutoDownloadAttachments.self
+                    _011_SharedUtilChanges.self,
+                    _012_AddClosedGroupInfo.self,
+                    _013_AutoDownloadAttachments.self
                 ]
             ]
         )

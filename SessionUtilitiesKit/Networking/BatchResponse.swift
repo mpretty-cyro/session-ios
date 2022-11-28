@@ -23,6 +23,18 @@ public extension HTTP {
         
         /// A flag to indicate that there was a body but it failed to parse
         public let failedToParseBody: Bool
+        
+        public init(
+            code: Int32,
+            headers: [String: String] = [:],
+            body: T? = nil,
+            failedToParseBody: Bool = false
+        ) {
+            self.code = code
+            self.headers = headers
+            self.body = body
+            self.failedToParseBody = failedToParseBody
+        }
     }
 }
 

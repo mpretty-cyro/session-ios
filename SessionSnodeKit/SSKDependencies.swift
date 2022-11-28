@@ -5,7 +5,7 @@ import GRDB
 import SessionUtilitiesKit
 
 open class SSKDependencies: Dependencies {
-    internal var _onionApi: Atomic<OnionRequestAPIType.Type?>
+    public var _onionApi: Atomic<OnionRequestAPIType.Type?>
     public var onionApi: OnionRequestAPIType.Type {
         get { Dependencies.getValueSettingIfNull(&_onionApi) { OnionRequestAPI.self } }
         set { _onionApi.mutate { $0 = newValue } }
