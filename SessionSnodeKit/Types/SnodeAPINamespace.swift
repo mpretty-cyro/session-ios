@@ -5,7 +5,8 @@ import Foundation
 public extension SnodeAPI {
     enum Namespace: Int, Codable {
         case `default` = 0
-        case config = 5
+        
+        case userProfileConfig = 2
         
         case legacyClosedGroup = -10
         
@@ -19,8 +20,11 @@ public extension SnodeAPI {
         }
         
         var requiresWriteAuthentication: Bool {
-            // Not in use until we can batch delete and store config messages
-            return false
+            switch self {
+                // Not in use until we can batch delete and store config messages
+                case .default, .legacyClosedGroup: return false
+                default: return true
+            }
         }
         
         var verificationString: String {

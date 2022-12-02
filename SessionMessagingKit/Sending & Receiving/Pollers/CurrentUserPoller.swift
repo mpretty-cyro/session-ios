@@ -3,12 +3,11 @@
 import Foundation
 import GRDB
 import PromiseKit
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
 public final class CurrentUserPoller: Poller {
-    public static var namespaces: [SnodeAPI.Namespace] = [.default]
+    public static var namespaces: [SnodeAPI.Namespace] = [.default, .userProfileConfig]
     
     private var targetSnode: Atomic<Snode?> = Atomic(nil)
     private var usedSnodes: Atomic<Set<Snode>> = Atomic([])

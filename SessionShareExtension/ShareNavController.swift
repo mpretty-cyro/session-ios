@@ -5,6 +5,7 @@ import CoreServices
 import PromiseKit
 import SignalUtilitiesKit
 import SessionUIKit
+import SignalCoreKit
 
 final class ShareNavController: UINavigationController, ShareViewDelegate {
     private var areVersionMigrationsComplete = false

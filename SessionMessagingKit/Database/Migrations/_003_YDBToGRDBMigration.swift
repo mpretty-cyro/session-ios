@@ -421,7 +421,7 @@ enum _003_YDBToGRDBMigration: Migration {
                     nickname: legacyContact.nickname,
                     profilePictureUrl: legacyContact.profilePictureURL,
                     profilePictureFileName: legacyContact.profilePictureFileName,
-                    profileEncryptionKey: legacyContact.profileEncryptionKey
+                    profileEncryptionKey: legacyContact.profileEncryptionKey?.keyData
                 ).migrationSafeInsert(db)
                 
                 /// **Note:** The blow "shouldForce" flags are here to allow us to avoid having to run legacy migrations they
@@ -526,7 +526,7 @@ enum _003_YDBToGRDBMigration: Migration {
             let recipientString: String = {
                 if let destination: Message.Destination = destination {
                     switch destination {
-                        case .contact(let publicKey): return publicKey
+                        case .contact(let publicKey, _): return publicKey
                         default: break
                     }
                 }
@@ -975,7 +975,10 @@ enum _003_YDBToGRDBMigration: Migration {
                                 .keys
                                 .map { $0 })
                                 .defaulting(to: []),
-                            destination: (threadVariant == .contact ? .contact(publicKey: threadId) : nil),
+                            destination: (threadVariant == .contact ?
+                                .contact(publicKey: threadId, namespace: .default) :
+                                nil
+                            ),
                             variant: variant,
                             useFallback: false
                         )
@@ -987,7 +990,10 @@ enum _003_YDBToGRDBMigration: Migration {
                                 .keys
                                 .map { $0 })
                                 .defaulting(to: []),
-                            destination: (threadVariant == .contact ? .contact(publicKey: threadId) : nil),
+                            destination: (threadVariant == .contact ?
+                                .contact(publicKey: threadId, namespace: .default) :
+                                nil
+                            ),
                             variant: variant,
                             useFallback: true
                         )
@@ -1274,8 +1280,8 @@ enum _003_YDBToGRDBMigration: Migration {
                 // Fetch the threadId and interactionId this job should be associated with
                 let threadId: String = {
                     switch legacyJob.destination {
-                        case .contact(let publicKey): return publicKey
-                        case .closedGroup(let groupPublicKey): return groupPublicKey
+                        case .contact(let publicKey, _): return publicKey
+                        case .closedGroup(let groupPublicKey, _): return groupPublicKey
                         case .openGroup(let roomToken, let server, _, _, _):
                             return OpenGroup.idFor(roomToken: roomToken, server: server)
                         
@@ -1438,7 +1444,7 @@ enum _003_YDBToGRDBMigration: Migration {
                     behaviour: .recurring,
                     threadId: threadId,
                     details: SendReadReceiptsJob.Details(
-                        destination: .contact(publicKey: threadId),
+                        destination: .contact(publicKey: threadId, namespace: .default),
                         timestampMsValues: timestampsMs
                     )
                 )?.migrationSafeInserted(db)
@@ -1863,6 +1869,10 @@ enum _003_YDBToGRDBMigration: Migration {
         NSKeyedUnarchiver.setClass(
             SMKLegacy._MessageRequestResponse.self,
             forClassName: "SNMessageRequestResponse"
+        )
+        NSKeyedUnarchiver.setClass(
+            SMKLegacy._Contact._LegacyProfileKey.self,
+            forClassName: "OWSAES256Key"
         )
     }
 }

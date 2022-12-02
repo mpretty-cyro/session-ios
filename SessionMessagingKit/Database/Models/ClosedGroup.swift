@@ -3,7 +3,6 @@
 import Foundation
 import GRDB
 import DifferenceKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Differentiable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
@@ -50,7 +49,7 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
     public let groupImageFileName: String?
 
     /// The key with which the group image is encrypted
-    public let groupImageEncryptionKey: OWSAES256Key?
+    public let groupImageEncryptionKey: Data?
     
     /// The description set for the group
     public let groupDescription: String?
@@ -111,7 +110,7 @@ public struct ClosedGroup: Codable, Equatable, Hashable, Identifiable, Different
         name: String,
         groupImageUrl: String? = nil,
         groupImageFileName: String? = nil,
-        groupImageEncryptionKey: OWSAES256Key? = nil,
+        groupImageEncryptionKey: Data? = nil,
         groupDescription: String? = nil,
         formationTimestamp: TimeInterval,
         privateKey: Data? = nil,
@@ -139,7 +138,7 @@ public extension ClosedGroup {
     init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
         
-        var groupImageEncryptionKey: OWSAES256Key?
+        var groupImageEncryptionKey: Data?
         var groupImageUrl: String?
         
         // If we have both a `groupImageEncryptionKey` and a `groupImageUrl` then the key MUST be valid
@@ -147,13 +146,8 @@ public extension ClosedGroup {
             let groupImageEncryptionKeyData: Data = try? container.decode(Data.self, forKey: .groupImageEncryptionKey),
             let groupImageUrlValue: String = try? container.decode(String.self, forKey: .groupImageUrl)
         {
-            if let validGroupImageEncryptionKey: OWSAES256Key = OWSAES256Key(data: groupImageEncryptionKeyData) {
-                groupImageEncryptionKey = validGroupImageEncryptionKey
-                groupImageUrl = groupImageUrlValue
-            }
-            else {
-                SNLog("Failed to make groupImageEncryptionKey for ClosedGroup key data")
-            }
+            groupImageEncryptionKey = groupImageEncryptionKeyData
+            groupImageUrl = groupImageUrlValue
         }
         
         self = ClosedGroup(
@@ -178,10 +172,7 @@ public extension ClosedGroup {
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(groupImageUrl, forKey: .groupImageUrl)
         try container.encodeIfPresent(groupImageFileName, forKey: .groupImageFileName)
-        try container.encodeIfPresent(
-            groupImageEncryptionKey?.keyData,
-            forKey: .groupImageEncryptionKey
-        )
+        try container.encodeIfPresent(groupImageEncryptionKey, forKey: .groupImageEncryptionKey)
         try container.encode(formationTimestamp, forKey: .formationTimestamp)
         try container.encodeIfPresent(privateKey, forKey: .privateKey)
         try container.encodeIfPresent(memberPrivateKey, forKey: .memberPrivateKey)
@@ -197,7 +188,7 @@ public extension ClosedGroup {
         name: String? = nil,
         groupImageUrl: Updatable<String?> = .existing,
         groupImageFileName: Updatable<String?> = .existing,
-        groupImageEncryptionKey: Updatable<OWSAES256Key?> = .existing,
+        groupImageEncryptionKey: Updatable<Data?> = .existing,
         groupDescription: Updatable<String?> = .existing,
         isApproved: Updatable<Bool> = .existing,
         isDeleted: Updatable<Bool> = .existing

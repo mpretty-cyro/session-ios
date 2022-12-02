@@ -60,7 +60,7 @@ extension SnodeAPI {
             /// option.
             let verificationBytes: [UInt8] = SnodeAPI.Endpoint.sendMessage.rawValue.bytes
                 .appending(contentsOf: namespace.verificationString.bytes)
-                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
+                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .utf8)?.bytes)
             
             guard
                 let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(

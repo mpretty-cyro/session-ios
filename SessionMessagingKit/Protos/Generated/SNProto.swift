@@ -1191,6 +1191,9 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
         if let _value = messageRequestResponse {
             builder.setMessageRequestResponse(_value)
         }
+        if let _value = sharedConfigMessage {
+            builder.setSharedConfigMessage(_value)
+        }
         return builder
     }
 
@@ -1232,6 +1235,10 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
             proto.messageRequestResponse = valueParam.proto
         }
 
+        @objc public func setSharedConfigMessage(_ valueParam: SNProtoSharedConfigMessage) {
+            proto.sharedConfigMessage = valueParam.proto
+        }
+
         @objc public func build() throws -> SNProtoContent {
             return try SNProtoContent.parseProto(proto)
         }
@@ -1259,6 +1266,8 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
 
     @objc public let messageRequestResponse: SNProtoMessageRequestResponse?
 
+    @objc public let sharedConfigMessage: SNProtoSharedConfigMessage?
+
     private init(proto: SessionProtos_Content,
                  dataMessage: SNProtoDataMessage?,
                  callMessage: SNProtoCallMessage?,
@@ -1267,7 +1276,8 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
                  configurationMessage: SNProtoConfigurationMessage?,
                  dataExtractionNotification: SNProtoDataExtractionNotification?,
                  unsendRequest: SNProtoUnsendRequest?,
-                 messageRequestResponse: SNProtoMessageRequestResponse?) {
+                 messageRequestResponse: SNProtoMessageRequestResponse?,
+                 sharedConfigMessage: SNProtoSharedConfigMessage?) {
         self.proto = proto
         self.dataMessage = dataMessage
         self.callMessage = callMessage
@@ -1277,6 +1287,7 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
         self.dataExtractionNotification = dataExtractionNotification
         self.unsendRequest = unsendRequest
         self.messageRequestResponse = messageRequestResponse
+        self.sharedConfigMessage = sharedConfigMessage
     }
 
     @objc
@@ -1330,6 +1341,11 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
             messageRequestResponse = try SNProtoMessageRequestResponse.parseProto(proto.messageRequestResponse)
         }
 
+        var sharedConfigMessage: SNProtoSharedConfigMessage? = nil
+        if proto.hasSharedConfigMessage {
+            sharedConfigMessage = try SNProtoSharedConfigMessage.parseProto(proto.sharedConfigMessage)
+        }
+
         // MARK: - Begin Validation Logic for SNProtoContent -
 
         // MARK: - End Validation Logic for SNProtoContent -
@@ -1342,7 +1358,8 @@ extension SNProtoGroupMemberLeftMessage.SNProtoGroupMemberLeftMessageBuilder {
                                     configurationMessage: configurationMessage,
                                     dataExtractionNotification: dataExtractionNotification,
                                     unsendRequest: unsendRequest,
-                                    messageRequestResponse: messageRequestResponse)
+                                    messageRequestResponse: messageRequestResponse,
+                                    sharedConfigMessage: sharedConfigMessage)
         return result
     }
 
@@ -4273,6 +4290,151 @@ extension SNProtoAttachmentPointer {
 
 extension SNProtoAttachmentPointer.SNProtoAttachmentPointerBuilder {
     @objc public func buildIgnoringErrors() -> SNProtoAttachmentPointer? {
+        return try! self.build()
+    }
+}
+
+#endif
+
+// MARK: - SNProtoSharedConfigMessage
+
+@objc public class SNProtoSharedConfigMessage: NSObject {
+
+    // MARK: - SNProtoSharedConfigMessageKind
+
+    @objc public enum SNProtoSharedConfigMessageKind: Int32 {
+        case userProfile = 1
+    }
+
+    private class func SNProtoSharedConfigMessageKindWrap(_ value: SessionProtos_SharedConfigMessage.Kind) -> SNProtoSharedConfigMessageKind {
+        switch value {
+        case .userProfile: return .userProfile
+        }
+    }
+
+    private class func SNProtoSharedConfigMessageKindUnwrap(_ value: SNProtoSharedConfigMessageKind) -> SessionProtos_SharedConfigMessage.Kind {
+        switch value {
+        case .userProfile: return .userProfile
+        }
+    }
+
+    // MARK: - SNProtoSharedConfigMessageBuilder
+
+    @objc public class func builder(kind: SNProtoSharedConfigMessageKind, seqno: Int64, data: Data) -> SNProtoSharedConfigMessageBuilder {
+        return SNProtoSharedConfigMessageBuilder(kind: kind, seqno: seqno, data: data)
+    }
+
+    // asBuilder() constructs a builder that reflects the proto's contents.
+    @objc public func asBuilder() -> SNProtoSharedConfigMessageBuilder {
+        let builder = SNProtoSharedConfigMessageBuilder(kind: kind, seqno: seqno, data: data)
+        return builder
+    }
+
+    @objc public class SNProtoSharedConfigMessageBuilder: NSObject {
+
+        private var proto = SessionProtos_SharedConfigMessage()
+
+        @objc fileprivate override init() {}
+
+        @objc fileprivate init(kind: SNProtoSharedConfigMessageKind, seqno: Int64, data: Data) {
+            super.init()
+
+            setKind(kind)
+            setSeqno(seqno)
+            setData(data)
+        }
+
+        @objc public func setKind(_ valueParam: SNProtoSharedConfigMessageKind) {
+            proto.kind = SNProtoSharedConfigMessageKindUnwrap(valueParam)
+        }
+
+        @objc public func setSeqno(_ valueParam: Int64) {
+            proto.seqno = valueParam
+        }
+
+        @objc public func setData(_ valueParam: Data) {
+            proto.data = valueParam
+        }
+
+        @objc public func build() throws -> SNProtoSharedConfigMessage {
+            return try SNProtoSharedConfigMessage.parseProto(proto)
+        }
+
+        @objc public func buildSerializedData() throws -> Data {
+            return try SNProtoSharedConfigMessage.parseProto(proto).serializedData()
+        }
+    }
+
+    fileprivate let proto: SessionProtos_SharedConfigMessage
+
+    @objc public let kind: SNProtoSharedConfigMessageKind
+
+    @objc public let seqno: Int64
+
+    @objc public let data: Data
+
+    private init(proto: SessionProtos_SharedConfigMessage,
+                 kind: SNProtoSharedConfigMessageKind,
+                 seqno: Int64,
+                 data: Data) {
+        self.proto = proto
+        self.kind = kind
+        self.seqno = seqno
+        self.data = data
+    }
+
+    @objc
+    public func serializedData() throws -> Data {
+        return try self.proto.serializedData()
+    }
+
+    @objc public class func parseData(_ serializedData: Data) throws -> SNProtoSharedConfigMessage {
+        let proto = try SessionProtos_SharedConfigMessage(serializedData: serializedData)
+        return try parseProto(proto)
+    }
+
+    fileprivate class func parseProto(_ proto: SessionProtos_SharedConfigMessage) throws -> SNProtoSharedConfigMessage {
+        guard proto.hasKind else {
+            throw SNProtoError.invalidProtobuf(description: "\(logTag) missing required field: kind")
+        }
+        let kind = SNProtoSharedConfigMessageKindWrap(proto.kind)
+
+        guard proto.hasSeqno else {
+            throw SNProtoError.invalidProtobuf(description: "\(logTag) missing required field: seqno")
+        }
+        let seqno = proto.seqno
+
+        guard proto.hasData else {
+            throw SNProtoError.invalidProtobuf(description: "\(logTag) missing required field: data")
+        }
+        let data = proto.data
+
+        // MARK: - Begin Validation Logic for SNProtoSharedConfigMessage -
+
+        // MARK: - End Validation Logic for SNProtoSharedConfigMessage -
+
+        let result = SNProtoSharedConfigMessage(proto: proto,
+                                                kind: kind,
+                                                seqno: seqno,
+                                                data: data)
+        return result
+    }
+
+    @objc public override var debugDescription: String {
+        return "\(proto)"
+    }
+}
+
+#if DEBUG
+
+extension SNProtoSharedConfigMessage {
+    @objc public func serializedDataIgnoringErrors() -> Data? {
+        return try! self.serializedData()
+    }
+}
+
+extension SNProtoSharedConfigMessage.SNProtoSharedConfigMessageBuilder {
+    @objc public func buildIgnoringErrors() -> SNProtoSharedConfigMessage? {
         return try! self.build()
     }
 }
