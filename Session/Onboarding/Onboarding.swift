@@ -38,6 +38,9 @@ enum Onboarding {
                     .fetchOrCreate(db, id: x25519PublicKey, variant: .contact)
                     .save(db)
                 
+                // Create the initial shared util state (won't have been created on
+                // launch due to lack of ed25519 key)
+                SessionUtil.loadState(ed25519SecretKey: ed25519KeyPair.secretKey)
                 
                 // No need to show the seed again if the user is restoring or linking
                 db[.hasViewedSeed] = (self == .recover || self == .link)
