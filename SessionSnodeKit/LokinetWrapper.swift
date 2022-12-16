@@ -15,6 +15,10 @@ public enum LokinetWrapper {
     public static private(set) var isReady: Bool = false
     public static private(set) var startTime: CFTimeInterval = 0
     private static var context: OpaquePointer?
+    private static var loggerFunc: lokinet_logger_func?
+    
+    // TODO: Expose this from `Storage`?
+    private static var sharedDatabaseDirectoryPath: String { "\(OWSFileSystem.appSharedDataDirectoryPath())/database" }
     
     public static func setupIfNeeded() {
         guard !LokinetWrapper.isReady else { return }
@@ -30,10 +34,26 @@ public enum LokinetWrapper {
             SNLog("[Lokinet] Start")
             let start = CACurrentMediaTime()
             let bundle: Bundle = Bundle(for: SnodeAPI.self)
-            let context = lokinet_context_new()
+            var context = lokinet_context_new()
             let bootstrapContent = try! Data(contentsOf: bundle.url(forResource: "mainnet", withExtension: "signed")!)
             var bootstrapBytes: [CChar] = bootstrapContent.bytes.map { CChar(bitPattern: $0) }
             LokinetWrapper.context = context
+            
+            // Set the data directory so we can cache the nodedb
+            var dataDir: [CChar] = sharedDatabaseDirectoryPath.bytes.map { CChar(bitPattern: $0) }
+            lokinet_set_data_dir(&dataDir, context)
+            print("RAWR \(sharedDatabaseDirectoryPath)")
+            
+            var logLevel: [CChar] = "trace".bytes.map { CChar(bitPattern: $0) }
+            lokinet_log_level(&logLevel)
+            let loggerFunc: lokinet_logger_func = { messagePtr, _ in
+                guard let messagePtr = messagePtr else { return }
+                
+                let message: String = String(cString: messagePtr)
+                print("[Lokinet Info] \(message)")
+            }
+            lokinet_set_logger(loggerFunc, &context)
+            LokinetWrapper.loggerFunc = loggerFunc
             
             guard
                 lokinet_add_bootstrap_rc(&bootstrapBytes, bootstrapBytes.count, context) == 0 &&
