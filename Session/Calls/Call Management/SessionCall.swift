@@ -206,7 +206,7 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
             let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId)
         else { return }
         
-        let timestampMs: Int64 = Int64(floor(Date().timeIntervalSince1970 * 1000))
+        let timestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs()
         let message: CallMessage = CallMessage(
             uuid: self.uuid,
             kind: .preOffer,
@@ -318,12 +318,20 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
                     }
                 }()
                 
-                guard shouldMarkAsRead else { return }
+                guard
+                    shouldMarkAsRead,
+                    let threadVariant: SessionThread.Variant = try? SessionThread
+                        .filter(id: interaction.threadId)
+                        .select(.variant)
+                        .asRequest(of: SessionThread.Variant.self)
+                        .fetchOne(db)
+                else { return }
                 
                 try Interaction.markAsRead(
                     db,
                     interactionId: interaction.id,
                     threadId: interaction.threadId,
+                    threadVariant: threadVariant,
                     includingOlder: false,
                     trySendReadReceipt: false
                 )

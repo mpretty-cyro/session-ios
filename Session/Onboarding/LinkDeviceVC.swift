@@ -109,8 +109,10 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
     }
     
     fileprivate func handleCameraAccessGranted() {
-        pages[1] = scanQRCodeWrapperVC
-        pageVC.setViewControllers([ scanQRCodeWrapperVC ], direction: .forward, animated: false, completion: nil)
+        DispatchQueue.main.async {
+            self.pages[1] = self.scanQRCodeWrapperVC
+            self.pageVC.setViewControllers([ self.scanQRCodeWrapperVC ], direction: .forward, animated: false, completion: nil)
+        }
     }
     
     // MARK: - Updating
@@ -161,9 +163,15 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         GetSnodePoolJob.run()
         
         NotificationCenter.default.addObserver(self, selector: #selector(handleInitialConfigurationMessageReceived), name: .initialConfigurationMessageReceived, object: nil)
-        ModalActivityIndicatorViewController.present(fromViewController: navigationController!) { [weak self] modal in
-            self?.activityIndicatorModal = modal
-        }
+        
+        ModalActivityIndicatorViewController
+            .present(
+                // There was some crashing here due to force-unwrapping so just falling back to
+                // using self if there is no nav controller
+                fromViewController: (self.navigationController ?? self)
+            ) { [weak self] modal in
+                self?.activityIndicatorModal = modal
+            }
     }
     
     @objc private func handleInitialConfigurationMessageReceived(_ notification: Notification) {
@@ -186,7 +194,7 @@ private final class RecoveryPhraseVC: UIViewController {
     private lazy var mnemonicTextView: TextView = {
         let result = TextView(placeholder: "vc_restore_seed_text_field_hint".localized())
         result.themeBorderColor = .textPrimary
-        result.accessibilityLabel = "Recovery phrase text view"
+        result.accessibilityLabel = "Enter your recovery phrase"
         
         return result
     }()
@@ -224,6 +232,7 @@ private final class RecoveryPhraseVC: UIViewController {
         
         // Continue button
         let continueButton = SessionButton(style: .filled, size: .large)
+        continueButton.accessibilityLabel = "Link device"
         continueButton.setTitle("continue_2".localized(), for: UIControl.State.normal)
         continueButton.addTarget(self, action: #selector(handleContinueButtonTapped), for: UIControl.Event.touchUpInside)
         

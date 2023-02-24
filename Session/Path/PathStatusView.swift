@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Reachability
 import SessionUIKit
 import SessionSnodeKit
 
@@ -63,6 +64,7 @@ final class PathStatusView: UIView {
     
     public let size: Size
     private let networkLayer: RequestAPI.NetworkLayer
+    private let reachability: Reachability = Reachability.forInternetConnection()
     
     init(size: Size = .small, networkLayer: RequestAPI.NetworkLayer) {
         self.size = size
@@ -113,20 +115,59 @@ final class PathStatusView: UIView {
         }
         
         // For the settings view we want to change the path colour to gray if it's not currently active
-        if networkLayer != currentLayer {
-            setStatus(to: .unknown)
+        switch (networkLayer != currentLayer, reachability.isReachable(), OnionRequestAPI.paths.isEmpty) {
+            case (true, _, _): setStatus(to: .unknown)
+            case (_, false, _): setStatus(to: .error)
+            case (_, true, true): setStatus(to: .connecting)
+            case (_, true, false): setStatus(to: .connected)
         }
     }
     
     // MARK: - Functions
-
+    
     private func registerObservers(networkLayer: RequestAPI.NetworkLayer) {
-        NotificationCenter.default.addObserver(self, selector: #selector(handleNetworkLayerChangedNotification), name: .networkLayerChanged, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleBuildingPathsNotification), name: .buildingPaths, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePathsBuiltNotification), name: .pathsBuilt, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleBuildingPathsLokiNotification), name: .buildingPathsLoki, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePathsBuiltLokiNotification), name: .pathsBuiltLoki, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDirectNetworkReadyNotification), name: .directNetworkReady, object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNetworkLayerChangedNotification),
+            name: .networkLayerChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBuildingPathsNotification),
+            name: .buildingPaths,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePathsBuiltNotification),
+            name: .pathsBuilt,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBuildingPathsLokiNotification),
+            name: .buildingPathsLoki,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePathsBuiltLokiNotification),
+            name: .pathsBuiltLoki,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDirectNetworkReadyNotification),
+            name: .directNetworkReady,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reachabilityChanged),
+            name: .reachabilityChanged,
+            object: nil
+        )
     }
 
     private func setStatus(to status: Status) {
@@ -182,6 +223,11 @@ final class PathStatusView: UIView {
     }
 
     @objc private func handlePathsBuiltNotification() {
+        guard reachability.isReachable() else {
+            setStatus(to: .error)
+            return
+        }
+        
         switch networkLayer {
             case .onionRequest:
                 setStatus(to: .connected)
@@ -206,6 +252,11 @@ final class PathStatusView: UIView {
     }
 
     @objc private func handlePathsBuiltLokiNotification() {
+        guard reachability.isReachable() else {
+            setStatus(to: .error)
+            return
+        }
+        
         switch networkLayer {
             case .lokinet:
                 setStatus(to: .connected)
@@ -226,6 +277,25 @@ final class PathStatusView: UIView {
             case .onionRequest: fallthrough
             case .lokinet:
                 setStatus(to: .unknown)
+        }
+    }
+    
+    @objc private func reachabilityChanged() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.reachabilityChanged() }
+            return
+        }
+        
+        guard reachability.isReachable() else {
+            setStatus(to: .error)
+            return
+        }
+        
+        switch networkLayer {
+            case .onionRequest: setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
+            case .lokinet: setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
+            case .nativeLokinet: setStatus(to: .connected)
+            case .direct: setStatus(to: .connected)
         }
     }
 }

@@ -532,7 +532,7 @@ class NotificationActionHandler {
                 authorId: getUserHexEncodedPublicKey(db),
                 variant: .standardOutgoing,
                 body: replyText,
-                timestampMs: Int64(floor(Date().timeIntervalSince1970 * 1000)),
+                timestampMs: SnodeAPI.currentOffsetTimestampMs(),
                 hasMention: Interaction.isUserMentioned(db, threadId: threadId, body: replyText),
                 expiresInSeconds: try? DisappearingMessagesConfiguration
                     .select(.durationSeconds)
@@ -546,6 +546,7 @@ class NotificationActionHandler {
                 db,
                 interactionId: interaction.id,
                 threadId: thread.id,
+                threadVariant: thread.variant,
                 includingOlder: true,
                 trySendReadReceipt: true
             )
@@ -597,9 +598,10 @@ class NotificationActionHandler {
                     interactionId: try thread.interactions
                         .select(.id)
                         .order(Interaction.Columns.timestampMs.desc)
-                        .asRequest(of: Int64?.self)
+                        .asRequest(of: Int64.self)
                         .fetchOne(db),
                     threadId: thread.id,
+                    threadVariant: thread.variant,
                     includingOlder: true,
                     trySendReadReceipt: true
                 )

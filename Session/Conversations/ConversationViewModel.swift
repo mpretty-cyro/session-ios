@@ -86,7 +86,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         )
         
         // Run the initial query on a background thread so we don't block the push transition
-        DispatchQueue.global(qos: .default).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             // If we don't have a `initialFocusedId` then default to `.pageBefore` (it'll query
             // from a `0` offset)
             guard let initialFocusedId: Int64 = targetInteractionId else {
@@ -115,6 +115,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             }
         )
     )
+    .populatingCurrentUserBlindedKey()
     
     /// This is all the data the screen needs to populate itself, please see the following link for tips to help optimise
     /// performance https://github.com/groue/GRDB.swift#valueobservation-performance
@@ -130,7 +131,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     private func setupObservableThreadData(for threadId: String) -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<SessionThreadViewModel?>>> {
         return ValueObservation
-            .trackingConstantRegion { db -> SessionThreadViewModel? in
+            .trackingConstantRegion { [weak self] db -> SessionThreadViewModel? in
                 let userPublicKey: String = getUserHexEncodedPublicKey(db)
                 let recentReactionEmoji: [String] = try Emoji.getRecent(db, withDefaultEmoji: true)
                 let threadViewModel: SessionThreadViewModel? = try SessionThreadViewModel
@@ -139,6 +140,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 
                 return threadViewModel
                     .map { $0.with(recentReactionEmoji: recentReactionEmoji) }
+                    .map { viewModel -> SessionThreadViewModel in
+                        viewModel.populatingCurrentUserBlindedKey(
+                            currentUserBlindedPublicKeyForThisThread: self?.threadData.currentUserBlindedPublicKey
+                        )
+                    }
             }
             .removeDuplicates()
     }
@@ -150,17 +156,17 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     // MARK: - Interaction Data
     
     private var lastInteractionIdMarkedAsRead: Int64?
-    public private(set) var unobservedInteractionDataChanges: [SectionModel]?
+    public private(set) var unobservedInteractionDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
     public private(set) var interactionData: [SectionModel] = []
     public private(set) var reactionExpandedInteractionIds: Set<Int64> = []
     public private(set) var pagedDataObserver: PagedDatabaseObserver<Interaction, MessageViewModel>?
     
-    public var onInteractionChange: (([SectionModel]) -> ())? {
+    public var onInteractionChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? {
         didSet {
             // When starting to observe interaction changes we want to trigger a UI update just in case the
             // data was changed while we weren't observing
-            if let unobservedInteractionDataChanges: [SectionModel] = self.unobservedInteractionDataChanges {
-                onInteractionChange?(unobservedInteractionDataChanges)
+            if let unobservedInteractionDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedInteractionDataChanges {
+                onInteractionChange?(unobservedInteractionDataChanges.0, unobservedInteractionDataChanges.1)
                 self.unobservedInteractionDataChanges = nil
             }
         }
@@ -197,9 +203,18 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         
                         return SQL("LEFT JOIN \(Profile.self) ON \(profile[.id]) = \(interaction[.authorId])")
                     }()
-                )
+                ),
+                PagedData.ObservedChanges(
+                    table: RecipientState.self,
+                    columns: [.state, .mostRecentFailureText],
+                    joinToPagedType: {
+                        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+                        let recipientState: TypedTableAlias<RecipientState> = TypedTableAlias()
+                        
+                        return SQL("LEFT JOIN \(RecipientState.self) ON \(recipientState[.interactionId]) = \(interaction[.id])")
+                    }()
+                ),
             ],
-            joinSQL: MessageViewModel.optimisedJoinSQL,
             filterSQL: MessageViewModel.filterSQL(threadId: threadId),
             groupSQL: MessageViewModel.groupSQL,
             orderSQL: MessageViewModel.orderSQL,
@@ -248,20 +263,14 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 )
             ],
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                guard let updatedInteractionData: [SectionModel] = self?.process(data: updatedData, for: updatedPageInfo) else {
-                    return
-                }
-                
-                // If we have the 'onInteractionChanged' callback then trigger it, otherwise just store the changes
-                // to be sent to the callback if we ever start observing again (when we have the callback it needs
-                // to do the data updating as it's tied to UI updates and can cause crashes if not updated in the
-                // correct order)
-                guard let onInteractionChange: (([SectionModel]) -> ()) = self?.onInteractionChange else {
-                    self?.unobservedInteractionDataChanges = updatedInteractionData
-                    return
-                }
-
-                onInteractionChange(updatedInteractionData)
+                PagedData.processAndTriggerUpdates(
+                    updatedData: self?.process(data: updatedData, for: updatedPageInfo),
+                    currentDataRetriever: { self?.interactionData },
+                    onDataChange: self?.onInteractionChange,
+                    onUnobservedDataChange: { updatedData, changeset in
+                        self?.unobservedInteractionDataChanges = (updatedData, changeset)
+                    }
+                )
             }
         )
     }
@@ -412,6 +421,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         else { return }
         
         let threadId: String = self.threadData.threadId
+        let threadVariant: SessionThread.Variant = self.threadData.threadVariant
         let trySendReadReceipt: Bool = (self.threadData.threadIsMessageRequest == false)
         self.lastInteractionIdMarkedAsRead = targetInteractionId
         
@@ -420,6 +430,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 db,
                 interactionId: targetInteractionId,
                 threadId: threadId,
+                threadVariant: threadVariant,
                 includingOlder: true,
                 trySendReadReceipt: trySendReadReceipt
             )

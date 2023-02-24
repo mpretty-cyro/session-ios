@@ -43,6 +43,7 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
     
     private lazy var seedReminderView: SeedReminderView = {
         let result = SeedReminderView(hasContinueButton: true)
+        result.accessibilityLabel = "Recovery phrase reminder"
         let title = "You're almost finished! 80%"
         result.subtitle = "view_seed_reminder_subtitle_1".localized()
         result.setProgress(0.8, animated: false)
@@ -102,27 +103,38 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         return result
     }()
     
-    private lazy var newConversationButton: UIButton = {
-        let result = UIButton(type: .system)
-        result.clipsToBounds = false
-        result.setImage(
+    private lazy var newConversationButton: UIView = {
+        let result: UIView = UIView()
+        result.set(.width, to: HomeVC.newConversationButtonSize)
+        result.set(.height, to: HomeVC.newConversationButtonSize)
+        
+        let button = UIButton()
+        button.accessibilityLabel = "New conversation button"
+        button.isAccessibilityElement = true
+        button.clipsToBounds = true
+        button.setImage(
             UIImage(named: "Plus")?
                 .withRenderingMode(.alwaysTemplate),
             for: .normal
         )
-        result.contentMode = .center
-        result.themeBackgroundColor = .menuButton_background
-        result.themeTintColor = .menuButton_icon
-        result.contentEdgeInsets = UIEdgeInsets(
+        button.contentMode = .center
+        button.adjustsImageWhenHighlighted = false
+        button.themeTintColor = .menuButton_icon
+        button.setThemeBackgroundColor(.menuButton_background, for: .normal)
+        button.setThemeBackgroundColor(
+            .highlighted(.menuButton_background, alwaysDarken: true),
+            for: .highlighted
+        )
+        button.contentEdgeInsets = UIEdgeInsets(
             top: ((HomeVC.newConversationButtonSize - 24) / 2),
             leading: ((HomeVC.newConversationButtonSize - 24) / 2),
             bottom: ((HomeVC.newConversationButtonSize - 24) / 2),
             trailing: ((HomeVC.newConversationButtonSize - 24) / 2)
         )
-        result.layer.cornerRadius = (HomeVC.newConversationButtonSize / 2)
-        result.addTarget(self, action: #selector(createNewConversation), for: .touchUpInside)
-        result.set(.width, to: HomeVC.newConversationButtonSize)
-        result.set(.height, to: HomeVC.newConversationButtonSize)
+        button.layer.cornerRadius = (HomeVC.newConversationButtonSize / 2)
+        button.addTarget(self, action: #selector(createNewConversation), for: .touchUpInside)
+        result.addSubview(button)
+        button.pin(to: result)
         
         // Add the outer shadow
         result.themeShadowColor = .menuButton_outerShadow
@@ -324,15 +336,15 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
             }
         )
         
-        self.viewModel.onThreadChange = { [weak self] updatedThreadData in
-            self?.handleThreadUpdates(updatedThreadData)
+        self.viewModel.onThreadChange = { [weak self] updatedThreadData, changeset in
+            self?.handleThreadUpdates(updatedThreadData, changeset: changeset)
         }
         
         // Note: When returning from the background we could have received notifications but the
         // PagedDatabaseObserver won't have them so we need to force a re-fetch of the current
         // data to ensure everything is up to date
         if didReturnFromBackground {
-            DispatchQueue.global(qos: .default).async { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.viewModel.pagedDataObserver?.reload()
             }
         }
@@ -373,12 +385,18 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         self.viewModel.updateState(updatedState)
     }
     
-    private func handleThreadUpdates(_ updatedData: [HomeViewModel.SectionModel], initialLoad: Bool = false) {
+    private func handleThreadUpdates(
+        _ updatedData: [HomeViewModel.SectionModel],
+        changeset: StagedChangeset<[HomeViewModel.SectionModel]>,
+        initialLoad: Bool = false
+    ) {
         // Ensure the first load runs without animations (if we don't do this the cells will animate
         // in from a frame of CGRect.zero)
         guard hasLoadedInitialThreadData else {
             hasLoadedInitialThreadData = true
-            UIView.performWithoutAnimation { handleThreadUpdates(updatedData, initialLoad: true) }
+            UIView.performWithoutAnimation {
+                handleThreadUpdates(updatedData, changeset: changeset, initialLoad: true)
+            }
             return
         }
         
@@ -400,7 +418,7 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         
         // Reload the table content (animate changes after the first load)
         tableView.reload(
-            using: StagedChangeset(source: viewModel.threadData, target: updatedData),
+            using: changeset,
             deleteSectionsAnimation: .none,
             insertSectionsAnimation: .none,
             reloadSectionsAnimation: .none,
@@ -439,7 +457,7 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
             
             self?.isLoadingMore = true
             
-            DispatchQueue.global(qos: .default).async { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.viewModel.pagedDataObserver?.load(.pageAfter)
             }
         }
@@ -449,7 +467,9 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         // Profile picture view
         let profilePictureSize = Values.verySmallProfilePictureSize
         let profilePictureView = ProfilePictureView()
-        profilePictureView.accessibilityLabel = "Settings button"
+        profilePictureView.accessibilityIdentifier = "User settings"
+        profilePictureView.accessibilityLabel = "User settings"
+        profilePictureView.isAccessibilityElement = true
         profilePictureView.size = profilePictureSize
         profilePictureView.update(
             publicKey: getUserHexEncodedPublicKey(),
@@ -476,7 +496,6 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         
         // Container view
         let profilePictureViewContainer = UIView()
-        profilePictureViewContainer.accessibilityLabel = "Settings button"
         profilePictureViewContainer.addSubview(profilePictureView)
         profilePictureView.autoPinEdgesToSuperviewEdges()
         profilePictureViewContainer.addSubview(pathStatusView)
@@ -493,7 +512,6 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
         
         // Left bar button item
         let leftBarButtonItem = UIBarButtonItem(customView: profilePictureViewContainer)
-        leftBarButtonItem.accessibilityLabel = "Settings button"
         leftBarButtonItem.isAccessibilityElement = true
         navigationItem.leftBarButtonItem = leftBarButtonItem
         
@@ -523,6 +541,8 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
             case .messageRequests:
                 let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
                 let cell: MessageRequestsCell = tableView.dequeue(type: MessageRequestsCell.self, for: indexPath)
+                cell.accessibilityIdentifier = "Message requests banner"
+                cell.isAccessibilityElement = true
                 cell.update(with: Int(threadViewModel.threadUnreadCount ?? 0))
                 return cell
                 
@@ -530,6 +550,8 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
                 let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
                 cell.update(with: threadViewModel)
+                cell.accessibilityIdentifier = "Conversation list item"
+                cell.accessibilityLabel = threadViewModel.displayName
                 return cell
                 
             default: preconditionFailure("Other sections should have no content")
@@ -576,7 +598,7 @@ final class HomeVC: BaseVC, UITableViewDataSource, UITableViewDelegate, SeedRemi
             case .loadMore:
                 self.isLoadingMore = true
                 
-                DispatchQueue.global(qos: .default).async { [weak self] in
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     self?.viewModel.pagedDataObserver?.load(.pageAfter)
                 }
                 

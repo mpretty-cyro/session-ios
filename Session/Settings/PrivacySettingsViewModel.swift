@@ -3,6 +3,7 @@
 import Foundation
 import Combine
 import GRDB
+import LocalAuthentication
 import DifferenceKit
 import SessionUIKit
 import SessionMessagingKit
@@ -99,20 +100,25 @@ class PrivacySettingsViewModel: SessionTableViewModel<PrivacySettingsViewModel.N
                             title: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_TITLE".localized(),
                             subtitle: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_DESCRIPTION".localized(),
                             rightAccessory: .toggle(.settingBool(key: .isScreenLockEnabled)),
-                            onTap: {
-                                Storage.shared.writeAsync { db in
-                                    db[.isScreenLockEnabled] = !db[.isScreenLockEnabled]
+                            onTap: { [weak self] in
+                                // Make sure the device has a passcode set before allowing screen lock to
+                                // be enabled (Note: This will always return true on a simulator)
+                                guard LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {
+                                    self?.transitionToScreen(
+                                        ConfirmationModal(
+                                            info: ConfirmationModal.Info(
+                                                title: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_AVAILABLE".localized(),
+                                                cancelTitle: "BUTTON_OK".localized(),
+                                                cancelStyle: .alert_text
+                                            )
+                                        ),
+                                        transitionType: .present
+                                    )
+                                    return
                                 }
-                            }
-                        ),
-                        SessionCell.Info(
-                            id: .screenshotNotifications,
-                            title: "PRIVACY_SCREEN_SECURITY_SCREENSHOT_NOTIFICATIONS_TITLE".localized(),
-                            subtitle: "PRIVACY_SCREEN_SECURITY_SCREENSHOT_NOTIFICATIONS_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(.settingBool(key: .showScreenshotNotifications)),
-                            onTap: {
-                                Storage.shared.writeAsync { db in
-                                    db[.showScreenshotNotifications] = !db[.showScreenshotNotifications]
+                                
+                                Storage.shared.write { db in
+                                    db[.isScreenLockEnabled] = !db[.isScreenLockEnabled]
                                 }
                             }
                         )
@@ -127,7 +133,7 @@ class PrivacySettingsViewModel: SessionTableViewModel<PrivacySettingsViewModel.N
                             subtitle: "PRIVACY_READ_RECEIPTS_DESCRIPTION".localized(),
                             rightAccessory: .toggle(.settingBool(key: .areReadReceiptsEnabled)),
                             onTap: {
-                                Storage.shared.writeAsync { db in
+                                Storage.shared.write { db in
                                     db[.areReadReceiptsEnabled] = !db[.areReadReceiptsEnabled]
                                 }
                             }
@@ -169,7 +175,7 @@ class PrivacySettingsViewModel: SessionTableViewModel<PrivacySettingsViewModel.N
                             },
                             rightAccessory: .toggle(.settingBool(key: .typingIndicatorsEnabled)),
                             onTap: {
-                                Storage.shared.writeAsync { db in
+                                Storage.shared.write { db in
                                     db[.typingIndicatorsEnabled] = !db[.typingIndicatorsEnabled]
                                 }
                             }
@@ -185,7 +191,7 @@ class PrivacySettingsViewModel: SessionTableViewModel<PrivacySettingsViewModel.N
                             subtitle: "PRIVACY_LINK_PREVIEWS_DESCRIPTION".localized(),
                             rightAccessory: .toggle(.settingBool(key: .areLinkPreviewsEnabled)),
                             onTap: {
-                                Storage.shared.writeAsync { db in
+                                Storage.shared.write { db in
                                     db[.areLinkPreviewsEnabled] = !db[.areLinkPreviewsEnabled]
                                 }
                             }
@@ -200,16 +206,18 @@ class PrivacySettingsViewModel: SessionTableViewModel<PrivacySettingsViewModel.N
                             title: "PRIVACY_CALLS_TITLE".localized(),
                             subtitle: "PRIVACY_CALLS_DESCRIPTION".localized(),
                             rightAccessory: .toggle(.settingBool(key: .areCallsEnabled)),
+                            accessibilityLabel: "Allow voice and video calls",
                             confirmationInfo: ConfirmationModal.Info(
                                 title: "PRIVACY_CALLS_WARNING_TITLE".localized(),
                                 explanation: "PRIVACY_CALLS_WARNING_DESCRIPTION".localized(),
                                 stateToShow: .whenDisabled,
                                 confirmTitle: "continue_2".localized(),
+                                confirmAccessibilityLabel: "Enable",
                                 confirmStyle: .textPrimary,
                                 onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded() }
                             ),
                             onTap: {
-                                Storage.shared.writeAsync { db in
+                                Storage.shared.write { db in
                                     db[.areCallsEnabled] = !db[.areCallsEnabled]
                                 }
                             }

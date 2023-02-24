@@ -19,10 +19,16 @@ public final class SnodeAPI {
     internal static var snodePool: Atomic<Set<Snode>> = Atomic([])
 
     /// The offset between the user's clock and the Service Node's clock. Used in cases where the
-    /// user's clock is incorrect.
-    ///
-    /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
-    public static var clockOffset: Atomic<Int64> = Atomic(0)
+    /// user's clock is incorrect
+    public static var clockOffsetMs: Atomic<Int64> = Atomic(0)
+    
+    public static func currentOffsetTimestampMs() -> Int64 {
+        return (
+            Int64(floor(Date().timeIntervalSince1970 * 1000)) +
+            SnodeAPI.clockOffsetMs.wrappedValue
+        )
+    }
+    
     /// - Note: Should only be accessed from `Threading.workQueue` to avoid race conditions.
     public static var swarmCache: Atomic<[String: Set<Snode>]> = Atomic([:])
     
@@ -493,8 +499,8 @@ public final class SnodeAPI {
     // MARK: - Retrieve
     
     // Not in use until we can batch delete and store config messages
-    public static func getConfigMessages(from snode: Snode, associatedWith publicKey: String) -> Promise<[SnodeReceivedMessage]> {
-        let (promise, seal) = Promise<[SnodeReceivedMessage]>.pending()
+    public static func getConfigMessages(from snode: Snode, associatedWith publicKey: String) -> Promise<([SnodeReceivedMessage], String?)> {
+        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
         
         Threading.workQueue.async {
             getMessagesWithAuthentication(from: snode, associatedWith: publicKey, namespace: configNamespace)
@@ -509,8 +515,8 @@ public final class SnodeAPI {
         return promise
     }
     
-    public static func getMessages(from snode: Snode, associatedWith publicKey: String, authenticated: Bool = true) -> Promise<[SnodeReceivedMessage]> {
-        let (promise, seal) = Promise<[SnodeReceivedMessage]>.pending()
+    public static func getMessages(from snode: Snode, associatedWith publicKey: String, authenticated: Bool = true) -> Promise<([SnodeReceivedMessage], String?)> {
+        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
         
         Threading.workQueue.async {
             let retrievePromise = (authenticated ?
@@ -526,8 +532,8 @@ public final class SnodeAPI {
         return promise
     }
     
-    public static func getClosedGroupMessagesFromDefaultNamespace(from snode: Snode, associatedWith publicKey: String) -> Promise<[SnodeReceivedMessage]> {
-        let (promise, seal) = Promise<[SnodeReceivedMessage]>.pending()
+    public static func getClosedGroupMessagesFromDefaultNamespace(from snode: Snode, associatedWith publicKey: String) -> Promise<([SnodeReceivedMessage], String?)> {
+        let (promise, seal) = Promise<([SnodeReceivedMessage], String?)>.pending()
         
         Threading.workQueue.async {
             getMessagesUnauthenticated(from: snode, associatedWith: publicKey, namespace: defaultNamespace)
@@ -538,7 +544,7 @@ public final class SnodeAPI {
         return promise
     }
     
-    private static func getMessagesWithAuthentication(from snode: Snode, associatedWith publicKey: String, namespace: Int) -> Promise<[SnodeReceivedMessage]> {
+    private static func getMessagesWithAuthentication(from snode: Snode, associatedWith publicKey: String, namespace: Int) -> Promise<([SnodeReceivedMessage], String?)> {
         /// **Note:** All authentication logic is only apply to 1-1 chats, the reason being that we can't currently support it yet for
         /// closed groups. The Storage Server requires an ed25519 key pair, but we don't have that for our closed groups.
         guard let userED25519KeyPair: Box.KeyPair = Storage.shared.read({ db in Identity.fetchUserEd25519KeyPair(db) }) else {
@@ -550,7 +556,7 @@ public final class SnodeAPI {
         let lastHash = SnodeReceivedMessageInfo.fetchLastNotExpired(for: snode, namespace: namespace, associatedWith: publicKey)?.hash ?? ""
 
         // Construct signature
-        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
+        let timestamp = UInt64(SnodeAPI.currentOffsetTimestampMs())
         let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
         let namespaceVerificationString = (namespace == defaultNamespace ? "" : String(namespace))
         
@@ -588,13 +594,14 @@ public final class SnodeAPI {
                         )
                     }
             }
+            .map { ($0, lastHash) }
     }
         
     private static func getMessagesUnauthenticated(
         from snode: Snode,
         associatedWith publicKey: String,
         namespace: Int = closedGroupNamespace
-    ) -> Promise<[SnodeReceivedMessage]> {
+    ) -> Promise<([SnodeReceivedMessage], String?)> {
         // Get last message hash
         SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(for: snode, namespace: namespace, associatedWith: publicKey)
         let lastHash = SnodeReceivedMessageInfo.fetchLastNotExpired(for: snode, namespace: namespace, associatedWith: publicKey)?.hash ?? ""
@@ -602,7 +609,7 @@ public final class SnodeAPI {
         // Make the request
         var parameters: JSON = [
             "pubKey": (Features.useTestnet ? publicKey.removingIdPrefixIfNeeded() : publicKey),
-            "lastHash": lastHash,
+            "lastHash": lastHash
         ]
         
         // Don't include namespace if polling for 0 with no authentication
@@ -629,6 +636,7 @@ public final class SnodeAPI {
                         )
                     }
             }
+            .map { ($0, lastHash) }
     }
     
     // MARK: Store
@@ -649,7 +657,7 @@ public final class SnodeAPI {
         }
         
         // Construct signature
-        let timestamp = UInt64(Int64(floor(Date().timeIntervalSince1970 * 1000)) + SnodeAPI.clockOffset.wrappedValue)
+        let timestamp = UInt64(SnodeAPI.currentOffsetTimestampMs())
         let ed25519PublicKey = userED25519KeyPair.publicKey.toHexString()
         
         guard
@@ -899,6 +907,17 @@ public final class SnodeAPI {
                                     }
                                 }
                                 
+                                // If we get to here then we assume it's been deleted from at least one
+                                // service node and as a result we need to mark the hash as invalid so
+                                // we don't try to fetch updates since that hash going forward (if we do
+                                // we would end up re-fetching all old messages)
+                                Storage.shared.writeAsync { db in
+                                    try? SnodeReceivedMessageInfo.handlePotentialDeletedOrInvalidHash(
+                                        db,
+                                        potentiallyInvalidHashes: serverHashes
+                                    )
+                                }
+                                
                                 return result
                             }
                     }
@@ -1091,5 +1110,13 @@ public final class SnodeAPI {
         }
         
         return nil
+    }
+}
+
+@objc(SNSnodeAPI)
+public final class SNSnodeAPI: NSObject {
+    @objc(currentOffsetTimestampMs)
+    public static func currentOffsetTimestampMs() -> UInt64 {
+        return UInt64(SnodeAPI.currentOffsetTimestampMs())
     }
 }

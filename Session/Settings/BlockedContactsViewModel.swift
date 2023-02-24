@@ -62,25 +62,19 @@ public class BlockedContactsViewModel {
                 orderSQL: DataModel.orderSQL
             ),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                guard let updatedContactData: [SectionModel] = self?.process(data: updatedData, for: updatedPageInfo) else {
-                    return
-                }
-                
-                // If we have the 'onThreadChange' callback then trigger it, otherwise just store the changes
-                // to be sent to the callback if we ever start observing again (when we have the callback it needs
-                // to do the data updating as it's tied to UI updates and can cause crashes if not updated in the
-                // correct order)
-                guard let onContactChange: (([SectionModel]) -> ()) = self?.onContactChange else {
-                    self?.unobservedContactDataChanges = updatedContactData
-                    return
-                }
-
-                onContactChange(updatedContactData)
+                PagedData.processAndTriggerUpdates(
+                    updatedData: self?.process(data: updatedData, for: updatedPageInfo),
+                    currentDataRetriever: { self?.contactData },
+                    onDataChange: self?.onContactChange,
+                    onUnobservedDataChange: { updatedData, changeset in
+                        self?.unobservedContactDataChanges = (updatedData, changeset)
+                    }
+                )
             }
         )
         
         // Run the initial query on a background thread so we don't block the push transition
-        DispatchQueue.global(qos: .default).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             // The `.pageBefore` will query from a `0` offset loading the first page
             self?.pagedDataObserver?.load(.pageBefore)
         }
@@ -89,16 +83,16 @@ public class BlockedContactsViewModel {
     // MARK: - Contact Data
     
     public private(set) var selectedContactIds: Set<String> = []
-    public private(set) var unobservedContactDataChanges: [SectionModel]?
+    public private(set) var unobservedContactDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
     public private(set) var contactData: [SectionModel] = []
     public private(set) var pagedDataObserver: PagedDatabaseObserver<Profile, DataModel>?
     
-    public var onContactChange: (([SectionModel]) -> ())? {
+    public var onContactChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? {
         didSet {
             // When starting to observe interaction changes we want to trigger a UI update just in case the
             // data was changed while we weren't observing
-            if let unobservedContactDataChanges: [SectionModel] = self.unobservedContactDataChanges {
-                onContactChange?(unobservedContactDataChanges)
+            if let unobservedContactDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedContactDataChanges {
+                onContactChange?(unobservedContactDataChanges.0 , unobservedContactDataChanges.1)
                 self.unobservedContactDataChanges = nil
             }
         }

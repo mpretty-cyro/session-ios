@@ -136,16 +136,6 @@ public class HomeViewModel {
                         
                         return SQL("LEFT JOIN \(ThreadTypingIndicator.self) ON \(typingIndicator[.threadId]) = \(thread[.id])")
                     }()
-                ),
-                PagedData.ObservedChanges(
-                    table: Setting.self,
-                    columns: [.value],
-                    joinToPagedType: {
-                        let setting: TypedTableAlias<Setting> = TypedTableAlias()
-                        let targetSetting: String = Setting.BoolKey.showScreenshotNotifications.rawValue
-                        
-                        return SQL("LEFT JOIN \(Setting.self) ON \(setting[.key]) = \(targetSetting)")
-                    }()
                 )
             ],
             /// **Note:** This `optimisedJoinSQL` value includes the required minimum joins needed for the query but differs
@@ -160,20 +150,14 @@ public class HomeViewModel {
                 orderSQL: SessionThreadViewModel.homeOrderSQL
             ),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                guard let updatedThreadData: [SectionModel] = self?.process(data: updatedData, for: updatedPageInfo) else {
-                    return
-                }
-                
-                // If we have the 'onThreadChange' callback then trigger it, otherwise just store the changes
-                // to be sent to the callback if we ever start observing again (when we have the callback it needs
-                // to do the data updating as it's tied to UI updates and can cause crashes if not updated in the
-                // correct order)
-                guard let onThreadChange: (([SectionModel]) -> ()) = self?.onThreadChange else {
-                    self?.unobservedThreadDataChanges = updatedThreadData
-                    return
-                }
-
-                onThreadChange(updatedThreadData)
+                PagedData.processAndTriggerUpdates(
+                    updatedData: self?.process(data: updatedData, for: updatedPageInfo),
+                    currentDataRetriever: { self?.threadData },
+                    onDataChange: self?.onThreadChange,
+                    onUnobservedDataChange: { updatedData, changeset in
+                        self?.unobservedThreadDataChanges = (updatedData, changeset)
+                    }
+                )
             }
         )
         
@@ -229,30 +213,34 @@ public class HomeViewModel {
         else { return }
         
         /// **MUST** have the same logic as in the 'PagedDataObserver.onChangeUnsorted' above
-        let currentData: [SessionThreadViewModel] = (self.unobservedThreadDataChanges ?? self.threadData)
-            .flatMap { $0.elements }
-        let updatedThreadData: [SectionModel] = self.process(data: currentData, for: currentPageInfo)
+        let currentData: [SectionModel] = (self.unobservedThreadDataChanges?.0 ?? self.threadData)
+        let updatedThreadData: [SectionModel] = self.process(
+            data: currentData.flatMap { $0.elements },
+            for: currentPageInfo
+        )
         
-        guard let onThreadChange: (([SectionModel]) -> ()) = self.onThreadChange else {
-            self.unobservedThreadDataChanges = updatedThreadData
-            return
-        }
-        
-        onThreadChange(updatedThreadData)
+        PagedData.processAndTriggerUpdates(
+            updatedData: updatedThreadData,
+            currentDataRetriever: { [weak self] in (self?.unobservedThreadDataChanges?.0 ?? self?.threadData) },
+            onDataChange: onThreadChange,
+            onUnobservedDataChange: { [weak self] updatedThreadData, changeset in
+                self?.unobservedThreadDataChanges = (updatedThreadData, changeset)
+            }
+        )
     }
     
     // MARK: - Thread Data
     
-    public private(set) var unobservedThreadDataChanges: [SectionModel]?
+    public private(set) var unobservedThreadDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
     public private(set) var threadData: [SectionModel] = []
     public private(set) var pagedDataObserver: PagedDatabaseObserver<SessionThread, SessionThreadViewModel>?
     
-    public var onThreadChange: (([SectionModel]) -> ())? {
+    public var onThreadChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? {
         didSet {
             // When starting to observe interaction changes we want to trigger a UI update just in case the
             // data was changed while we weren't observing
-            if let unobservedThreadDataChanges: [SectionModel] = self.unobservedThreadDataChanges {
-                onThreadChange?(unobservedThreadDataChanges)
+            if let unobservedThreadDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedThreadDataChanges {
+                onThreadChange?(unobservedThreadDataChanges.0, unobservedThreadDataChanges.1)
                 self.unobservedThreadDataChanges = nil
             }
         }

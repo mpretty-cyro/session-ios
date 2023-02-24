@@ -19,7 +19,12 @@ extension MessageReceiver {
         
         guard
             let interactionId: Int64 = maybeInteraction?.id,
-            let interaction: Interaction = maybeInteraction
+            let interaction: Interaction = maybeInteraction,
+            let threadVariant: SessionThread.Variant = try SessionThread
+                .filter(id: interaction.threadId)
+                .select(.variant)
+                .asRequest(of: SessionThread.Variant.self)
+                .fetchOne(db)
         else { return }
         
         // Mark incoming messages as read and remove any of their notifications
@@ -28,6 +33,7 @@ extension MessageReceiver {
                 db,
                 interactionId: interactionId,
                 threadId: interaction.threadId,
+                threadVariant: threadVariant,
                 includingOlder: false,
                 trySendReadReceipt: false
             )
@@ -51,6 +57,13 @@ extension MessageReceiver {
                 
                 _ = try interaction.attachments
                     .deleteAll(db)
+                
+                if let serverHash: String = interaction.serverHash {
+                    try SnodeReceivedMessageInfo.handlePotentialDeletedOrInvalidHash(
+                        db,
+                        potentiallyInvalidHashes: [serverHash]
+                    )
+                }
         }
     }
 }

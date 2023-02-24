@@ -10,7 +10,8 @@ public enum DirectRequestAPI {
         endpoint: String,
         headers: [String: String] = [:],
         body: Data?,
-        destination: OnionRequestAPIDestination
+        destination: OnionRequestAPIDestination,
+        timeout: TimeInterval = HTTP.timeout
     ) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
         let container = RequestContainer(promise: promise)
@@ -40,7 +41,8 @@ public enum DirectRequestAPI {
                     method,
                     finalUrlString,
                     headers: headers,
-                    body: body
+                    body: body,
+                    timeout: timeout
                 )
             
             container.task = task

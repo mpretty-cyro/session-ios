@@ -34,6 +34,7 @@ internal enum Theme_ClassicLight: ThemeColors {
         .messageBubble_outgoingText: .classicLight0,
         .messageBubble_incomingText: .classicLight0,
         .messageBubble_overlay: .black_06,
+        .messageBubble_deliveryStatus: .classicLight1,
 
         // MenuButton
         .menuButton_background: .primary,
@@ -62,28 +63,22 @@ internal enum Theme_ClassicLight: ThemeColors {
         
         // SolidButton
         .solidButton_background: .classicLight3,
-        .solidButton_highlight: .classicLight4,
         
         // Settings
         .settings_tabBackground: .classicLight5,
-        .settings_tabHighlight: .classicLight3,
         
         // AppearanceButton
         .appearance_sectionBackground: .classicLight6,
         .appearance_buttonBackground: .classicLight6,
-        .appearance_buttonHighlight: .classicLight4,
         
         // Alert
         .alert_text: .classicLight0,
         .alert_background: .classicLight6,
         .alert_buttonBackground: .classicLight6,
-        .alert_buttonHighlight: .classicLight4,
         
         // ConversationButton
         .conversationButton_background: .classicLight6,
-        .conversationButton_highlight: .classicLight4,
         .conversationButton_unreadBackground: .classicLight6,
-        .conversationButton_unreadHighlight: .classicLight4,
         .conversationButton_unreadStripBackground: .primary,
         .conversationButton_unreadBubbleBackground: .classicLight3,
         .conversationButton_unreadBubbleText: .classicLight0,

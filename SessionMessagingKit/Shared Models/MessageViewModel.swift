@@ -603,25 +603,9 @@ extension MessageViewModel {
 public extension MessageViewModel {
     static func filterSQL(threadId: String) -> SQL {
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-        let setting: TypedTableAlias<Setting> = TypedTableAlias()
         
-        var targetValue: Bool = true
-        let boolSettingLiteral: Data = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
-        
-        return SQL("""
-            \(interaction[.threadId]) = \(threadId) AND (
-                \(SQL("\(interaction[.variant]) != \(Interaction.Variant.infoScreenshotNotification)")) OR
-                \(SQL("IFNULL(\(setting[.value]), false) == \(boolSettingLiteral)"))
-            )
-        """)
+        return SQL("\(interaction[.threadId]) = \(threadId)")
     }
-    
-    static let optimisedJoinSQL: SQL = {
-        let setting: TypedTableAlias<Setting> = TypedTableAlias()
-        let targetSetting: String = Setting.BoolKey.showScreenshotNotifications.rawValue
-        
-        return SQL("LEFT JOIN \(Setting.self) ON \(setting[.key]) = \(targetSetting)")
-    }()
     
     static let groupSQL: SQL = {
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
@@ -649,6 +633,7 @@ public extension MessageViewModel {
             let disappearingMessagesConfig: TypedTableAlias<DisappearingMessagesConfiguration> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
             let quote: TypedTableAlias<Quote> = TypedTableAlias()
+            let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
             let linkPreview: TypedTableAlias<LinkPreview> = TypedTableAlias()
             
             let threadProfileTableLiteral: SQL = SQL(stringLiteral: "threadProfile")
@@ -666,6 +651,7 @@ public extension MessageViewModel {
             let groupMemberRoleColumnLiteral: SQL = SQL(stringLiteral: GroupMember.Columns.role.name)
             
             let numColumnsBeforeLinkedRecords: Int = 20
+            let finalGroupSQL: SQL = (groupSQL ?? "")
             let request: SQLRequest<ViewModel> = """
                 SELECT
                     \(thread[.id]) AS \(ViewModel.threadIdKey),
@@ -723,7 +709,19 @@ public extension MessageViewModel {
                 LEFT JOIN \(DisappearingMessagesConfiguration.self) ON \(disappearingMessagesConfig[.threadId]) = \(interaction[.threadId])
                 LEFT JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(interaction[.threadId])
                 LEFT JOIN \(Profile.self) ON \(profile[.id]) = \(interaction[.authorId])
-                LEFT JOIN \(Quote.self) ON \(quote[.interactionId]) = \(interaction[.id])
+                LEFT JOIN (
+                    SELECT \(quote[.interactionId]),
+                           \(quote[.authorId]),
+                           \(quote[.timestampMs]),
+                           \(interaction[.body]) AS \(Quote.Columns.body),
+                           \(interactionAttachment[.attachmentId]) AS \(Quote.Columns.attachmentId)
+                    FROM \(Quote.self)
+                    LEFT JOIN \(Interaction.self) ON (
+                        \(quote[.authorId]) = \(interaction[.authorId]) AND
+                        \(quote[.timestampMs]) = \(interaction[.timestampMs])
+                    )
+                    LEFT JOIN \(InteractionAttachment.self) ON \(interaction[.id]) = \(interactionAttachment[.interactionId])
+                ) AS \(ViewModel.quoteKey) ON \(quote[.interactionId]) = \(interaction[.id])
                 LEFT JOIN \(Attachment.self) AS \(ViewModel.quoteAttachmentKey) ON \(ViewModel.quoteAttachmentKey).\(attachmentIdColumnLiteral) = \(quote[.attachmentId])
                 LEFT JOIN \(LinkPreview.self) ON (
                     \(linkPreview[.url]) = \(interaction[.linkPreviewUrl]) AND
@@ -752,7 +750,7 @@ public extension MessageViewModel {
                     \(SQL("\(groupMemberAdminTableLiteral).\(groupMemberRoleColumnLiteral) = \(GroupMember.Role.admin)"))
                 )
                 WHERE \(interaction.alias[Column.rowID]) IN \(rowIds)
-                \(groupSQL ?? "")
+                \(finalGroupSQL)
                 ORDER BY \(orderSQL)
             """
             

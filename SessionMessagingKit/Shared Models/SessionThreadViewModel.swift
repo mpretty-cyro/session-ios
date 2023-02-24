@@ -43,6 +43,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public static let openGroupNameKey: SQL = SQL(stringLiteral: CodingKeys.openGroupName.stringValue)
     public static let openGroupServerKey: SQL = SQL(stringLiteral: CodingKeys.openGroupServer.stringValue)
     public static let openGroupRoomTokenKey: SQL = SQL(stringLiteral: CodingKeys.openGroupRoomToken.stringValue)
+    public static let openGroupPublicKeyKey: SQL = SQL(stringLiteral: CodingKeys.openGroupPublicKey.stringValue)
     public static let openGroupProfilePictureDataKey: SQL = SQL(stringLiteral: CodingKeys.openGroupProfilePictureData.stringValue)
     public static let openGroupUserCountKey: SQL = SQL(stringLiteral: CodingKeys.openGroupUserCount.stringValue)
     public static let openGroupPermissionsKey: SQL = SQL(stringLiteral: CodingKeys.openGroupPermissions.stringValue)
@@ -117,6 +118,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     public let openGroupName: String?
     public let openGroupServer: String?
     public let openGroupRoomToken: String?
+    public let openGroupPublicKey: String?
     public let openGroupProfilePictureData: Data?
     private let openGroupUserCount: Int?
     private let openGroupPermissions: OpenGroup.Permissions?
@@ -274,6 +276,7 @@ public extension SessionThreadViewModel {
         self.openGroupName = nil
         self.openGroupServer = nil
         self.openGroupRoomToken = nil
+        self.openGroupPublicKey = nil
         self.openGroupProfilePictureData = nil
         self.openGroupUserCount = nil
         self.openGroupPermissions = nil
@@ -334,6 +337,7 @@ public extension SessionThreadViewModel {
             openGroupName: self.openGroupName,
             openGroupServer: self.openGroupServer,
             openGroupRoomToken: self.openGroupRoomToken,
+            openGroupPublicKey: self.openGroupPublicKey,
             openGroupProfilePictureData: self.openGroupProfilePictureData,
             openGroupUserCount: self.openGroupUserCount,
             openGroupPermissions: self.openGroupPermissions,
@@ -387,6 +391,7 @@ public extension SessionThreadViewModel {
             openGroupName: self.openGroupName,
             openGroupServer: self.openGroupServer,
             openGroupRoomToken: self.openGroupRoomToken,
+            openGroupPublicKey: self.openGroupPublicKey,
             openGroupProfilePictureData: self.openGroupProfilePictureData,
             openGroupUserCount: self.openGroupUserCount,
             openGroupPermissions: self.openGroupPermissions,
@@ -440,11 +445,6 @@ public extension SessionThreadViewModel {
             let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
             let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
-            let setting: TypedTableAlias<Setting> = TypedTableAlias()
-            let targetSetting: String = Setting.BoolKey.showScreenshotNotifications.rawValue
-            
-            var targetValue: Bool = true
-            let boolSettingLiteral: Data = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
             
             let interactionTimestampMsColumnLiteral: SQL = SQL(stringLiteral: Interaction.Columns.timestampMs.name)
             let interactionStateInteractionIdColumnLiteral: SQL = SQL(stringLiteral: RecipientState.Columns.interactionId.name)
@@ -532,12 +532,7 @@ public extension SessionThreadViewModel {
                         SUM(\(interaction[.wasRead]) = false AND \(interaction[.hasMention]) = true) AS \(ViewModel.threadUnreadMentionCountKey)
                     
                     FROM \(Interaction.self)
-                    LEFT JOIN \(Setting.self) ON \(setting[.key]) = \(targetSetting)
-                    WHERE
-                        \(SQL("\(interaction[.variant]) != \(Interaction.Variant.standardIncomingDeleted)")) AND (
-                            \(SQL("\(interaction[.variant]) != \(Interaction.Variant.infoScreenshotNotification)")) OR
-                            \(SQL("IFNULL(\(setting[.value]), false) == \(boolSettingLiteral)"))
-                        )
+                    WHERE \(SQL("\(interaction[.variant]) != \(Interaction.Variant.standardIncomingDeleted)"))
                     GROUP BY \(interaction[.threadId])
                 ) AS \(Interaction.self) ON \(interaction[.threadId]) = \(thread[.id])
                 
@@ -636,11 +631,6 @@ public extension SessionThreadViewModel {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         let contact: TypedTableAlias<Contact> = TypedTableAlias()
         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-        let setting: TypedTableAlias<Setting> = TypedTableAlias()
-        let targetSetting: String = Setting.BoolKey.showScreenshotNotifications.rawValue
-        
-        var targetValue: Bool = true
-        let boolSettingLiteral: Data = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
         
         let interactionTimestampMsColumnLiteral: SQL = SQL(stringLiteral: Interaction.Columns.timestampMs.name)
         
@@ -651,12 +641,7 @@ public extension SessionThreadViewModel {
                     \(interaction[.threadId]),
                     MAX(\(interaction[.timestampMs])) AS \(interactionTimestampMsColumnLiteral)
                 FROM \(Interaction.self)
-                LEFT JOIN \(Setting.self) ON \(setting[.key]) = \(targetSetting)
-                WHERE
-                    \(SQL("\(interaction[.variant]) != \(Interaction.Variant.standardIncomingDeleted)")) AND (
-                        \(SQL("\(interaction[.variant]) != \(Interaction.Variant.infoScreenshotNotification)")) OR
-                        \(SQL("IFNULL(\(setting[.value]), false) == \(boolSettingLiteral)"))
-                    )
+                WHERE \(SQL("\(interaction[.variant]) != \(Interaction.Variant.standardIncomingDeleted)"))
                 GROUP BY \(interaction[.threadId])
             ) AS \(Interaction.self) ON \(interaction[.threadId]) = \(thread[.id])
         """
@@ -773,6 +758,7 @@ public extension SessionThreadViewModel {
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
                 \(openGroup[.server]) AS \(ViewModel.openGroupServerKey),
                 \(openGroup[.roomToken]) AS \(ViewModel.openGroupRoomTokenKey),
+                \(openGroup[.publicKey]) AS \(ViewModel.openGroupPublicKeyKey),
                 \(openGroup[.userCount]) AS \(ViewModel.openGroupUserCountKey),
                 \(openGroup[.permissions]) AS \(ViewModel.openGroupPermissionsKey),
         
@@ -867,6 +853,9 @@ public extension SessionThreadViewModel {
                 \(closedGroup[.name]) AS \(ViewModel.closedGroupNameKey),
                 (\(groupMember[.profileId]) IS NOT NULL) AS \(ViewModel.currentUserIsClosedGroupMemberKey),
                 \(openGroup[.name]) AS \(ViewModel.openGroupNameKey),
+                \(openGroup[.server]) AS \(ViewModel.openGroupServerKey),
+                \(openGroup[.roomToken]) AS \(ViewModel.openGroupRoomTokenKey),
+                \(openGroup[.publicKey]) AS \(ViewModel.openGroupPublicKeyKey),
                 \(openGroup[.imageData]) AS \(ViewModel.openGroupProfilePictureDataKey),
                     
                 \(SQL("\(userPublicKey)")) AS \(ViewModel.currentUserPublicKeyKey)

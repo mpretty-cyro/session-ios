@@ -42,14 +42,14 @@ public class MediaGalleryViewModel {
     public private(set) var pagedDataObserver: PagedDatabaseObserver<Attachment, Item>?
     
     /// This value is the current state of a gallery view
-    private var unobservedGalleryDataChanges: [SectionModel]?
+    private var unobservedGalleryDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
     public private(set) var galleryData: [SectionModel] = []
-    public var onGalleryChange: (([SectionModel]) -> ())? {
+    public var onGalleryChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? {
         didSet {
             // When starting to observe interaction changes we want to trigger a UI update just in case the
             // data was changed while we weren't observing
-            if let unobservedGalleryDataChanges: [SectionModel] = self.unobservedGalleryDataChanges {
-                onGalleryChange?(unobservedGalleryDataChanges)
+            if let unobservedGalleryDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedGalleryDataChanges {
+                onGalleryChange?(unobservedGalleryDataChanges.0, unobservedGalleryDataChanges.1)
                 self.unobservedGalleryDataChanges = nil
             }
         }
@@ -93,20 +93,14 @@ public class MediaGalleryViewModel {
             orderSQL: Item.galleryOrderSQL,
             dataQuery: Item.baseQuery(orderSQL: Item.galleryOrderSQL),
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
-                guard let updatedGalleryData: [SectionModel] = self?.process(data: updatedData, for: updatedPageInfo) else {
-                    return
-                }
-                
-                // If we have the 'onGalleryChange' callback then trigger it, otherwise just store the changes
-                // to be sent to the callback if we ever start observing again (when we have the callback it needs
-                // to do the data updating as it's tied to UI updates and can cause crashes if not updated in the
-                // correct order)
-                guard let onGalleryChange: (([SectionModel]) -> ()) = self?.onGalleryChange else {
-                    self?.unobservedGalleryDataChanges = updatedGalleryData
-                    return
-                }
-
-                onGalleryChange(updatedGalleryData)
+                PagedData.processAndTriggerUpdates(
+                    updatedData: self?.process(data: updatedData, for: updatedPageInfo),
+                    currentDataRetriever: { self?.galleryData },
+                    onDataChange: self?.onGalleryChange,
+                    onUnobservedDataChange: { updatedData, changeset in
+                        self?.unobservedGalleryDataChanges = (updatedData, changeset)
+                    }
+                )
             }
         )
         
@@ -128,11 +122,11 @@ public class MediaGalleryViewModel {
         // we don't want to mess with the initial view controller behaviour)
         guard !performInitialQuerySync else {
             loadInitialData()
-            updateGalleryData(self.unobservedGalleryDataChanges ?? [])
+            updateGalleryData(self.unobservedGalleryDataChanges?.0 ?? [])
             return
         }
         
-        DispatchQueue.global(qos: .default).async {
+        DispatchQueue.global(qos: .userInitiated).async {
             loadInitialData()
         }
     }

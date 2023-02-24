@@ -13,7 +13,6 @@ final class ReactionContainerView: UIView {
     private var collapsedCount: Int = 0
     private var showingAllReactions: Bool = false
     private var showNumbers: Bool = true
-    private var maxEmojisPerLine = isIPhone6OrSmaller ? 5 : 6
     private var oldSize: CGSize = .zero
     
     var reactions: [ReactionViewModel] = []
@@ -65,7 +64,7 @@ final class ReactionContainerView: UIView {
         textLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         textLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         textLabel.font = .systemFont(ofSize: Values.verySmallFontSize)
-        textLabel.text = "Show less"
+        textLabel.text = "EMOJI_REACTS_SHOW_LESS".localized()
         textLabel.themeTextColor = .textPrimary
         
         let result: UIView = UIView()
@@ -103,7 +102,10 @@ final class ReactionContainerView: UIView {
     private func setUpViewHierarchy() {
         addSubview(mainStackView)
         
-        mainStackView.pin(to: self)
+        mainStackView.pin(.top, to: .top, of: self)
+        mainStackView.pin(.leading, to: .leading, of: self)
+        mainStackView.pin(.trailing, to: .trailing, of: self)
+        mainStackView.pin(.bottom, to: .bottom, of: self, withInset: -Values.verySmallSpacing)
         reactionContainerView.set(.width, to: .width, of: mainStackView)
     }
     
@@ -114,7 +116,7 @@ final class ReactionContainerView: UIView {
         // button appear horizontally centered (if we don't do this it gets offset to one side)
         guard frame != CGRect.zero, frame.size != oldSize else { return }
         
-        var targetSuperview: UIView? = {
+        let targetSuperview: UIView? = {
             var result: UIView? = self.superview
             
             while result != nil, result?.isKind(of: UITableViewCell.self) != true {

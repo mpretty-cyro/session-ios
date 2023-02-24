@@ -13,6 +13,7 @@ public struct SnodeReceivedMessageInfo: Codable, FetchableRecord, MutablePersist
         case key
         case hash
         case expirationDateMs
+        case wasDeletedOrInvalid
     }
     
     /// The `id` value is auto incremented by the database, if the `Job` hasn't been inserted into
@@ -33,10 +34,18 @@ public struct SnodeReceivedMessageInfo: Codable, FetchableRecord, MutablePersist
     /// 14 days)
     public let expirationDateMs: Int64
     
+    /// This flag indicates whether the interaction associated with this message hash was deleted or whether this message
+    /// hash is potentially invalid (if a poll results in 100% of the `SnodeReceivedMessageInfo` entries being seen as
+    /// duplicates then we assume that the `lastHash` value provided when retrieving messages was invalid and mark
+    /// it as such)
+    ///
+    /// **Note:** When retrieving the `lastNotExpired` we will ignore any entries where this flag is true
+    public var wasDeletedOrInvalid: Bool?
+    
     // MARK: - Custom Database Interaction
     
-    public mutating func didInsert(with rowID: Int64, for column: String?) {
-        self.id = rowID
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        self.id = inserted.rowID
     }
 }
 
@@ -84,7 +93,7 @@ public extension SnodeReceivedMessageInfo {
                 return try SnodeReceivedMessageInfo
                     .select(Column.rowID)
                     .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-                    .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs <= (Date().timeIntervalSince1970 * 1000))
+                    .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs <= SnodeAPI.currentOffsetTimestampMs())
                     .asRequest(of: Int64.self)
                     .fetchAll(db)
             }
@@ -108,8 +117,12 @@ public extension SnodeReceivedMessageInfo {
     static func fetchLastNotExpired(for snode: Snode, namespace: Int, associatedWith publicKey: String) -> SnodeReceivedMessageInfo? {
         return Storage.shared.read { db in
             let nonLegacyHash: SnodeReceivedMessageInfo? = try SnodeReceivedMessageInfo
+                .filter(
+                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
+                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
+                )
                 .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-                .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > (Date().timeIntervalSince1970 * 1000))
+                .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > SnodeAPI.currentOffsetTimestampMs())
                 .order(SnodeReceivedMessageInfo.Columns.id.desc)
                 .fetchOne(db)
             
@@ -118,9 +131,44 @@ public extension SnodeReceivedMessageInfo {
             if nonLegacyHash != nil { return nonLegacyHash }
             
             return try SnodeReceivedMessageInfo
+                .filter(
+                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
+                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
+                )
                 .filter(SnodeReceivedMessageInfo.Columns.key == publicKey)
                 .order(SnodeReceivedMessageInfo.Columns.id.desc)
                 .fetchOne(db)
         }
+    }
+    
+    /// There are some cases where the latest message can be removed from a swarm, if we then try to poll for that message the swarm
+    /// will see it as invalid and start returning messages from the beginning which can result in a lot of wasted, duplicate downloads
+    ///
+    /// This method should be called when deleting a message, handling an UnsendRequest or when receiving a poll response which contains
+    /// solely duplicate messages (for the specific service node - if even one message in a response is new for that service node then this shouldn't
+    /// be called if if the message has already been received and processed by a separate service node)
+    static func handlePotentialDeletedOrInvalidHash(
+        _ db: Database,
+        potentiallyInvalidHashes: [String],
+        otherKnownValidHashes: [String] = []
+    ) throws {
+        _ = try SnodeReceivedMessageInfo
+            .filter(potentiallyInvalidHashes.contains(SnodeReceivedMessageInfo.Columns.hash))
+            .updateAll(
+                db,
+                SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid.set(to: true)
+            )
+        
+        // If we have any server hashes which we know are valid (eg. we fetched the oldest messages) then
+        // mark them all as valid to prevent the case where we just slowly work backwards from the latest
+        // message, polling for one earlier each time
+        guard !otherKnownValidHashes.isEmpty else { return }
+        
+        _ = try SnodeReceivedMessageInfo
+            .filter(otherKnownValidHashes.contains(SnodeReceivedMessageInfo.Columns.hash))
+            .updateAll(
+                db,
+                SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid.set(to: false)
+            )
     }
 }

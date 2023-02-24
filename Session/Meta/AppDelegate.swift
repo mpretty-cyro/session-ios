@@ -31,6 +31,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
         Cryptography.seedRandom()
         AppVersion.sharedInstance()
+        AppEnvironment.shared.pushRegistrationManager.createVoipRegistryIfNecessary()
 
         // Prevent the device from sleeping during database view async registration
         // (e.g. long database upgrades).
@@ -66,8 +67,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                     minEstimatedTotalTime: minEstimatedTotalTime
                 )
             },
-            migrationsCompletion: { [weak self] error, needsConfigSync in
-                guard error == nil else {
+            migrationsCompletion: { [weak self] result, needsConfigSync in
+                if case .failure(let error) = result {
                     self?.showFailedMigrationAlert(error: error)
                     return
                 }
@@ -200,6 +201,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - Orientation
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if UIDevice.current.isIPad {
+            return .allButUpsideDown
+        }
+        
         return .portrait
     }
     
@@ -223,8 +228,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             
             BackgroundPoller.isValid = false
             
-            // Suspend database
-            NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+            if CurrentAppContext().isInBackground() {
+                // Suspend database
+                NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+            }
             
             SNLog("Background poll failed due to manual timeout")
             completionHandler(.failed)
@@ -242,8 +249,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 
                 BackgroundPoller.isValid = false
                 
-                // Suspend database
-                NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+                if CurrentAppContext().isInBackground() {
+                    // Suspend database
+                    NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+                }
                 
                 cancelTimer.invalidate()
                 completionHandler(result)
@@ -331,8 +340,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                         minEstimatedTotalTime: minEstimatedTotalTime
                     )
                 },
-                migrationsCompletion: { [weak self] error, needsConfigSync in
-                    guard error == nil else {
+                migrationsCompletion: { [weak self] result, needsConfigSync in
+                    if case .failure(let error) = result {
                         self?.showFailedMigrationAlert(error: error)
                         return
                     }

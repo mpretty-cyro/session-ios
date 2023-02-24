@@ -30,7 +30,7 @@ public class SessionCell: UITableViewCell {
     private var botSeparatorLeftConstraint: NSLayoutConstraint = NSLayoutConstraint()
     private var botSeparatorRightConstraint: NSLayoutConstraint = NSLayoutConstraint()
     private lazy var leftAccessoryFillConstraint: NSLayoutConstraint = contentStackView.set(.height, to: .height, of: leftAccessoryView)
-    private lazy var rightAccessoryFillConstraint: NSLayoutConstraint = contentStackView.set(.height, to: .height, of: rightAccessoryView)// .heightAnchor.constraint(equalTo: iconImageView.heightAnchor)
+    private lazy var rightAccessoryFillConstraint: NSLayoutConstraint = contentStackView.set(.height, to: .height, of: rightAccessoryView)
     
     private let cellBackgroundView: UIView = {
         let result: UIView = UIView()
@@ -44,7 +44,7 @@ public class SessionCell: UITableViewCell {
     private let cellSelectedBackgroundView: UIView = {
         let result: UIView = UIView()
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.themeBackgroundColor = .settings_tabHighlight
+        result.themeBackgroundColor = .highlighted(.settings_tabBackground)
         result.alpha = 0
         
         return result
@@ -308,6 +308,8 @@ public class SessionCell: UITableViewCell {
         self.subtitleExtraView = info.subtitleExtraViewGenerator?()
         self.onExtraActionTap = info.extraAction?.onTap
         self.accessibilityIdentifier = info.accessibilityIdentifier
+        self.accessibilityLabel = info.accessibilityLabel
+        self.isAccessibilityElement = true
         
         let leftFitToEdge: Bool = (info.leftAccessory?.shouldFitToEdge == true)
         let rightFitToEdge: Bool = (!leftFitToEdge && info.rightAccessory?.shouldFitToEdge == true)
@@ -315,12 +317,14 @@ public class SessionCell: UITableViewCell {
         leftAccessoryView.update(
             with: info.leftAccessory,
             tintColor: info.tintColor,
-            isEnabled: info.isEnabled
+            isEnabled: info.isEnabled,
+            accessibilityLabel: info.leftAccessoryAccessibilityLabel
         )
         rightAccessoryView.update(
             with: info.rightAccessory,
             tintColor: info.tintColor,
-            isEnabled: info.isEnabled
+            isEnabled: info.isEnabled,
+            accessibilityLabel: info.rightAccessoryAccessibilityLabel
         )
         rightAccessoryFillConstraint.isActive = rightFitToEdge
         contentStackView.layoutMargins = UIEdgeInsets(

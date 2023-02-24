@@ -7,13 +7,17 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public protocol OnionRequestAPIType {
-    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> RequestContainer<Data>
-    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)>
+    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?, timeout: TimeInterval) -> RequestContainer<Data>
+    static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String, timeout: TimeInterval) -> RequestContainer<(OnionRequestResponseInfoType, Data?)>
 }
 
 public extension OnionRequestAPIType {
-    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
-        sendOnionRequest(request, to: server, using: .v4, with: x25519PublicKey)
+    static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> RequestContainer<Data> {
+        sendOnionRequest(to: snode, invoking: method, with: parameters, associatedWith: publicKey, timeout: HTTP.timeout)
+    }
+    
+    static func sendOnionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String, timeout: TimeInterval = HTTP.timeout) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
+        sendOnionRequest(request, to: server, using: .v4, with: x25519PublicKey, timeout: timeout)
     }
 }
 
@@ -369,7 +373,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     // MARK: - Public API
     
     /// Sends an onion request to `snode`. Builds new paths as needed.
-    public static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil) -> RequestContainer<Data> {
+    public static func sendOnionRequest(to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String? = nil, timeout: TimeInterval = HTTP.timeout) -> RequestContainer<Data> {
         let payloadJson: JSON = [ "method" : method.rawValue, "params" : parameters ]
         
         guard let payload: Data = try? JSONSerialization.data(withJSONObject: payloadJson, options: []) else {
@@ -377,7 +381,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         }
         
         /// **Note:** Currently the service nodes only support V3 Onion Requests
-        return sendOnionRequest(with: payload, to: OnionRequestAPIDestination.snode(snode), version: .v3)
+        return sendOnionRequest(with: payload, to: OnionRequestAPIDestination.snode(snode), version: .v3, timeout: timeout)
             .map { _, maybeData in
                 guard let data: Data = maybeData else { throw HTTP.Error.invalidResponse }
                 
@@ -393,7 +397,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
     }
 
     /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
+    public static func sendOnionRequest(_ request: URLRequest, to server: String, using version: OnionRequestAPIVersion = .v4, with x25519PublicKey: String, timeout: TimeInterval = HTTP.timeout) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
             return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidURL))
         }
@@ -412,14 +416,15 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             scheme: scheme,
             port: port
         )
-        let container = sendOnionRequest(with: payload, to: destination, version: version)
+
+        let container = sendOnionRequest(with: payload, to: destination, version: version, timeout: timeout)
         container.promise.catch2 { error in
             SNLog("Couldn't reach server: \(url) due to error: \(error).")
         }
         return container
     }
 
-    internal static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
+    public static func sendOnionRequest(with payload: Data, to destination: OnionRequestAPIDestination, version: OnionRequestAPIVersion, timeout: TimeInterval = HTTP.timeout) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()
         let container = RequestContainer(promise: promise)
         var guardSnode: Snode?
@@ -445,7 +450,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                     }
                     let destinationSymmetricKey = intermediate.destinationSymmetricKey
                     
-                    let (promise, task) = HTTP.execute2(.post, url, body: body)
+                    let (promise, task) = HTTP.execute2(.post, url, body: body, timeout: timeout)
                     container.task = task
                     promise
                         .done2 { responseData in
@@ -675,7 +680,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                         
                         if let timestamp = body["t"] as? Int64 {
                             let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
-                            SnodeAPI.clockOffset.mutate { $0 = offset }
+                            SnodeAPI.clockOffsetMs.mutate { $0 = offset }
                         }
                         
                         guard 200...299 ~= statusCode else {
@@ -703,72 +708,86 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                 do {
                     let data: Data = try AESGCM.decrypt(responseData, with: destinationSymmetricKey)
                     
-                    // The data will be in the form of `l123:jsone` or `l123:json456:bodye` so we need to break the data into
-                    // parts to properly process it
-                    guard let responseString: String = String(data: data, encoding: .ascii), responseString.starts(with: "l") else {
-                        return seal.reject(HTTP.Error.invalidResponse)
-                    }
-                    
-                    let stringParts: [String.SubSequence] = responseString.split(separator: ":")
-                    
-                    guard stringParts.count > 1, let infoLength: Int = Int(stringParts[0].suffix(from: stringParts[0].index(stringParts[0].startIndex, offsetBy: 1))) else {
-                        return seal.reject(HTTP.Error.invalidResponse)
-                    }
-                    
-                    let infoStringStartIndex: String.Index = responseString.index(responseString.startIndex, offsetBy: "l\(infoLength):".count)
-                    let infoStringEndIndex: String.Index = responseString.index(infoStringStartIndex, offsetBy: infoLength)
-                    let infoString: String = String(responseString[infoStringStartIndex..<infoStringEndIndex])
-
-                    guard let infoStringData: Data = infoString.data(using: .utf8), let responseInfo: ResponseInfo = try? JSONDecoder().decode(ResponseInfo.self, from: infoStringData) else {
+                    // Process the bencoded response
+                    guard let processedResponse: (info: ResponseInfo, body: Data?) = process(bencodedData: data) else {
                         return seal.reject(HTTP.Error.invalidResponse)
                     }
 
-                    // Custom handle a clock out of sync error (v4 returns '425' but included the '406' just in case)
-                    guard responseInfo.code != 406 && responseInfo.code != 425 else {
+                    // Custom handle a clock out of sync error (v4 returns '425' but included the '406'
+                    // just in case)
+                    guard processedResponse.info.code != 406 && processedResponse.info.code != 425 else {
                         SNLog("The user's clock is out of sync with the service node network.")
                         return seal.reject(SnodeAPIError.clockOutOfSync)
                     }
                     
-                    guard responseInfo.code != 401 else { // Signature verification failed
+                    guard processedResponse.info.code != 401 else { // Signature verification failed
                         SNLog("Failed to verify the signature.")
                         return seal.reject(SnodeAPIError.signatureVerificationFailed)
                     }
                     
                     // Handle error status codes
-                    guard 200...299 ~= responseInfo.code else {
+                    guard 200...299 ~= processedResponse.info.code else {
                         return seal.reject(
                             OnionRequestAPIError.httpRequestFailedAtDestination(
-                                statusCode: UInt(responseInfo.code),
+                                statusCode: UInt(processedResponse.info.code),
                                 data: data,
                                 destination: destination
                             )
                         )
                     }
                     
-                    // If there is no data in the response then just return the ResponseInfo
-                    guard responseString.count > "l\(infoLength)\(infoString)e".count else {
-                        return seal.fulfill((responseInfo, nil))
-                    }
-                    
-                    // Extract the response data as well
-                    let dataString: String = String(responseString.suffix(from: infoStringEndIndex))
-                    let dataStringParts: [String.SubSequence] = dataString.split(separator: ":")
-                    
-                    guard dataStringParts.count > 1, let finalDataLength: Int = Int(dataStringParts[0]), let suffixData: Data = "e".data(using: .utf8) else {
-                        return seal.reject(HTTP.Error.invalidResponse)
-                    }
-                    
-                    let dataBytes: Array<UInt8> = Array(data)
-                    let dataEndIndex: Int = (dataBytes.count - suffixData.count)
-                    let dataStartIndex: Int = (dataEndIndex - finalDataLength)
-                    let finalDataBytes: ArraySlice<UInt8> = dataBytes[dataStartIndex..<dataEndIndex]
-                    let finalData: Data = Data(finalDataBytes)
-                    
-                    return seal.fulfill((responseInfo, finalData))
+                    return seal.fulfill(processedResponse)
                 }
                 catch {
                     return seal.reject(error)
                 }
         }
+    }
+    
+    public static func process(bencodedData data: Data) -> (info: ResponseInfo, body: Data?)? {
+        // The data will be in the form of `l123:jsone` or `l123:json456:bodye` so we need to break the data
+        // into parts to properly process it
+        guard let responseString: String = String(data: data, encoding: .ascii), responseString.starts(with: "l") else {
+            return nil
+        }
+        
+        let stringParts: [String.SubSequence] = responseString.split(separator: ":")
+        
+        guard stringParts.count > 1, let infoLength: Int = Int(stringParts[0].suffix(from: stringParts[0].index(stringParts[0].startIndex, offsetBy: 1))) else {
+            return nil
+        }
+        
+        let infoStringStartIndex: String.Index = responseString.index(responseString.startIndex, offsetBy: "l\(infoLength):".count)
+        let infoStringEndIndex: String.Index = responseString.index(infoStringStartIndex, offsetBy: infoLength)
+        let infoString: String = String(responseString[infoStringStartIndex..<infoStringEndIndex])
+
+        guard let infoStringData: Data = infoString.data(using: .utf8), let responseInfo: ResponseInfo = try? JSONDecoder().decode(ResponseInfo.self, from: infoStringData) else {
+            return nil
+        }
+
+        // Custom handle a clock out of sync error (v4 returns '425' but included the '406' just in case)
+        guard responseInfo.code != 406 && responseInfo.code != 425 else { return nil }
+        guard responseInfo.code != 401 else { return nil }
+        
+        // If there is no data in the response then just return the ResponseInfo
+        guard responseString.count > "l\(infoLength)\(infoString)e".count else {
+            return (responseInfo, nil)
+        }
+        
+        // Extract the response data as well
+        let dataString: String = String(responseString.suffix(from: infoStringEndIndex))
+        let dataStringParts: [String.SubSequence] = dataString.split(separator: ":")
+        
+        guard dataStringParts.count > 1, let finalDataLength: Int = Int(dataStringParts[0]), let suffixData: Data = "e".data(using: .utf8) else {
+            return nil
+        }
+        
+        let dataBytes: Array<UInt8> = Array(data)
+        let dataEndIndex: Int = (dataBytes.count - suffixData.count)
+        let dataStartIndex: Int = (dataEndIndex - finalDataLength)
+        let finalDataBytes: ArraySlice<UInt8> = dataBytes[dataStartIndex..<dataEndIndex]
+        let finalData: Data = Data(finalDataBytes)
+        
+        return (responseInfo, finalData)
     }
 }

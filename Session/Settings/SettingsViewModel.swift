@@ -126,7 +126,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                             NavItem(
                                 id: .done,
                                 systemItem: .done,
-                                accessibilityIdentifier: "Done button"
+                                accessibilityIdentifier: "Done"
                             ) { [weak self] in
                                 let updatedNickname: String = (self?.editedDisplayName ?? "")
                                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -218,6 +218,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                             run: { [weak self] button in
                                                 self?.copySessionId(profile.id, button: button)
                                             }
+                                        
                                         ),
                                         SessionCell.Accessory.ThreadInfoStyle.Action(
                                             title: "share".localized(),
@@ -421,13 +422,15 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
             message: nil,
             preferredStyle: .actionSheet
         )
-        actionSheet.addAction(UIAlertAction(
+        let action = UIAlertAction(
             title: "MEDIA_FROM_LIBRARY_BUTTON".localized(),
             style: .default,
             handler: { [weak self] _ in
                 self?.showPhotoLibraryForAvatar()
             }
-        ))
+        )
+        action.accessibilityLabel = "Photo library"
+        actionSheet.addAction(action)
         actionSheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel, handler: nil))
         
         self.transitionToScreen(actionSheet, transitionType: .present)
@@ -435,12 +438,14 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
     
     private func showPhotoLibraryForAvatar() {
         Permissions.requestLibraryPermissionIfNeeded { [weak self] in
-            let picker: UIImagePickerController = UIImagePickerController()
-            picker.sourceType = .photoLibrary
-            picker.mediaTypes = [ "public.image" ]
-            picker.delegate = self?.imagePickerHandler
-            
-            self?.transitionToScreen(picker, transitionType: .present)
+            DispatchQueue.main.async {
+                let picker: UIImagePickerController = UIImagePickerController()
+                picker.sourceType = .photoLibrary
+                picker.mediaTypes = [ "public.image" ]
+                picker.delegate = self?.imagePickerHandler
+                
+                self?.transitionToScreen(picker, transitionType: .present)
+            }
         }
     }
     
@@ -474,7 +479,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                     try MessageSender.syncConfiguration(db, forceSyncNow: true).retainUntilComplete()
 
                     // Wait for the database transaction to complete before updating the UI
-                    db.afterNextTransactionCommit { _ in
+                    db.afterNextTransaction { _ in
                         DispatchQueue.main.async {
                             modalActivityIndicator.dismiss(completion: {})
                         }
@@ -519,6 +524,8 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
         // Ensure we are on the main thread just in case
         DispatchQueue.main.async {
             button.isUserInteractionEnabled = false
+            
+            
             
             UIView.transition(
                 with: button,
@@ -587,9 +594,8 @@ class ImagePickerHandler: NSObject, UIImagePickerControllerDelegate & UINavigati
             // Check if the user selected an animated image (if so then don't crop, just
             // set the avatar directly
             guard
-                let type: Any = try? imageUrl.resourceValues(forKeys: [.typeIdentifierKey])
-                    .allValues
-                    .first,
+                let resourceValues: URLResourceValues = (try? imageUrl.resourceValues(forKeys: [.typeIdentifierKey])),
+                let type: Any = resourceValues.allValues.first?.value,
                 let typeString: String = type as? String,
                 MIMETypeUtil.supportedAnimatedImageUTITypes().contains(typeString)
             else {

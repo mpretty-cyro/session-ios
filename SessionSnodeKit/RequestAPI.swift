@@ -8,12 +8,12 @@ import SessionUtilitiesKit
 
 public protocol RequestAPIType {
     static func sendRequest(_ db: Database, to snode: Snode, invoking method: SnodeAPIEndpoint, with parameters: JSON, associatedWith publicKey: String?) -> Promise<Data>
-    static func sendRequest(_ db: Database, request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)>
+    static func sendRequest(_ db: Database, request: URLRequest, to server: String, using version: OnionRequestAPIVersion, with x25519PublicKey: String, timeout: TimeInterval) -> Promise<(OnionRequestResponseInfoType, Data?)>
 }
 
 public extension RequestAPIType {
-    static func sendRequest(_ db: Database, request: URLRequest, to server: String, with x25519PublicKey: String) -> Promise<(OnionRequestResponseInfoType, Data?)> {
-        sendRequest(db, request: request, to: server, using: .v4, with: x25519PublicKey)
+    static func sendRequest(_ db: Database, request: URLRequest, to server: String, with x25519PublicKey: String, timeout: TimeInterval = HTTP.timeout) -> Promise<(OnionRequestResponseInfoType, Data?)> {
+        sendRequest(db, request: request, to: server, using: .v4, with: x25519PublicKey, timeout: timeout)
     }
 }
 
@@ -87,7 +87,8 @@ public enum RequestAPI: RequestAPIType {
         request: URLRequest,
         to server: String,
         using version: OnionRequestAPIVersion = .v4,
-        with x25519PublicKey: String
+        with x25519PublicKey: String,
+        timeout: TimeInterval = HTTP.timeout
     ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         guard let url = request.url, let host = request.url?.host else {
             return Promise(error: OnionRequestAPIError.invalidURL)
@@ -147,7 +148,8 @@ public enum RequestAPI: RequestAPIType {
         endpoint: String,
         body: Data?,
         to destination: OnionRequestAPIDestination,
-        version: OnionRequestAPIVersion = .v4
+        version: OnionRequestAPIVersion = .v4,
+        timeout: TimeInterval = HTTP.timeout
     ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
         let container: RequestContainer<(OnionRequestResponseInfoType, Data?)> = {
             let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
@@ -158,7 +160,13 @@ public enum RequestAPI: RequestAPIType {
                         return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))
                     }
                     
-                    return OnionRequestAPI.sendOnionRequest(with: payload, to: destination, version: version)
+                    return OnionRequestAPI
+                        .sendOnionRequest(
+                            with: payload,
+                            to: destination,
+                            version: version,
+                            timeout: timeout
+                        )
                     
                 case .lokinet:
                     return LokinetRequestAPI
@@ -166,7 +174,8 @@ public enum RequestAPI: RequestAPIType {
                             method,
                             endpoint: endpoint,
                             body: body,
-                            destination: destination
+                            destination: destination,
+                            timeout: timeout
                         )
                     
                 case .nativeLokinet:
@@ -175,7 +184,8 @@ public enum RequestAPI: RequestAPIType {
                             method,
                             endpoint: endpoint,
                             body: body,
-                            destination: destination
+                            destination: destination,
+                            timeout: timeout
                         )
                     
                 case .direct:
@@ -184,7 +194,8 @@ public enum RequestAPI: RequestAPIType {
                             method,
                             endpoint: endpoint,
                             body: body,
-                            destination: destination
+                            destination: destination,
+                            timeout: timeout
                         )
             }
         }()
@@ -204,7 +215,7 @@ public enum RequestAPI: RequestAPIType {
                 else { return response }
                     
                 let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
-                SnodeAPI.clockOffset.mutate { $0 = offset }
+                SnodeAPI.clockOffsetMs.mutate { $0 = offset }
                 
                 return response
             }

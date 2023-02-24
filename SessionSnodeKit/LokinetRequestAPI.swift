@@ -15,7 +15,8 @@ public enum LokinetRequestAPI {
         endpoint: String,
         headers: [String: String] = [:],
         body: Data?,
-        destination: OnionRequestAPIDestination
+        destination: OnionRequestAPIDestination,
+        timeout: TimeInterval = HTTP.timeout
     ) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         guard LokinetWrapper.isReady else {
             // Use this error to indicate not setup for now
@@ -125,7 +126,7 @@ public enum LokinetRequestAPI {
                     headers: headers,
                     body: body,
                     // FIXME: Why do we need an increased timeout for Lokinet? (smaller values seem to result in timeouts even though we get responses much quicker...)
-                    timeout: 60
+                    timeout: 60// timeout
                 )
             
             container.task = task

@@ -9,14 +9,21 @@ final class ConversationTitleView: UIView {
     private static let leftInset: CGFloat = 8
     private static let leftInsetWithCallButton: CGFloat = 54
     
+    private var oldSize: CGSize = .zero
+    
     override var intrinsicContentSize: CGSize {
         return UIView.layoutFittingExpandedSize
     }
 
     // MARK: - UI Components
     
+    private lazy var stackViewLeadingConstraint: NSLayoutConstraint = stackView.pin(.leading, to: .leading, of: self)
+    private lazy var stackViewTrailingConstraint: NSLayoutConstraint = stackView.pin(.trailing, to: .trailing, of: self)
+    
     private lazy var titleLabel: UILabel = {
         let result: UILabel = UILabel()
+        result.accessibilityIdentifier = "Username"
+        result.isAccessibilityElement = true
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
         result.themeTextColor = .textPrimary
         result.lineBreakMode = .byTruncatingTail
@@ -37,7 +44,6 @@ final class ConversationTitleView: UIView {
         let result = UIStackView(arrangedSubviews: [ titleLabel, subtitleLabel ])
         result.axis = .vertical
         result.alignment = .center
-        result.isLayoutMarginsRelativeArrangement = true
         
         return result
     }()
@@ -49,7 +55,10 @@ final class ConversationTitleView: UIView {
         
         addSubview(stackView)
         
-        stackView.pin(to: self)
+        stackView.pin(.top, to: .top, of: self)
+        stackViewLeadingConstraint.isActive = true
+        stackViewTrailingConstraint.isActive = true
+        stackView.pin(.bottom, to: .bottom, of: self)
     }
 
     deinit {
@@ -71,6 +80,21 @@ final class ConversationTitleView: UIView {
             onlyNotifyForMentions: false,
             userCount: (threadVariant != .contact ? 0 : nil)
         )
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        
+        // There is an annoying issue where pushing seems to update the width of this
+        // view resulting in the content shifting to the right during
+        guard self.oldSize != .zero, self.oldSize != bounds.size else {
+            self.oldSize = bounds.size
+            return
+        }
+        
+        let diff: CGFloat = (bounds.size.width - oldSize.width)
+        self.stackViewTrailingConstraint.constant = -max(0, diff)
+        self.oldSize = bounds.size
     }
     
     public func update(
@@ -102,6 +126,7 @@ final class ConversationTitleView: UIView {
         )
         
         self.titleLabel.text = name
+        self.titleLabel.accessibilityLabel = name
         self.titleLabel.font = .boldSystemFont(
             ofSize: (shouldHaveSubtitle ?
                 Values.mediumFontSize :
@@ -111,7 +136,7 @@ final class ConversationTitleView: UIView {
         
         ThemeManager.onThemeChange(observer: self.subtitleLabel) { [weak subtitleLabel] theme, _ in
             guard let textPrimary: UIColor = theme.color(for: .textPrimary) else { return }
-            //subtitleLabel?.attributedText = subtitle
+            
             guard Date().timeIntervalSince1970 > (mutedUntilTimestamp ?? 0) else {
                 subtitleLabel?.attributedText = NSAttributedString(
                     string: "\u{e067}  ",
@@ -140,9 +165,19 @@ final class ConversationTitleView: UIView {
             }
             guard let userCount: Int = userCount else { return }
             
-            subtitleLabel?.attributedText = NSAttributedString(
-                string: "\(userCount) member\(userCount == 1 ? "" : "s")"
-            )
+            switch threadVariant {
+                case .contact: break
+                    
+                case .closedGroup:
+                    subtitleLabel?.attributedText = NSAttributedString(
+                        string: "\(userCount) member\(userCount == 1 ? "" : "s")"
+                    )
+                    
+                case .openGroup:
+                    subtitleLabel?.attributedText = NSAttributedString(
+                        string: "\(userCount) active member\(userCount == 1 ? "" : "s")"
+                    )
+            }
         }
         
         // Contact threads also have the call button to compensate for
@@ -151,14 +186,10 @@ final class ConversationTitleView: UIView {
             !isNoteToSelf &&
             threadVariant == .contact
         )
-        self.stackView.layoutMargins = UIEdgeInsets(
-            top: 0,
-            left: (shouldShowCallButton ?
-                ConversationTitleView.leftInsetWithCallButton :
-                ConversationTitleView.leftInset
-            ),
-            bottom: 0,
-            right: 0
+        self.stackViewLeadingConstraint.constant = (shouldShowCallButton ?
+            ConversationTitleView.leftInsetWithCallButton :
+            ConversationTitleView.leftInset
         )
+        self.stackViewTrailingConstraint.constant = 0
     }
 }
