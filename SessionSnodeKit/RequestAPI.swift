@@ -56,13 +56,15 @@ public enum RequestAPI: RequestAPIType {
             return Promise(error: HTTP.Error.invalidJSON)
         }
         
+        /// **Note:** Currently the service nodes only support V3 Onion Requests
         return sendRequest(
             db,
             method: .post,
             headers: [:],
             endpoint: "storage_rpc/v1",
             body: payload,
-            to: OnionRequestAPIDestination.snode(snode)
+            to: OnionRequestAPIDestination.snode(snode),
+            version: .v3
         )
         .map { _, maybeData in
             guard let data: Data = maybeData else { throw HTTP.Error.invalidResponse }

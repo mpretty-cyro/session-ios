@@ -35,7 +35,12 @@ public enum LokinetWrapper {
             let start = CACurrentMediaTime()
             let bundle: Bundle = Bundle(for: SnodeAPI.self)
             var context = lokinet_context_new()
-            let bootstrapContent = try! Data(contentsOf: bundle.url(forResource: "mainnet", withExtension: "signed")!)
+            let bootstrapContent = try! Data(
+                contentsOf: bundle.url(
+                    forResource: (Features.useTestnet ? "testnet" : "mainnet"),
+                    withExtension: "signed"
+                )!
+            )
             var bootstrapBytes: [CChar] = bootstrapContent.bytes.map { CChar(bitPattern: $0) }
             LokinetWrapper.context = context
             
@@ -43,6 +48,9 @@ public enum LokinetWrapper {
             var dataDir: [CChar] = sharedDatabaseDirectoryPath.bytes.map { CChar(bitPattern: $0) }
             lokinet_set_data_dir(&dataDir, context)
             print("RAWR \(sharedDatabaseDirectoryPath)")
+            
+            // Set the netid when on testnet
+            if Features.useTestnet { lokinet_set_netid("gamma") }
             
             var logLevel: [CChar] = "trace".bytes.map { CChar(bitPattern: $0) }
             lokinet_log_level(&logLevel)
