@@ -141,8 +141,13 @@ public enum HTTP {
         return promise
     }
     
-    public static func execute2(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> (Promise<Data>, URLSessionDataTask) {
-        var request = URLRequest(url: URL(string: url)!)
+    public static func execute2(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> (Promise<Data>, URLSessionDataTask?) {
+        guard
+            let urlSafeString: String = url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+            let url: URL = URL(string: urlSafeString)
+        else { return (Promise(error: HTTP.Error.invalidURL), nil) }
+        
+        var request = URLRequest(url: url)
         request.httpMethod = verb.rawValue
         request.httpBody = body
         request.timeoutInterval = timeout

@@ -20,19 +20,7 @@ public enum NativeLokinetRequestAPI {
             let maybeFinalUrlString: String? = {
                 switch destination {
                     case .server(let host, _, _, let scheme, _):
-                        let maybeAddressInfo: (address: String, port: UInt16)? = {
-                            if host.contains("chat.lokinet.dev") {
-                                return (LokinetRequestAPI.sogsDevLoki, LokinetRequestAPI.sogsDevPort)
-                            }
-                            
-                            if host.contains("open.getsession.org") || host.contains("116.203.70.33") {
-                                return (LokinetRequestAPI.sogsLiveLoki, LokinetRequestAPI.sogsLivePort)
-                            }
-                            
-                            return nil
-                        }()
-                        
-                        guard let addressInfo: (address: String, port: UInt16) = maybeAddressInfo else {
+                        guard let addressInfo: (address: String, port: UInt16) = LokinetRequestAPI.lokiAddressLookup[host] else {
                             return nil
                         }
                         

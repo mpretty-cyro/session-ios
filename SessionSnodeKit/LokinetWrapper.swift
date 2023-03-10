@@ -47,7 +47,7 @@ public enum LokinetWrapper {
             // Set the data directory so we can cache the nodedb
             var dataDir: [CChar] = sharedDatabaseDirectoryPath.bytes.map { CChar(bitPattern: $0) }
             lokinet_set_data_dir(&dataDir, context)
-            print("RAWR \(sharedDatabaseDirectoryPath)")
+            print("[Lokinet] Database path \(sharedDatabaseDirectoryPath)")
             
             // Set the netid when on testnet
             if Features.useTestnet { lokinet_set_netid("gamma") }

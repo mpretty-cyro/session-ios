@@ -100,15 +100,15 @@ public enum RequestAPI: RequestAPIType {
         if let query = url.query { endpoint += "?\(query)" }
         let scheme = url.scheme
         let port = given(url.port) { UInt16($0) }
-        let headers: [String: Any] = (request.allHTTPHeaderFields ?? [:])
+        let headers: [String: String] = (request.allHTTPHeaderFields ?? [:])
+            .setting(
+                "Content-Type",
+                (request.httpBody == nil ? nil :
+                    // Default to JSON if not defined
+                    ((request.allHTTPHeaderFields ?? [:])["Content-Type"] ?? "application/json")
+                )
+            )
             .removingValue(forKey: "User-Agent")
-            .mapValues { value in
-                switch value.lowercased() {
-                    case "true": return true
-                    case "false": return false
-                    default: return value
-                }
-            }
         
         let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
         let destination = OnionRequestAPIDestination.server(
@@ -146,7 +146,7 @@ public enum RequestAPI: RequestAPIType {
     private static func sendRequest(
         _ db: Database,
         method: HTTP.Verb,
-        headers: [String: Any],
+        headers: [String: String],
         endpoint: String,
         body: Data?,
         to destination: OnionRequestAPIDestination,
@@ -175,6 +175,7 @@ public enum RequestAPI: RequestAPIType {
                         .sendLokinetRequest(
                             method,
                             endpoint: endpoint,
+                            headers: headers,
                             body: body,
                             destination: destination,
                             timeout: timeout
@@ -185,6 +186,7 @@ public enum RequestAPI: RequestAPIType {
                         .sendNativeLokinetRequest(
                             method,
                             endpoint: endpoint,
+                            headers: headers,
                             body: body,
                             destination: destination,
                             timeout: timeout
@@ -195,6 +197,7 @@ public enum RequestAPI: RequestAPIType {
                         .sendDirectRequest(
                             method,
                             endpoint: endpoint,
+                            headers: headers,
                             body: body,
                             destination: destination,
                             timeout: timeout

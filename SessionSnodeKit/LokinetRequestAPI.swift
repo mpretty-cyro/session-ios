@@ -5,10 +5,12 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public enum LokinetRequestAPI {
-    internal static let sogsLiveLoki: String = "http://xp5ph6qkse3dr3yecjkgstxekrhc8jbprr88frrfcxeaw1kiao8y.loki"
-    internal static let sogsDevLoki: String = "http://kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki"
-    internal static let sogsLivePort: UInt16 = 80
-    internal static let sogsDevPort: UInt16 = 88
+    internal static let lokiAddressLookup: [String: (address: String, port: UInt16)] = [
+        "open.getsession.org": ("http://xp5ph6qkse3dr3yecjkgstxekrhc8jbprr88frrfcxeaw1kiao8y.loki", 88),
+        "116.203.70.33": ("http://xp5ph6qkse3dr3yecjkgstxekrhc8jbprr88frrfcxeaw1kiao8y.loki", 88),
+        "chat.lokinet.dev": ("http://kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki", 88),
+        "dan.lokinet.dev": ("http://dan.kcpyawm9se7trdbzncimdi5t7st4p5mh9i1mg7gkpuubi4k4ku1y.loki", 85)
+    ]
     
     internal static func sendLokinetRequest(
         _ method: HTTP.Verb,
@@ -30,19 +32,7 @@ public enum LokinetRequestAPI {
             let maybeFinalUrlString: String? = {
                 switch destination {
                     case .server(let host, _, _, _, _):
-                        let maybeAddressInfo: (address: String, port: UInt16)? = {
-                            if host.contains("chat.lokinet.dev") {
-                                return (LokinetRequestAPI.sogsDevLoki, LokinetRequestAPI.sogsDevPort)
-                            }
-                            
-                            if host.contains("open.getsession.org") || host.contains("116.203.70.33") {
-                                return (LokinetRequestAPI.sogsLiveLoki, LokinetRequestAPI.sogsLivePort)
-                            }
-                            
-                            return nil
-                        }()
-                        
-                        guard let addressInfo: (address: String, port: UInt16) = maybeAddressInfo else {
+                        guard let addressInfo: (address: String, port: UInt16) = lokiAddressLookup[host] else {
                             return nil
                         }
                         
@@ -142,7 +132,13 @@ public enum LokinetRequestAPI {
                         switch error as? HTTP.Error {
                             case .timeout: return "timed out"
                             case .cancelled: return "was cancelled"
-                            default: return "failed"
+                            case .httpRequestFailed(let status, let data):
+                                switch status {
+                                    case 400: return "failed: Bad request"
+                                    default: return "failed \(data.map { String(data: $0, encoding: .utf8) } ?? "unknown")"
+                                }
+                                
+                            default: return "failed: unknown"
                         }
                     }()
                     SNLog("[Lokinet] \(isSnode ? "Snode" : "Server") request \(errorType) \(end - start)s")
