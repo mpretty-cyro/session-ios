@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 import SessionMessagingKit
@@ -150,15 +151,17 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
     
     internal lazy var messageStatusLabel: UILabel = {
         let result = UILabel()
+        result.accessibilityIdentifier = "Message sent status"
         result.accessibilityLabel = "Message sent status"
         result.font = .systemFont(ofSize: Values.verySmallFontSize)
-        result.themeTextColor = .messageBubble_deliveryStatus
+        result.themeTextColor = .messageBubble_deliveryStatus  
         
         return result
     }()
     
     internal lazy var messageStatusImageView: UIImageView = {
         let result = UIImageView()
+        result.accessibilityIdentifier = "Message sent status tick"
         result.accessibilityLabel = "Message sent status tick"
         result.contentMode = .scaleAspectFit
         result.themeTintColor = .messageBubble_deliveryStatus
@@ -425,6 +428,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         messageStatusLabel.text = statusText
         messageStatusLabel.themeTextColor = tintColor
         messageStatusImageView.image = image
+        messageStatusLabel.accessibilityIdentifier = "Message sent status: \(statusText ?? "invalid")"
         messageStatusImageView.themeTintColor = tintColor
         messageStatusContainerView.isHidden = (
             cellViewModel.variant != .standardOutgoing ||
@@ -469,6 +473,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         for subview in bubbleView.subviews {
             subview.removeFromSuperview()
         }
+        albumView = nil
         albumView = nil
         bodyTappableLabel = nil
         
@@ -541,7 +546,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                         let quoteView: QuoteView = QuoteView(
                             for: .regular,
                             authorId: quote.authorId,
-                            quotedText: quote.body ?? "QUOTED_MESSAGE_NOT_FOUND".localized(),
+                            quotedText: quote.body,
                             threadVariant: cellViewModel.threadVariant,
                             currentUserPublicKey: cellViewModel.currentUserPublicKey,
                             currentUserBlindedPublicKey: cellViewModel.currentUserBlindedPublicKey,
@@ -771,12 +776,18 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
     // MARK: - Interaction
     
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if let bodyTappableLabel = bodyTappableLabel {
-            let btIngetBodyTappableLabelCoordinates = convert(point, to: bodyTappableLabel)
-            if bodyTappableLabel.bounds.contains(btIngetBodyTappableLabelCoordinates) {
+        // We are currently using Appium to do automated UI testing, unfortunately it seems to run into
+        // issues when trying to long-press an element which has custom interaction logic - the TappableLabel
+        // only needs to custom handle touches for interacting with links so we check to see if it contains
+        // links before forwarding touches to it
+        if let bodyTappableLabel: TappableLabel = bodyTappableLabel, bodyTappableLabel.containsLinks {
+            let bodyTappableLabelLocalTapCoordinate: CGPoint = convert(point, to: bodyTappableLabel)
+            
+            if bodyTappableLabel.bounds.contains(bodyTappableLabelLocalTapCoordinate) {
                 return bodyTappableLabel
             }
         }
+        
         return super.hitTest(point, with: event)
     }
 
