@@ -78,7 +78,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 
                 if networkLayer == nil {
                     let previousNetworkLayer: RequestAPI.NetworkLayer = RequestAPI.NetworkLayer(rawValue: UserDefaults.standard.string(forKey: "networkLayer") ?? "")
-                        .defaulting(to: .onionRequest)
+                        .defaulting(to: .defaultLayer)
                     
                     Storage.shared.writeAsync { db in
                         db[.debugNetworkLayer] = previousNetworkLayer

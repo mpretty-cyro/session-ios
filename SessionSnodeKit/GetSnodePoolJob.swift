@@ -30,11 +30,11 @@ public enum GetSnodePoolJob: JobExecutor {
         }
         
         let layer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .onionRequest)
+            .defaulting(to: .defaultLayer)
         
         switch layer {
             case .onionRequest: break
-            case .lokinet:
+            case .lokinet, .onionAndLokiComparison:
                 // Force Lokinet to start building (want to do this regardless of the
                 // network layer to get a proper status comparison between them)
                 LokinetWrapper.setupIfNeeded()
@@ -55,8 +55,31 @@ public enum GetSnodePoolJob: JobExecutor {
             return
         }
         
+        let startTime: TimeInterval = CACurrentMediaTime()
+        RequestAPI.onionRequestTiming.mutate {
+            $0["Startup"] = RequestAPI.Timing(
+                requestType: "Startup",
+                startTime: startTime,
+                endTime: -1,
+                didError: false,
+                didTimeout: false
+            )
+        }
+        
         SnodeAPI.getSnodePool()
-            .done(on: queue) { _ in success(job, false) }
+            .done(on: queue) { _ in
+                switch layer {
+                    case .onionRequest, .onionAndLokiComparison:
+                        // If there are no onion request paths then build one immediately
+                        if OnionRequestAPI.paths.isEmpty {
+                            OnionRequestAPI.getPath(excluding: nil).retainUntilComplete()
+                        }
+                        
+                    default: break
+                }
+                
+                success(job, false)
+            }
             .catch(on: queue) { error in failure(job, error, false) }
             .retainUntilComplete()
     }

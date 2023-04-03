@@ -46,7 +46,7 @@ class NetworkLayerViewModel: SessionTableViewModel<NoNav, NetworkLayerViewModel.
     private lazy var _observableSettingsData: ObservableData = ValueObservation
         .trackingConstantRegion { [storage] db -> [SectionModel] in
             let currentSelection: RequestAPI.NetworkLayer? = db[.debugNetworkLayer]
-                .defaulting(to: .onionRequest)
+                .defaulting(to: .defaultLayer)
             
             return [
                 SectionModel(

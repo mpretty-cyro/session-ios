@@ -44,10 +44,24 @@ public enum OnionRequestAPI: OnionRequestAPIType {
                 try? Snode.fetchAllOnionRequestPaths(db)
             }
             
-            if results?.isEmpty == false { _paths = results }
+            if results?.isEmpty == false {
+                _paths = results
+                let endTime: TimeInterval = CACurrentMediaTime()
+                RequestAPI.onionRequestTiming.mutate {
+                    $0["Startup"] = $0["Startup"]?.with(endTime: endTime)
+                }
+            }
             return (results ?? [])
         }
-        set { _paths = newValue }
+        set {
+            if _paths == nil {
+                let endTime: TimeInterval = CACurrentMediaTime()
+                RequestAPI.onionRequestTiming.mutate {
+                    $0["Startup"] = $0["Startup"]?.with(endTime: endTime)
+                }
+            }
+            _paths = newValue
+        }
     }
 
     // MARK: - Settings

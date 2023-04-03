@@ -18,11 +18,39 @@ public extension RequestAPIType {
 }
 
 public enum RequestAPI: RequestAPIType {
+    public enum RequestAPIError: Error {
+        case networkWrappersNotReady
+    }
+        
+    public struct Timing {
+        let requestType: String
+        let startTime: TimeInterval
+        let endTime: TimeInterval
+        let didError: Bool
+        let didTimeout: Bool
+        
+        func with(endTime: TimeInterval = -1, didError: Bool = false, didTimeout: Bool = false) -> Timing {
+            return Timing(
+                requestType: requestType,
+                startTime: startTime,
+                endTime: endTime,
+                didError: didError,
+                didTimeout: didTimeout
+            )
+        }
+    }
+    
+    public static var onionRequestTiming: Atomic<[String: Timing]> = Atomic([:])
+    public static var lokinetRequestTiming: Atomic<[String: Timing]> = Atomic([:])
+    
     public enum NetworkLayer: String, Codable, CaseIterable, Equatable, Hashable, EnumStringSetting, Differentiable {
         case onionRequest
         case lokinet
         case nativeLokinet
         case direct
+        case onionAndLokiComparison
+        
+        public static let defaultLayer: NetworkLayer = .onionRequest
         
         public var name: String {
             switch self {
@@ -30,6 +58,7 @@ public enum RequestAPI: RequestAPIType {
                 case .lokinet: return "Lokinet"
                 case .nativeLokinet: return "Native Lokinet"
                 case .direct: return "Direct"
+                case .onionAndLokiComparison: return "Onion Requests and Lokinet"
             }
         }
         
@@ -62,7 +91,7 @@ public enum RequestAPI: RequestAPIType {
             method: .post,
             headers: [:],
             endpoint: "storage_rpc/v1",
-            body: payload,
+            body: (onion: payload, loki: payload),
             to: OnionRequestAPIDestination.snode(snode),
             version: .v3
         )
@@ -72,7 +101,7 @@ public enum RequestAPI: RequestAPIType {
             return data
         }
         .recover2 { error -> Promise<Data> in
-            let layer: NetworkLayer = Storage.shared[.debugNetworkLayer].defaulting(to: .onionRequest)
+            let layer: NetworkLayer = Storage.shared[.debugNetworkLayer].defaulting(to: .defaultLayer)
             
             guard
                 layer == .onionRequest,
@@ -110,7 +139,7 @@ public enum RequestAPI: RequestAPIType {
             )
             .removingValue(forKey: "User-Agent")
         
-        let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
+        let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .defaultLayer)
         let destination = OnionRequestAPIDestination.server(
             host: host,
             target: version.rawValue,
@@ -118,7 +147,7 @@ public enum RequestAPI: RequestAPIType {
             scheme: scheme,
             port: port
         )
-        let body: Data?
+        let body: (onion: Data?, loki: Data?)?
         
         switch layer {
             case .onionRequest:
@@ -126,10 +155,18 @@ public enum RequestAPI: RequestAPIType {
                     return Promise(error: OnionRequestAPIError.invalidRequestInfo)
                 }
                 
-                body = payload
+                body = (onion: payload, loki: nil)
+                break
+                
+            case .onionAndLokiComparison:
+                guard let payload: Data = OnionRequestAPI.generatePayload(for: request, with: version) else {
+                    return Promise(error: OnionRequestAPIError.invalidRequestInfo)
+                }
+                
+                body = (onion: payload, loki: request.httpBody)
                 break
             
-            default: body = request.httpBody
+            default: body = (onion: nil, loki: request.httpBody)
         }
         
         return sendRequest(
@@ -143,91 +180,298 @@ public enum RequestAPI: RequestAPIType {
         )
     }
     
+    public static func printTimingComparison() {
+        let onionRequestTiming: [String: Timing] = RequestAPI.onionRequestTiming.wrappedValue
+        let lokinetRequestTiming: [String: Timing] = RequestAPI.lokinetRequestTiming.wrappedValue
+        let requestsToTrack: [String] = [
+            "Snode: retrieve",
+            "Snode: store",
+            "chat.lokinet.dev: batch",
+            "chat.lokinet.dev: sequence",
+            "chat.lokinet.dev: room/",  // Don't split between rooms
+            "open.getsession.org: batch",
+            "open.getsession.org: sequence",
+            "open.getsession.org: room/",  // Don't split between rooms
+            "filev2.getsession.org: file/"  // Don't split between files
+        ]
+        
+        func get(requestType: String, from data: [String: Timing], with index: Int? = nil) -> String {
+            let indexStr: String? = index.map { String(format: " %02d", $0) }
+            
+            guard let item: Timing = data[requestType] else { return "\(requestType)\(indexStr ?? ""): Incomplete" }
+            guard !item.didTimeout else { return "\(item.requestType)\(indexStr ?? ""): Timeout" }
+            guard !item.didError else { return "\(item.requestType)\(indexStr ?? ""): Error" }
+            guard item.endTime != -1 else { return "\(item.requestType)\(indexStr ?? ""): Incomplete" }
+            
+            return "\(item.requestType)\(indexStr ?? ""): \(item.endTime - item.startTime)"
+        }
+        
+        let results: [String: (onion: [String], loki: [String])] = requestsToTrack
+            .reduce(into: [:]) { result, requestType in
+                onionRequestTiming
+                    .filter { $0.value.requestType.starts(with: requestType.replacingOccurrences(of: "%", with: "")) }
+                    .enumerated()
+                    .forEach { index, item in
+                        guard lokinetRequestTiming[item.key] != nil else { return }
+                        
+                        let updatedOnion: [String] = (result[requestType]?.onion ?? [])
+                            .appending(get(requestType: item.key, from: onionRequestTiming, with: index))
+                        let updatedLoki: [String] = (result[requestType]?.loki ?? [])
+                            .appending(get(requestType: item.key, from: lokinetRequestTiming, with: index))
+                        result[requestType] = (updatedOnion, updatedLoki)
+                    }
+            }
+        
+        var outputString: String = ""
+        outputString += "\n    Onion Requests:"
+        outputString += "\n      \(get(requestType: "Startup", from: onionRequestTiming))"
+        outputString += "\n      \(get(requestType: "GetSnodePool", from: onionRequestTiming))"
+        results.forEach { _, value in
+            outputString += "\n"
+            
+            value.onion.sorted().forEach { result in outputString += "\n      \(result)" }
+        }
+        
+        outputString += "\n"
+        outputString += "\n    Loki Requests:"
+        outputString += "\n      \(get(requestType: "Startup", from: lokinetRequestTiming))"
+        outputString += "\n      \(get(requestType: "GetSnodePool", from: lokinetRequestTiming))"
+        results.forEach { _, value in
+            outputString += "\n"
+            
+            value.loki.sorted().forEach { result in outputString += "\n      \(result)" }
+        }
+        
+        let untrackedRequests = onionRequestTiming
+            .filter { item in !requestsToTrack.contains(where: { item.value.requestType.starts(with: $0) }) }
+            .filter { item in !item.key.starts(with: "Startup") && !item.key.starts(with: "GetSnodePool") }
+        
+        outputString += "\n\n    Excluded \(untrackedRequests.count) request(s)"
+        
+        print(outputString)
+    }
+    
     private static func sendRequest(
         _ db: Database,
         method: HTTP.Verb,
         headers: [String: String],
         endpoint: String,
-        body: Data?,
+        body: (
+            onion: Data?,
+            loki: Data?
+        )?,
         to destination: OnionRequestAPIDestination,
         version: OnionRequestAPIVersion = .v4,
         timeout: TimeInterval = HTTP.timeout
     ) -> Promise<(OnionRequestResponseInfoType, Data?)> {
-        let container: RequestContainer<(OnionRequestResponseInfoType, Data?)> = {
-            let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .onionRequest)
+        let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .defaultLayer)
+        
+        switch layer {
+            case .onionRequest: break
+            case .nativeLokinet: break
+            case .direct: break
+                
+            case .lokinet:
+                guard LokinetWrapper.isReady else {
+                    return Promise(error: RequestAPI.RequestAPIError.networkWrappersNotReady)
+                }
+                
+                break
+                
+            case .onionAndLokiComparison:
+                guard LokinetWrapper.isReady && !OnionRequestAPI.paths.isEmpty else {
+                    return Promise(error: RequestAPI.RequestAPIError.networkWrappersNotReady)
+                }
+                
+                break
+        }
+        
+        let containers: [RequestContainer<(OnionRequestResponseInfoType, Data?)>] = {
+            let layer: NetworkLayer = db[.debugNetworkLayer].defaulting(to: .defaultLayer)
 
             switch layer {
                 case .onionRequest:
-                    guard let payload: Data = body else {
-                        return RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))
+                    guard let payload: Data = body?.onion else {
+                        return [RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))]
                     }
                     
-                    return OnionRequestAPI
+                    return [
+                        OnionRequestAPI
+                            .sendOnionRequest(
+                                with: payload,
+                                to: destination,
+                                version: version,
+                                timeout: timeout
+                            )
+                    ]
+                    
+                case .lokinet:
+                    return [
+                        LokinetRequestAPI
+                            .sendLokinetRequest(
+                                method,
+                                endpoint: endpoint,
+                                headers: headers,
+                                body: body?.loki,
+                                destination: destination,
+                                timeout: timeout
+                            )
+                    ]
+                    
+                case .nativeLokinet:
+                    return [
+                        NativeLokinetRequestAPI
+                            .sendNativeLokinetRequest(
+                                method,
+                                endpoint: endpoint,
+                                headers: headers,
+                                body: body?.loki,
+                                destination: destination,
+                                timeout: timeout
+                            )
+                    ]
+                    
+                case .direct:
+                    return [
+                        DirectRequestAPI
+                            .sendDirectRequest(
+                                method,
+                                endpoint: endpoint,
+                                headers: headers,
+                                body: body?.loki,
+                                destination: destination,
+                                timeout: timeout
+                            )
+                    ]
+                    
+                case .onionAndLokiComparison:
+                    guard let payload: Data = body?.onion else {
+                        return [RequestContainer(promise: Promise(error: OnionRequestAPIError.invalidRequestInfo))]
+                    }
+                    
+                    let requestId: UUID = UUID()
+                    let requestType: String = {
+                        let payload: Any? = body?.onion
+                            .map { try? JSONSerialization.jsonObject(with: $0) }
+                        let fallback: String = {
+                            switch destination {
+                                case .snode: return "Snode: \(endpoint)"
+                                case .server(let host, _, _, _, _): return "\(host): \(endpoint)"
+                            }
+                        }()
+                        
+                        return (
+                            ((payload as? [String: Any])?["method"] as? String).map { "Snode: \($0)" } ??
+                            fallback
+                        )
+                    }()
+                    let startTime: TimeInterval = CACurrentMediaTime()
+                    RequestAPI.onionRequestTiming.mutate {
+                        $0[requestId.uuidString] = Timing(
+                            requestType: requestType,
+                            startTime: startTime,
+                            endTime: -1,
+                            didError: false,
+                            didTimeout: false
+                        )
+                    }
+                    RequestAPI.lokinetRequestTiming.mutate {
+                        $0[requestId.uuidString] = Timing(
+                            requestType: requestType,
+                            startTime: startTime,
+                            endTime: -1,
+                            didError: false,
+                            didTimeout: false
+                        )
+                    }
+                    
+                    let container1 = OnionRequestAPI
                         .sendOnionRequest(
                             with: payload,
                             to: destination,
                             version: version,
                             timeout: timeout
                         )
+                        .map { result in
+                            let endTime: TimeInterval = CACurrentMediaTime()
+                            RequestAPI.onionRequestTiming.mutate {
+                                $0[requestId.uuidString] = $0[requestId.uuidString]?.with(endTime: endTime)
+                            }
+                            return result
+                        }
+                    container1.promise.catch2 { error in
+                        print("[Lokinet] RAWR \(error)")
+                        let isTimeout: Bool = {
+                            switch error {
+                                case HTTP.Error.timeout: return true
+                                default: return false
+                            }
+                        }()
+                        RequestAPI.onionRequestTiming.mutate {
+                            $0[requestId.uuidString] = $0[requestId.uuidString]?
+                                .with(
+                                    didError: !isTimeout,
+                                    didTimeout: isTimeout
+                                )
+                        }
+                    }
                     
-                case .lokinet:
-                    return LokinetRequestAPI
+                    let container2 = LokinetRequestAPI
                         .sendLokinetRequest(
                             method,
                             endpoint: endpoint,
                             headers: headers,
-                            body: body,
+                            body: body?.loki,
                             destination: destination,
                             timeout: timeout
                         )
+                        .map { result in
+                            let endTime: TimeInterval = CACurrentMediaTime()
+                            RequestAPI.lokinetRequestTiming.mutate {
+                                $0[requestId.uuidString] = $0[requestId.uuidString]?.with(endTime: endTime)
+                            }
+                            return result
+                        }
+                    container2.promise.catch2 { _ in
+                        RequestAPI.lokinetRequestTiming.mutate {
+                            $0[requestId.uuidString] = $0[requestId.uuidString]?.with(didError: true)
+                        }
+                    }
                     
-                case .nativeLokinet:
-                    return NativeLokinetRequestAPI
-                        .sendNativeLokinetRequest(
-                            method,
-                            endpoint: endpoint,
-                            headers: headers,
-                            body: body,
-                            destination: destination,
-                            timeout: timeout
-                        )
-                    
-                case .direct:
-                    return DirectRequestAPI
-                        .sendDirectRequest(
-                            method,
-                            endpoint: endpoint,
-                            headers: headers,
-                            body: body,
-                            destination: destination,
-                            timeout: timeout
-                        )
+                    return [container1, container2]
             }
         }()
         
         // Add the request from the cache
         RequestAPI.currentRequests.mutate { requests in
-            requests = requests.appending(container)
+            requests = requests.appending(contentsOf: containers)
         }
         
         // Handle `clockOffset` setting
-        return container.promise
-            .map2 { response in
+        return when(resolved: containers.map { $0.promise })
+            .then2 { results in
                 guard
+                    let result = results.first(where: { $0.isFulfilled }),
+                    case let .fulfilled(response) = result,
                     let data: Data = response.1,
                     let json: JSON = try? JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON,
                     let timestamp: Int64 = json["t"] as? Int64
-                else { return response }
+                else {
+                    switch results[0] {
+                        case .fulfilled(let result): return Promise.value(result)
+                        case .rejected(let error): return Promise(error: error)
+                    }
+                }
                     
                 let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
                 SnodeAPI.clockOffsetMs.mutate { $0 = offset }
                 
-                return response
+                return Promise.value(response)
             }
             .ensure {
                 // Remove the request from the cache
                 RequestAPI.currentRequests.mutate { requests in
-                    requests = requests.filter { $0.uuid != container.uuid }
+                    requests = requests.filter { !containers.map { $0.uuid }.contains($0.uuid) }
                 }
             }
     }

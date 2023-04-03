@@ -43,6 +43,15 @@ public enum LokinetWrapper {
             )
             var bootstrapBytes: [CChar] = bootstrapContent.bytes.map { CChar(bitPattern: $0) }
             LokinetWrapper.context = context
+            RequestAPI.lokinetRequestTiming.mutate {
+                $0["Startup"] = RequestAPI.Timing(
+                    requestType: "Startup",
+                    startTime: start,
+                    endTime: -1,
+                    didError: false,
+                    didTimeout: false
+                )
+            }
             
             // Set the data directory so we can cache the nodedb
             var dataDir: [CChar] = sharedDatabaseDirectoryPath.bytes.map { CChar(bitPattern: $0) }
@@ -89,6 +98,9 @@ public enum LokinetWrapper {
                     SNLog("[Lokinet] Ready: \(end - start)s")
                     LokinetWrapper.startTime = (end - start)
                     LokinetWrapper.isReady = true
+                    RequestAPI.lokinetRequestTiming.mutate {
+                        $0["Startup"] = $0["Startup"]?.with(endTime: end)
+                    }
                     
                     DispatchQueue.main.async {
                         NotificationCenter.default.post(name: .pathsBuiltLoki, object: nil)

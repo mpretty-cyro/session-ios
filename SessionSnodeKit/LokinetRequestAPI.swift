@@ -21,8 +21,7 @@ public enum LokinetRequestAPI {
         timeout: TimeInterval = HTTP.timeout
     ) -> RequestContainer<(OnionRequestResponseInfoType, Data?)> {
         guard LokinetWrapper.isReady else {
-            // Use this error to indicate not setup for now
-            return RequestContainer(promise: Promise(error: OnionRequestAPIError.insufficientSnodes))
+            return RequestContainer(promise: Promise(error: RequestAPI.RequestAPIError.networkWrappersNotReady))
         }
         
         let (promise, seal) = Promise<(OnionRequestResponseInfoType, Data?)>.pending()

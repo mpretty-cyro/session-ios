@@ -313,8 +313,35 @@ public final class SnodeAPI {
             now.timeIntervalSince($0) > 2 * 60 * 60
         }.defaulting(to: true)
         let snodePool: Set<Snode> = SnodeAPI.snodePool.wrappedValue
+        let startTime: TimeInterval = CACurrentMediaTime()
+        let requestId: UUID = UUID()
+        RequestAPI.onionRequestTiming.mutate {
+            $0["GetSnodePool-\(requestId.uuidString)"] = RequestAPI.Timing(
+                requestType: "GetSnodePool",
+                startTime: startTime,
+                endTime: -1,
+                didError: false,
+                didTimeout: false
+            )
+        }
+        RequestAPI.lokinetRequestTiming.mutate {
+            $0["GetSnodePool-\(requestId.uuidString)"] = RequestAPI.Timing(
+                requestType: "GetSnodePool",
+                startTime: startTime,
+                endTime: -1,
+                didError: false,
+                didTimeout: false
+            )
+        }
         
         guard hasInsufficientSnodes || hasSnodePoolExpired else {
+            let endTime: TimeInterval = CACurrentMediaTime()
+            RequestAPI.onionRequestTiming.mutate {
+                $0["GetSnodePool-\(requestId.uuidString)"] = $0["GetSnodePool-\(requestId.uuidString)"]?.with(endTime: endTime)
+            }
+            RequestAPI.lokinetRequestTiming.mutate {
+                $0["GetSnodePool-\(requestId.uuidString)"] = $0["GetSnodePool-\(requestId.uuidString)"]?.with(endTime: endTime)
+            }
             return Promise.value(snodePool)
         }
         
@@ -339,6 +366,14 @@ public final class SnodeAPI {
         
         promise.then2 { snodePool -> Promise<Set<Snode>> in
             let (promise, seal) = Promise<Set<Snode>>.pending()
+            
+            let endTime: TimeInterval = CACurrentMediaTime()
+            RequestAPI.onionRequestTiming.mutate {
+                $0["GetSnodePool-\(requestId.uuidString)"] = $0["GetSnodePool-\(requestId.uuidString)"]?.with(endTime: endTime)
+            }
+            RequestAPI.lokinetRequestTiming.mutate {
+                $0["GetSnodePool-\(requestId.uuidString)"] = $0["GetSnodePool-\(requestId.uuidString)"]?.with(endTime: endTime)
+            }
             
             Storage.shared.writeAsync(
                 updates: { db in

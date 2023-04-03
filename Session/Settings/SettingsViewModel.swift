@@ -195,7 +195,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
             let userPublicKey: String = getUserHexEncodedPublicKey(db)
             let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
             let networkLayer: RequestAPI.NetworkLayer = db[.debugNetworkLayer]
-                .defaulting(to: .onionRequest)
+                .defaulting(to: .defaultLayer)
             
             return [
                 SectionModel(

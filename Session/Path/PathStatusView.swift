@@ -96,7 +96,7 @@ final class PathStatusView: UIView {
         layerLabel.pin(to: self, withInset: 2)
         
         let currentLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .onionRequest)
+            .defaulting(to: .defaultLayer)
         
         switch networkLayer {
             case .onionRequest:
@@ -111,6 +111,10 @@ final class PathStatusView: UIView {
                 
             case .direct:
                 layerLabel.text = "D"
+                setStatus(to: .connected)
+                
+            case .onionAndLokiComparison:
+                layerLabel.text = "O/L"
                 setStatus(to: .connected)
         }
         
@@ -192,7 +196,7 @@ final class PathStatusView: UIView {
     
     @objc private func handleNetworkLayerChangedNotification() {
         let newLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .onionRequest)
+            .defaulting(to: .defaultLayer)
         
         switch (networkLayer, newLayer) {
             case (.onionRequest, .onionRequest):
@@ -211,13 +215,19 @@ final class PathStatusView: UIView {
     }
 
     @objc private func handleBuildingPathsNotification() {
+        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .defaultLayer)
+        
         switch networkLayer {
             case .onionRequest:
                 setStatus(to: .connecting)
                 
             case .lokinet: fallthrough
             case .nativeLokinet: fallthrough
-            case .direct:
+            case .direct: fallthrough
+            case .onionAndLokiComparison:
+                guard cachedLayer != .onionAndLokiComparison else { return }
+                
                 setStatus(to: .unknown)
         }
     }
@@ -228,25 +238,37 @@ final class PathStatusView: UIView {
             return
         }
         
+        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .defaultLayer)
+        
         switch networkLayer {
             case .onionRequest:
                 setStatus(to: .connected)
                 
             case .lokinet: fallthrough
             case .nativeLokinet: fallthrough
-            case .direct:
+            case .direct: fallthrough
+            case .onionAndLokiComparison:
+                guard cachedLayer != .onionAndLokiComparison else { return }
+                
                 setStatus(to: .unknown)
         }
     }
     
     @objc private func handleBuildingPathsLokiNotification() {
+        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .defaultLayer)
+        
         switch networkLayer {
             case .lokinet:
                 setStatus(to: .connecting)
                 
             case .onionRequest: fallthrough
             case .nativeLokinet: fallthrough
-            case .direct:
+            case .direct: fallthrough
+            case .onionAndLokiComparison:
+                guard cachedLayer != .onionAndLokiComparison else { return }
+                
                 setStatus(to: .unknown)
         }
     }
@@ -257,25 +279,37 @@ final class PathStatusView: UIView {
             return
         }
         
+        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .defaultLayer)
+        
         switch networkLayer {
             case .lokinet:
                 setStatus(to: .connected)
                 
             case .onionRequest: fallthrough
             case .nativeLokinet: fallthrough
-            case .direct:
+            case .direct: fallthrough
+            case .onionAndLokiComparison:
+                guard cachedLayer != .onionAndLokiComparison else { return }
+                
                 setStatus(to: .unknown)
         }
     }
     
     @objc private func handleDirectNetworkReadyNotification() {
+        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
+            .defaulting(to: .defaultLayer)
+        
         switch networkLayer {
             case .nativeLokinet: fallthrough
             case .direct:
                 setStatus(to: .connected)
                 
             case .onionRequest: fallthrough
-            case .lokinet:
+            case .lokinet: fallthrough
+            case .onionAndLokiComparison:
+                guard cachedLayer != .onionAndLokiComparison else { return }
+                
                 setStatus(to: .unknown)
         }
     }
@@ -296,6 +330,7 @@ final class PathStatusView: UIView {
             case .lokinet: setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
             case .nativeLokinet: setStatus(to: .connected)
             case .direct: setStatus(to: .connected)
+            case .onionAndLokiComparison: setStatus(to: .unknown)
         }
     }
 }
