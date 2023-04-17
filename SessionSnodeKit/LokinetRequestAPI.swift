@@ -5,6 +5,7 @@ import PromiseKit
 import SessionUtilitiesKit
 
 public enum LokinetRequestAPI {
+    /// **Note:** If testing against Testnet use `dan.lokinet.dev` as the others are all on Mainnet
     internal static let lokiAddressLookup: [String: (address: String, port: UInt16)] = [
         "open.getsession.org": ("http://xp5ph6qkse3dr3yecjkgstxekrhc8jbprr88frrfcxeaw1kiao8y.loki", 88),
         "116.203.70.33": ("http://xp5ph6qkse3dr3yecjkgstxekrhc8jbprr88frrfcxeaw1kiao8y.loki", 88),
