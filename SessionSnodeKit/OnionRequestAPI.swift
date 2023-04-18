@@ -40,9 +40,7 @@ public enum OnionRequestAPI: OnionRequestAPIType {
         get {
             if let paths: [[Snode]] = _paths { return paths }
             
-            let results: [[Snode]]? = Storage.shared.read { db in
-                try? Snode.fetchAllOnionRequestPaths(db)
-            }
+            let results: [[Snode]]? = Storage.shared.read { db in paths(db) }
             
             if results?.isEmpty == false {
                 _paths = results
@@ -62,6 +60,10 @@ public enum OnionRequestAPI: OnionRequestAPIType {
             }
             _paths = newValue
         }
+    }
+    
+    public static func paths(_ db: Database) -> [[Snode]] {
+        return ((try? Snode.fetchAllOnionRequestPaths(db)) ?? [])
     }
 
     // MARK: - Settings

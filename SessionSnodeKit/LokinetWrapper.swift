@@ -143,7 +143,10 @@ public enum LokinetWrapper {
             &result,
             &remoteAddr,
             nil,
-            LokinetWrapper.context
+            LokinetWrapper.context,
+            nil,
+            nil,
+            nil
         )
         
         guard result.error == 0 else { throw OnionRequestAPIError.insufficientSnodes }

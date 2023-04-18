@@ -128,7 +128,7 @@ public enum RequestAPI: RequestAPIType {
         var endpoint = url.path.removingPrefix("/")
         if let query = url.query { endpoint += "?\(query)" }
         let scheme = url.scheme
-        let port = given(url.port) { UInt16($0) }
+        let port = url.port.map { UInt16($0) }
         let headers: [String: String] = (request.allHTTPHeaderFields ?? [:])
             .setting(
                 "Content-Type",
@@ -181,20 +181,111 @@ public enum RequestAPI: RequestAPIType {
     }
     
     public static func printTimingComparison() {
+        enum RequestCategory {
+            case snode
+            case sogs
+            case file
+        }
+        struct Stats {
+            let label: String
+            let successes: Int
+            let errors: Int
+            let timeouts: Int
+            let incomplete: Int
+            let averageMs: Double
+            
+            var durationString: String { (averageMs == -1 ? "`N/A`" : "`\(label) \(averageMs)ms`") }
+            var overviewString: String {
+                guard successes > 0 || errors > 0 || timeouts > 0 else { return "\(label) - N/A" }
+                
+                return "\(label) `\(successes)/\(successes + errors)` requests successful, avg. response time: \(averageMs == -1 ? "`N/A`" : "`\(averageMs)ms`")"
+            }
+            var detailedOverviewString: String {
+                guard successes > 0 || errors > 0 || timeouts > 0 else { return "\(label) - No Stats" }
+                
+                return "\(label) Successful: \(successes), Errors: \(errors), Avg: \(averageMs == -1 ? "N/A" : "\(averageMs)ms")"
+            }
+            
+            init(label: String) {
+                self.label = label
+                self.successes = 0
+                self.errors = 0
+                self.timeouts = 0
+                self.incomplete = 0
+                self.averageMs = -1
+            }
+            
+            init(
+                label: String,
+                successes: Int,
+                errors: Int,
+                timeouts: Int,
+                incomplete: Int,
+                averageMs: Double
+            ) {
+                self.label = label
+                self.successes = successes
+                self.errors = errors
+                self.timeouts = timeouts
+                self.incomplete = incomplete
+                self.averageMs = averageMs
+            }
+        }
+        
+        
         let onionRequestTiming: [String: Timing] = RequestAPI.onionRequestTiming.wrappedValue
         let lokinetRequestTiming: [String: Timing] = RequestAPI.lokinetRequestTiming.wrappedValue
-        let requestsToTrack: [String] = [
-            "Snode: retrieve",
-            "Snode: store",
-            "chat.lokinet.dev: batch",
-            "chat.lokinet.dev: sequence",
-            "chat.lokinet.dev: room/",  // Don't split between rooms
-            "open.getsession.org: batch",
-            "open.getsession.org: sequence",
-            "open.getsession.org: room/",  // Don't split between rooms
-            "filev2.getsession.org: file/"  // Don't split between files
+        let requestsToTrack: [(type: String, category: RequestCategory)] = [
+            ("Snode: retrieve", .snode),
+            ("Snode: store", .snode),
+            ("chat.lokinet.dev: batch", .sogs),
+            ("chat.lokinet.dev: sequence", .sogs),
+            ("chat.lokinet.dev: room/", .sogs),  // Don't split between rooms
+            ("open.getsession.org: batch", .sogs),
+            ("open.getsession.org: sequence", .sogs),
+            ("open.getsession.org: room/", .sogs),  // Don't split between rooms
+            ("dan.lokinet.dev: batch", .sogs),
+            ("dan.lokinet.dev: sequence", .sogs),
+            ("dan.lokinet.dev: room/", .sogs),  // Don't split between rooms
+            ("filev2.getsession.org: file/", .file)  // Don't split between files
         ]
         
+        func stats(label: String, data: [String: Timing], filters: [String] = []) -> Stats {
+            let filteredData: [String: Timing] = (filters.isEmpty ? data :
+                data.filter { _, value in
+                    filters.contains(where: { filter in
+                        value.requestType.starts(with: filter.replacingOccurrences(of: "%", with: ""))
+                    })
+                }
+            )
+            
+            guard !filteredData.isEmpty else { return Stats(label: label) }
+            
+            let numComplete: Int = filteredData
+                .filter { !$0.value.didError && !$0.value.didTimeout && $0.value.endTime != -1 }
+                .count
+            let totalDuration: TimeInterval = filteredData
+                .filter { !$0.value.didError && !$0.value.didTimeout && $0.value.endTime != -1 }
+                .map { ($0.value.endTime - $0.value.startTime) }
+                .reduce(0, +)
+            
+            return Stats(
+                label: label,
+                successes: filteredData
+                    .filter { !$0.value.didError && !$0.value.didTimeout && $0.value.endTime != -1 }
+                    .count,
+                errors: filteredData
+                    .filter { $0.value.didError }
+                    .count,
+                timeouts: filteredData
+                    .filter { $0.value.didTimeout }
+                    .count,
+                incomplete: filteredData
+                    .filter { !$0.value.didError && !$0.value.didTimeout && $0.value.endTime == -1 }
+                    .count,
+                averageMs: (numComplete > 0 ? ((totalDuration / TimeInterval(numComplete)) * 1000) : -1)
+            )
+        }
         func get(requestType: String, from data: [String: Timing], with index: Int? = nil) -> String {
             let indexStr: String? = index.map { String(format: " %02d", $0) }
             
@@ -203,29 +294,72 @@ public enum RequestAPI: RequestAPIType {
             guard !item.didError else { return "\(item.requestType)\(indexStr ?? ""): Error" }
             guard item.endTime != -1 else { return "\(item.requestType)\(indexStr ?? ""): Incomplete" }
             
-            return "\(item.requestType)\(indexStr ?? ""): \(item.endTime - item.startTime)"
+            return "\(item.requestType)\(indexStr ?? ""): \((item.endTime - item.startTime) * 1000)ms"
         }
         
         let results: [String: (onion: [String], loki: [String])] = requestsToTrack
-            .reduce(into: [:]) { result, requestType in
-                onionRequestTiming
-                    .filter { $0.value.requestType.starts(with: requestType.replacingOccurrences(of: "%", with: "")) }
+            .reduce(into: [:]) { result, requestInfo in
+                let onionTimingForRequestType: [String: Timing] = onionRequestTiming
+                    .filter { $0.value.requestType.starts(with: requestInfo.type.replacingOccurrences(of: "%", with: "")) }
+                let lokiTimingForRequestType: [String: Timing] = lokinetRequestTiming
+                    .filter { $0.value.requestType.starts(with: requestInfo.type.replacingOccurrences(of: "%", with: "")) }
+                
+                // Add the overall stats
+                if !onionTimingForRequestType.isEmpty || !lokiTimingForRequestType.isEmpty {
+                    let updatedOnion: [String] = (result[requestInfo.type]?.onion ?? [])
+                        .appending(stats(label: "\(requestInfo.type) -", data: onionTimingForRequestType).detailedOverviewString)
+                    let updatedLoki: [String] = (result[requestInfo.type]?.loki ?? [])
+                        .appending(stats(label: "\(requestInfo.type) -", data: lokiTimingForRequestType).detailedOverviewString)
+                    result[requestInfo.type] = (updatedOnion, updatedLoki)
+                }
+                
+                // Add the specific timing
+                onionTimingForRequestType
                     .enumerated()
                     .forEach { index, item in
                         guard lokinetRequestTiming[item.key] != nil else { return }
                         
-                        let updatedOnion: [String] = (result[requestType]?.onion ?? [])
+                        let updatedOnion: [String] = (result[requestInfo.type]?.onion ?? [])
                             .appending(get(requestType: item.key, from: onionRequestTiming, with: index))
-                        let updatedLoki: [String] = (result[requestType]?.loki ?? [])
+                        let updatedLoki: [String] = (result[requestInfo.type]?.loki ?? [])
                             .appending(get(requestType: item.key, from: lokinetRequestTiming, with: index))
-                        result[requestType] = (updatedOnion, updatedLoki)
+                        result[requestInfo.type] = (updatedOnion, updatedLoki)
                     }
             }
         
+        let snodeFilters: [String] = requestsToTrack.filter { $0.category == .snode }.map { $0.type }
+        let sogsFilters: [String] = requestsToTrack.filter { $0.category == .sogs }.map { $0.type }
         var outputString: String = ""
+        outputString += "\n    **Overview:**"
+        outputString += "\n        **Onion Requests:**"
+        outputString += "\n            \(stats(label: "Startup -", data: onionRequestTiming, filters: ["Startup"]).durationString)"
+        outputString += "\n            \(stats(label: "Snode   -", data: onionRequestTiming, filters: snodeFilters).overviewString)"
+        outputString += "\n            \(stats(label: "SOGS    -", data: onionRequestTiming, filters: sogsFilters).overviewString)"
+        
+        outputString += "\n"
+        outputString += "\n        **Loki Requests:**"
+        outputString += "\n            \(stats(label: "Startup -", data: lokinetRequestTiming, filters: ["Startup"]).durationString)"
+        outputString += "\n            \(stats(label: "Snode   -", data: lokinetRequestTiming, filters: snodeFilters).overviewString)"
+        outputString += "\n            \(stats(label: "SOGS    -", data: lokinetRequestTiming, filters: sogsFilters).overviewString)"
+        
+        _ = onionRequestTiming
+            .filter { $0.value.requestType.starts(with: "GetSnodePool") }
+            .filter { !$0.value.didError && !$0.value.didTimeout && $0.value.endTime != -1 }
+            .enumerated()
+            .map { index, item in get(requestType: item.key, from: onionRequestTiming, with: index) }
+            .sorted()
+            .first
+            .map { value in
+                outputString += "\n"
+                outputString += "\n    Shared:"
+                outputString += "\n      \(value)"
+                
+                return ()
+            }
+        
+        outputString += "\n"
         outputString += "\n    Onion Requests:"
         outputString += "\n      \(get(requestType: "Startup", from: onionRequestTiming))"
-        outputString += "\n      \(get(requestType: "GetSnodePool", from: onionRequestTiming))"
         results.forEach { _, value in
             outputString += "\n"
             
@@ -235,7 +369,6 @@ public enum RequestAPI: RequestAPIType {
         outputString += "\n"
         outputString += "\n    Loki Requests:"
         outputString += "\n      \(get(requestType: "Startup", from: lokinetRequestTiming))"
-        outputString += "\n      \(get(requestType: "GetSnodePool", from: lokinetRequestTiming))"
         results.forEach { _, value in
             outputString += "\n"
             
@@ -243,7 +376,7 @@ public enum RequestAPI: RequestAPIType {
         }
         
         let untrackedRequests = onionRequestTiming
-            .filter { item in !requestsToTrack.contains(where: { item.value.requestType.starts(with: $0) }) }
+            .filter { item in !requestsToTrack.map { $0.type }.contains(where: { item.value.requestType.starts(with: $0) }) }
             .filter { item in !item.key.starts(with: "Startup") && !item.key.starts(with: "GetSnodePool") }
         
         outputString += "\n\n    Excluded \(untrackedRequests.count) request(s)"
@@ -279,7 +412,7 @@ public enum RequestAPI: RequestAPIType {
                 break
                 
             case .onionAndLokiComparison:
-                guard LokinetWrapper.isReady && !OnionRequestAPI.paths.isEmpty else {
+                guard LokinetWrapper.isReady && !OnionRequestAPI.paths(db).isEmpty else {
                     return Promise(error: RequestAPI.RequestAPIError.networkWrappersNotReady)
                 }
                 
