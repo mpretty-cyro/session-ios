@@ -136,10 +136,10 @@ public enum LokinetWrapper {
         ]
         .compactMap { $0 }
         .joined()
-        var result: lokinet_stream_result = lokinet_stream_result()
+        var result: lokinet_tcp_result = lokinet_tcp_result()
         var remoteAddr: [CChar] = remote.bytes.map { CChar(bitPattern: $0) }
         
-        lokinet_outbound_stream(
+        lokinet_outbound_tcp(
             &result,
             &remoteAddr,
             nil,

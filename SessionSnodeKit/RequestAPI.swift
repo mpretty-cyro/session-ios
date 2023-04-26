@@ -194,7 +194,7 @@ public enum RequestAPI: RequestAPIType {
             let incomplete: Int
             let averageMs: Double
             
-            var durationString: String { (averageMs == -1 ? "`N/A`" : "`\(label) \(averageMs)ms`") }
+            var durationString: String { (averageMs == -1 ? "`N/A`" : "\(label) `\(averageMs)ms`") }
             var overviewString: String {
                 guard successes > 0 || errors > 0 || timeouts > 0 else { return "\(label) - N/A" }
                 
@@ -360,20 +360,24 @@ public enum RequestAPI: RequestAPIType {
         outputString += "\n"
         outputString += "\n    Onion Requests:"
         outputString += "\n      \(get(requestType: "Startup", from: onionRequestTiming))"
-        results.forEach { _, value in
-            outputString += "\n"
-            
-            value.onion.sorted().forEach { result in outputString += "\n      \(result)" }
-        }
+        results
+            .sorted(by: { lhs, rhs in lhs.key < rhs.key })
+            .forEach { _, value in
+                outputString += "\n"
+                
+                value.onion.sorted().forEach { result in outputString += "\n      \(result)" }
+            }
         
         outputString += "\n"
         outputString += "\n    Loki Requests:"
         outputString += "\n      \(get(requestType: "Startup", from: lokinetRequestTiming))"
-        results.forEach { _, value in
-            outputString += "\n"
-            
-            value.loki.sorted().forEach { result in outputString += "\n      \(result)" }
-        }
+        results
+            .sorted(by: { lhs, rhs in lhs.key < rhs.key })
+            .forEach { _, value in
+                outputString += "\n"
+                
+                value.loki.sorted().forEach { result in outputString += "\n      \(result)" }
+            }
         
         let untrackedRequests = onionRequestTiming
             .filter { item in !requestsToTrack.map { $0.type }.contains(where: { item.value.requestType.starts(with: $0) }) }
