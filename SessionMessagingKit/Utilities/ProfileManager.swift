@@ -168,8 +168,8 @@ public struct ProfileManager {
             
             let useOldServer: Bool = (profileUrlStringAtStart.contains(FileServerAPI.oldServer))
             
-            FileServerAPI
-                .download(fileId, useOldServer: useOldServer)
+            Storage.shared
+                .read { db in FileServerAPI.download(db, fileId: fileId, useOldServer: useOldServer) }
                 .done(on: queue) { data in
                     currentAvatarDownloads.mutate { $0.remove(profile.id) }
                     
@@ -363,8 +363,7 @@ public struct ProfileManager {
             }
             
             // Upload the avatar to the FileServer
-            FileServerAPI
-                .upload(encryptedAvatarData)
+            Storage.shared.read { db in FileServerAPI.upload(db, file: encryptedAvatarData) }
                 .done(on: queue) { fileUploadResponse in
                     let downloadUrl: String = "\(FileServerAPI.server)/files/\(fileUploadResponse.id)"
                     UserDefaults.standard[.lastProfilePictureUpload] = Date()

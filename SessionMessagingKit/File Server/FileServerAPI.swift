@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import GRDB
 import PromiseKit
 import SessionSnodeKit
 import SessionUtilitiesKit
@@ -25,7 +26,7 @@ public final class FileServerAPI: NSObject {
     
     // MARK: - File Storage
     
-    public static func upload(_ file: Data) -> Promise<FileUploadResponse> {
+    public static func upload(_ db: Database, file: Data) -> Promise<FileUploadResponse> {
         let request = Request(
             method: .post,
             server: server,
@@ -37,21 +38,21 @@ public final class FileServerAPI: NSObject {
             body: Array(file)
         )
 
-        return send(request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileUploadTimeout)
+        return send(db, request: request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileUploadTimeout)
             .decoded(as: FileUploadResponse.self, on: .global(qos: .userInitiated))
     }
     
-    public static func download(_ fileId: String, useOldServer: Bool) -> Promise<Data> {
+    public static func download(_ db: Database, fileId: String, useOldServer: Bool) -> Promise<Data> {
         let serverPublicKey: String = (useOldServer ? oldServerPublicKey : serverPublicKey)
         let request = Request<NoBody, Endpoint>(
             server: (useOldServer ? oldServer : server),
             endpoint: .fileIndividual(fileId: fileId)
         )
         
-        return send(request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileDownloadTimeout)
+        return send(db, request: request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileDownloadTimeout)
     }
 
-    public static func getVersion(_ platform: String) -> Promise<String> {
+    public static func getVersion(_ db: Database, platform: String) -> Promise<String> {
         let request = Request<NoBody, Endpoint>(
             server: server,
             endpoint: .sessionVersion,
@@ -60,7 +61,7 @@ public final class FileServerAPI: NSObject {
             ]
         )
         
-        return send(request, serverPublicKey: serverPublicKey, timeout: HTTP.timeout)
+        return send(db, request: request, serverPublicKey: serverPublicKey, timeout: HTTP.timeout)
             .decoded(as: VersionResponse.self, on: .global(qos: .userInitiated))
             .map { response in response.version }
     }
@@ -68,7 +69,8 @@ public final class FileServerAPI: NSObject {
     // MARK: - Convenience
     
     private static func send<T: Encodable>(
-        _ request: Request<T, Endpoint>,
+        _ db: Database,
+        request: Request<T, Endpoint>,
         serverPublicKey: String,
         timeout: TimeInterval
     ) -> Promise<Data> {
@@ -81,16 +83,14 @@ public final class FileServerAPI: NSObject {
             return Promise(error: error)
         }
         
-        return Storage.shared
-            .read { db in 
-                RequestAPI.sendRequest(
-                    db,
-                    request: urlRequest,
-                    to: request.server,
-                    with: serverPublicKey,
-                    timeout: timeout
-                )
-            }
+        return RequestAPI
+            .sendRequest(
+                db,
+                request: urlRequest,
+                to: request.server,
+                with: serverPublicKey,
+                timeout: timeout
+            )
             .map2 { _, response in
                 guard let response: Data = response else { throw HTTP.Error.parsingFailed }
                 

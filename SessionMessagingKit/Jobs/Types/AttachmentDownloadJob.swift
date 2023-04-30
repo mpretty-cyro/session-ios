@@ -92,19 +92,17 @@ public enum AttachmentDownloadJob: JobExecutor {
                 return Promise(error: AttachmentDownloadError.invalidUrl)
             }
             
-            let maybeOpenGroupDownloadPromise: Promise<Data>? = Storage.shared.read({ db in
-                guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
-                    return nil  // Not an open group so just use standard FileServer upload
+            return Storage.shared
+                .read { db in
+                    guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
+                        // Not an open group so just use standard FileServer upload
+                        return FileServerAPI
+                            .download(db, fileId: fileId, useOldServer: downloadUrl.contains(FileServerAPI.oldServer))
+                    }
+                    
+                    return OpenGroupAPI.downloadFile(db, fileId: fileId, from: openGroup.roomToken, on: openGroup.server)
+                        .map { _, data in data }
                 }
-                
-                return OpenGroupAPI.downloadFile(db, fileId: fileId, from: openGroup.roomToken, on: openGroup.server)
-                    .map { _, data in data }
-            })
-            
-            return (
-                maybeOpenGroupDownloadPromise ??
-                FileServerAPI.download(fileId, useOldServer: downloadUrl.contains(FileServerAPI.oldServer))
-            )
         }()
         
         downloadPromise

@@ -67,7 +67,7 @@ public enum AttachmentUploadJob: JobExecutor {
                         .map { _, response -> String in response.id }
                 }
                 
-                return FileServerAPI.upload(data)
+                return FileServerAPI.upload(db, file:  data)
                     .map { response -> String in response.id }
             },
             encrypt: (openGroup == nil),
