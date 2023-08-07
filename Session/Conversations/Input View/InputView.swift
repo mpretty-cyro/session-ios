@@ -1,15 +1,18 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
+import SignalUtilitiesKit
 
 final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, MentionSelectionViewDelegate {
     // MARK: - Variables
     
     private static let linkPreviewViewInset: CGFloat = 6
 
+    private var disposables: Set<AnyCancellable> = Set()
     private let threadVariant: SessionThread.Variant
     private weak var delegate: InputViewDelegate?
     
@@ -36,8 +39,6 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         get { inputTextView.selectedRange }
         set { inputTextView.selectedRange = newValue }
     }
-    
-    var inputTextViewIsFirstResponder: Bool { inputTextView.isFirstResponder }
     
     var enabledMessageTypes: MessageInputTypes = .all {
         didSet {
@@ -91,7 +92,6 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         let result: UIView = UIView()
         result.accessibilityLabel = "Mentions list"
         result.accessibilityIdentifier = "Mentions list"
-        result.isAccessibilityElement = true
         result.alpha = 0
         
         let backgroundView = UIView()
@@ -265,7 +265,8 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
             quotedText: quoteDraftInfo.model.body,
             threadVariant: threadVariant,
             currentUserPublicKey: quoteDraftInfo.model.currentUserPublicKey,
-            currentUserBlindedPublicKey: quoteDraftInfo.model.currentUserBlindedPublicKey,
+            currentUserBlinded15PublicKey: quoteDraftInfo.model.currentUserBlinded15PublicKey,
+            currentUserBlinded25PublicKey: quoteDraftInfo.model.currentUserBlinded25PublicKey,
             direction: (quoteDraftInfo.isOutgoing ? .outgoing : .incoming),
             attachment: quoteDraftInfo.model.attachment,
             hInset: hInset,
@@ -332,19 +333,27 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         
         // Build the link preview
         LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL)
-            .done { [weak self] draft in
-                guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
-                
-                self?.linkPreviewInfo = (url: linkPreviewURL, draft: draft)
-                self?.linkPreviewView.update(with: LinkPreview.DraftState(linkPreviewDraft: draft), isOutgoing: false)
-            }
-            .catch { [weak self] _ in
-                guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
-                
-                self?.linkPreviewInfo = nil
-                self?.additionalContentContainer.subviews.forEach { $0.removeFromSuperview() }
-            }
-            .retainUntilComplete()
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] result in
+                    switch result {
+                        case .finished: break
+                        case .failure:
+                            guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
+                            
+                            self?.linkPreviewInfo = nil
+                            self?.additionalContentContainer.subviews.forEach { $0.removeFromSuperview() }
+                    }
+                },
+                receiveValue: { [weak self] draft in
+                    guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
+                    
+                    self?.linkPreviewInfo = (url: linkPreviewURL, draft: draft)
+                    self?.linkPreviewView.update(with: LinkPreview.DraftState(linkPreviewDraft: draft), isOutgoing: false)
+                }
+            )
+            .store(in: &disposables)
     }
 
     func setEnabledMessageTypes(_ messageTypes: MessageInputTypes, message: String?) {
@@ -407,14 +416,14 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         if inputViewButton == sendButton { delegate?.handleSendButtonTapped() }
     }
 
-    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?) {
+    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?, using dependencies: Dependencies) {
         guard inputViewButton == voiceMessageButton else { return }
         
         // Note: The 'showVoiceMessageUI' call MUST come before triggering 'startVoiceMessageRecording'
         // because if something goes wrong it'll trigger `hideVoiceMessageUI` and we don't want it to
         // end up in a state with the input content hidden
         showVoiceMessageUI()
-        delegate?.startVoiceMessageRecording()
+        delegate?.startVoiceMessageRecording(using: dependencies)
     }
 
     func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?) {
@@ -439,10 +448,6 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     override func resignFirstResponder() -> Bool {
         inputTextView.resignFirstResponder()
-    }
-    
-    func inputTextViewBecomeFirstResponder() {
-        inputTextView.becomeFirstResponder()
     }
 
     func handleLongPress(_ gestureRecognizer: UITapGestureRecognizer) {
@@ -497,7 +502,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     func showMentionsUI(for candidates: [MentionInfo]) {
         mentionsView.candidates = candidates
         
-        let mentionCellHeight = (Values.smallProfilePictureSize + 2 * Values.smallSpacing)
+        let mentionCellHeight = (ProfilePictureView.Size.message.viewSize + 2 * Values.smallSpacing)
         mentionsViewHeightConstraint.constant = CGFloat(min(3, candidates.count)) * mentionCellHeight
         layoutIfNeeded()
         

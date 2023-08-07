@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
 import DifferenceKit
 import SessionMessagingKit
@@ -8,6 +9,13 @@ import SessionUtilitiesKit
 
 public class ConversationViewModel: OWSAudioPlayerDelegate {
     public typealias SectionModel = ArraySection<Section, MessageViewModel>
+    
+    // MARK: - FocusBehaviour
+    
+    public enum FocusBehaviour {
+        case none
+        case highlight
+    }
     
     // MARK: - Action
     
@@ -34,7 +42,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     public let initialThreadVariant: SessionThread.Variant
     public var sentMessageBeforeUpdate: Bool = false
     public var lastSearchedText: String?
-    public let focusedInteractionId: Int64?    // Note: This is used for global search
+    public let focusedInteractionInfo: Interaction.TimestampInfo? // Note: This is used for global search
+    public let focusBehaviour: FocusBehaviour
+    private let initialUnreadInteractionId: Int64?
+    private let markAsReadTrigger: PassthroughSubject<(SessionThreadViewModel.ReadTarget, Int64?), Never> = PassthroughSubject()
+    private var markAsReadPublisher: AnyPublisher<Void, Never>?
     
     public lazy var blockedBannerMessage: String = {
         switch self.threadData.threadVariant {
@@ -52,28 +64,93 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionId: Int64?) {
-        // If we have a specified 'focusedInteractionId' then use that, otherwise retrieve the oldest
-        // unread interaction and start focused around that one
-        let targetInteractionId: Int64? = {
-            if let focusedInteractionId: Int64 = focusedInteractionId { return focusedInteractionId }
+    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo?) {
+        typealias InitialData = (
+            currentUserPublicKey: String,
+            initialUnreadInteractionInfo: Interaction.TimestampInfo?,
+            threadIsBlocked: Bool,
+            currentUserIsClosedGroupMember: Bool?,
+            openGroupPermissions: OpenGroup.Permissions?,
+            blinded15Key: String?,
+            blinded25Key: String?
+        )
+        
+        let initialData: InitialData? = Storage.shared.read { db -> InitialData in
+            let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+            let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
+            let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
             
-            return Storage.shared.read { db in
-                let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-                
-                return try Interaction
-                    .select(.id)
-                    .filter(interaction[.wasRead] == false)
-                    .filter(interaction[.threadId] == threadId)
-                    .order(interaction[.timestampMs].asc)
-                    .asRequest(of: Int64.self)
+            // If we have a specified 'focusedInteractionInfo' then use that, otherwise retrieve the oldest
+            // unread interaction and start focused around that one
+            let initialUnreadInteractionInfo: Interaction.TimestampInfo? = try Interaction
+                .select(.id, .timestampMs)
+                .filter(interaction[.wasRead] == false)
+                .filter(interaction[.threadId] == threadId)
+                .order(interaction[.timestampMs].asc)
+                .asRequest(of: Interaction.TimestampInfo.self)
+                .fetchOne(db)
+            let threadIsBlocked: Bool = (threadVariant != .contact ? false :
+                try Contact
+                    .filter(id: threadId)
+                    .select(.isBlocked)
+                    .asRequest(of: Bool.self)
                     .fetchOne(db)
-            }
-        }()
+                    .defaulting(to: false)
+            )
+            let currentUserIsClosedGroupMember: Bool? = (![.legacyGroup, .group].contains(threadVariant) ? nil :
+                GroupMember
+                    .filter(groupMember[.groupId] == threadId)
+                    .filter(groupMember[.profileId] == currentUserPublicKey)
+                    .filter(groupMember[.role] == GroupMember.Role.standard)
+                    .isNotEmpty(db)
+            )
+            let openGroupPermissions: OpenGroup.Permissions? = (threadVariant != .community ? nil :
+                try OpenGroup
+                    .filter(id: threadId)
+                    .select(.permissions)
+                    .asRequest(of: OpenGroup.Permissions.self)
+                    .fetchOne(db)
+            )
+            let blinded15Key: String? = SessionThread.getUserHexEncodedBlindedKey(
+                db,
+                threadId: threadId,
+                threadVariant: threadVariant,
+                blindingPrefix: .blinded15
+            )
+            let blinded25Key: String? = SessionThread.getUserHexEncodedBlindedKey(
+                db,
+                threadId: threadId,
+                threadVariant: threadVariant,
+                blindingPrefix: .blinded25
+            )
+            
+            return (
+                currentUserPublicKey,
+                initialUnreadInteractionInfo,
+                threadIsBlocked,
+                currentUserIsClosedGroupMember,
+                openGroupPermissions,
+                blinded15Key,
+                blinded25Key
+            )
+        }
         
         self.threadId = threadId
         self.initialThreadVariant = threadVariant
-        self.focusedInteractionId = targetInteractionId
+        self.focusedInteractionInfo = (focusedInteractionInfo ?? initialData?.initialUnreadInteractionInfo)
+        self.focusBehaviour = (focusedInteractionInfo == nil ? .none : .highlight)
+        self.initialUnreadInteractionId = initialData?.initialUnreadInteractionInfo?.id
+        self.threadData = SessionThreadViewModel(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            threadIsNoteToSelf: (initialData?.currentUserPublicKey == threadId),
+            threadIsBlocked: initialData?.threadIsBlocked,
+            currentUserIsClosedGroupMember: initialData?.currentUserIsClosedGroupMember,
+            openGroupPermissions: initialData?.openGroupPermissions
+        ).populatingCurrentUserBlindedKeys(
+            currentUserBlinded15PublicKeyForThisThread: initialData?.blinded15Key,
+            currentUserBlinded25PublicKeyForThisThread: initialData?.blinded25Key
+        )
         self.pagedDataObserver = nil
         
         // Note: Since this references self we need to finish initializing before setting it, we
@@ -82,44 +159,28 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         // distinct stutter)
         self.pagedDataObserver = self.setupPagedObserver(
             for: threadId,
-            userPublicKey: getUserHexEncodedPublicKey(),
-            blindedPublicKey: SessionThread.getUserHexEncodedBlindedKey(
-                threadId: threadId,
-                threadVariant: threadVariant
-            )
+            userPublicKey: (initialData?.currentUserPublicKey ?? getUserHexEncodedPublicKey()),
+            blinded15PublicKey: initialData?.blinded15Key,
+            blinded25PublicKey: initialData?.blinded25Key
         )
         
         // Run the initial query on a background thread so we don't block the push transition
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            // If we don't have a `initialFocusedId` then default to `.pageBefore` (it'll query
+            // If we don't have a `initialFocusedInfo` then default to `.pageBefore` (it'll query
             // from a `0` offset)
-            guard let initialFocusedId: Int64 = targetInteractionId else {
+            guard let initialFocusedInfo: Interaction.TimestampInfo = (focusedInteractionInfo ?? initialData?.initialUnreadInteractionInfo) else {
                 self?.pagedDataObserver?.load(.pageBefore)
                 return
             }
             
-            self?.pagedDataObserver?.load(.initialPageAround(id: initialFocusedId))
+            self?.pagedDataObserver?.load(.initialPageAround(id: initialFocusedInfo.id))
         }
     }
     
     // MARK: - Thread Data
     
     /// This value is the current state of the view
-    public private(set) lazy var threadData: SessionThreadViewModel = SessionThreadViewModel(
-        threadId: self.threadId,
-        threadVariant: self.initialThreadVariant,
-        currentUserIsClosedGroupMember: (self.initialThreadVariant != .closedGroup ?
-            nil :
-            Storage.shared.read { db in
-                try GroupMember
-                    .filter(GroupMember.Columns.groupId == self.threadId)
-                    .filter(GroupMember.Columns.profileId == getUserHexEncodedPublicKey(db))
-                    .filter(GroupMember.Columns.role == GroupMember.Role.standard)
-                    .isNotEmpty(db)
-            }
-        )
-    )
-    .populatingCurrentUserBlindedKey()
+    public private(set) var threadData: SessionThreadViewModel
     
     /// This is all the data the screen needs to populate itself, please see the following link for tips to help optimise
     /// performance https://github.com/groue/GRDB.swift#valueobservation-performance
@@ -131,9 +192,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     /// this is due to the behaviour of `ValueConcurrentObserver.asyncStartObservation` which triggers it's own
     /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
-    public lazy var observableThreadData: ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<SessionThreadViewModel?>>> = setupObservableThreadData(for: self.threadId)
+    public typealias ThreadObservation = ValueObservation<ValueReducers.Trace<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<SessionThreadViewModel?>>>>
+    public lazy var observableThreadData: ThreadObservation = setupObservableThreadData(for: self.threadId)
     
-    private func setupObservableThreadData(for threadId: String) -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<SessionThreadViewModel?>>> {
+    private func setupObservableThreadData(for threadId: String) -> ThreadObservation {
         return ValueObservation
             .trackingConstantRegion { [weak self] db -> SessionThreadViewModel? in
                 let userPublicKey: String = getUserHexEncodedPublicKey(db)
@@ -145,13 +207,15 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 return threadViewModel
                     .map { $0.with(recentReactionEmoji: recentReactionEmoji) }
                     .map { viewModel -> SessionThreadViewModel in
-                        viewModel.populatingCurrentUserBlindedKey(
+                        viewModel.populatingCurrentUserBlindedKeys(
                             db,
-                            currentUserBlindedPublicKeyForThisThread: self?.threadData.currentUserBlindedPublicKey
+                            currentUserBlinded15PublicKeyForThisThread: self?.threadData.currentUserBlinded15PublicKey,
+                            currentUserBlinded25PublicKeyForThisThread: self?.threadData.currentUserBlinded25PublicKey
                         )
                     }
             }
             .removeDuplicates()
+            .handleEvents(didFail: { SNLog("[ConversationViewModel] Observation failed with error: \($0)") })
     }
 
     public func updateThreadData(_ updatedData: SessionThreadViewModel) {
@@ -160,7 +224,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Interaction Data
     
-    private var lastInteractionIdMarkedAsRead: Int64?
+    private var lastInteractionIdMarkedAsRead: Int64? = nil
+    private var lastInteractionTimestampMsMarkedAsRead: Int64 = 0
     public private(set) var unobservedInteractionDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>)?
     public private(set) var interactionData: [SectionModel] = []
     public private(set) var reactionExpandedInteractionIds: Set<Int64> = []
@@ -170,14 +235,25 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         didSet {
             // When starting to observe interaction changes we want to trigger a UI update just in case the
             // data was changed while we weren't observing
-            if let unobservedInteractionDataChanges: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedInteractionDataChanges {
-                onInteractionChange?(unobservedInteractionDataChanges.0, unobservedInteractionDataChanges.1)
+            if let changes: ([SectionModel], StagedChangeset<[SectionModel]>) = self.unobservedInteractionDataChanges {
+                let performChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())? = onInteractionChange
+                
+                switch Thread.isMainThread {
+                    case true: performChange?(changes.0, changes.1)
+                    case false: DispatchQueue.main.async { performChange?(changes.0, changes.1) }
+                }
+                
                 self.unobservedInteractionDataChanges = nil
             }
         }
     }
     
-    private func setupPagedObserver(for threadId: String, userPublicKey: String, blindedPublicKey: String?) -> PagedDatabaseObserver<Interaction, MessageViewModel> {
+    private func setupPagedObserver(
+        for threadId: String,
+        userPublicKey: String,
+        blinded15PublicKey: String?,
+        blinded25PublicKey: String?
+    ) -> PagedDatabaseObserver<Interaction, MessageViewModel> {
         return PagedDatabaseObserver(
             pagedTable: Interaction.self,
             pageSize: ConversationViewModel.pageSize,
@@ -196,7 +272,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
                         let contact: TypedTableAlias<Contact> = TypedTableAlias()
                         
-                        return SQL("LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(interaction[.threadId])")
+                        return SQL("JOIN \(Contact.self) ON \(contact[.id]) = \(interaction[.threadId])")
                     }()
                 ),
                 PagedData.ObservedChanges(
@@ -206,7 +282,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
                         let profile: TypedTableAlias<Profile> = TypedTableAlias()
                         
-                        return SQL("LEFT JOIN \(Profile.self) ON \(profile[.id]) = \(interaction[.authorId])")
+                        return SQL("JOIN \(Profile.self) ON \(profile[.id]) = \(interaction[.authorId])")
                     }()
                 ),
                 PagedData.ObservedChanges(
@@ -225,7 +301,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             orderSQL: MessageViewModel.orderSQL,
             dataQuery: MessageViewModel.baseQuery(
                 userPublicKey: userPublicKey,
-                blindedPublicKey: blindedPublicKey,
+                blinded15PublicKey: blinded15PublicKey,
+                blinded25PublicKey: blinded25PublicKey,
                 orderSQL: MessageViewModel.orderSQL,
                 groupSQL: MessageViewModel.groupSQL
             ),
@@ -269,22 +346,40 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 )
             ],
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
+                self?.resolveOptimisticUpdates(with: updatedData)
+                
                 PagedData.processAndTriggerUpdates(
-                    updatedData: self?.process(data: updatedData, for: updatedPageInfo),
+                    updatedData: self?.process(
+                        data: updatedData,
+                        for: updatedPageInfo,
+                        optimisticMessages: (self?.optimisticallyInsertedMessages.wrappedValue.values)
+                            .map { $0.map { $0.messageViewModel } },
+                        initialUnreadInteractionId: self?.initialUnreadInteractionId
+                    ),
                     currentDataRetriever: { self?.interactionData },
                     onDataChange: self?.onInteractionChange,
                     onUnobservedDataChange: { updatedData, changeset in
-                        self?.unobservedInteractionDataChanges = (updatedData, changeset)
+                        self?.unobservedInteractionDataChanges = (changeset.isEmpty ?
+                            nil :
+                            (updatedData, changeset)
+                        )
                     }
                 )
             }
         )
     }
     
-    private func process(data: [MessageViewModel], for pageInfo: PagedData.PageInfo) -> [SectionModel] {
+    private func process(
+        data: [MessageViewModel],
+        for pageInfo: PagedData.PageInfo,
+        optimisticMessages: [MessageViewModel]?,
+        initialUnreadInteractionId: Int64?
+    ) -> [SectionModel] {
         let typingIndicator: MessageViewModel? = data.first(where: { $0.isTypingIndicator == true })
         let sortedData: [MessageViewModel] = data
-            .filter { $0.isTypingIndicator != true }
+            .filter { $0.id != MessageViewModel.optimisticUpdateId }    // Remove old optimistic updates
+            .appending(contentsOf: (optimisticMessages ?? []))          // Insert latest optimistic updates
+            .filter { !$0.cellType.isPostProcessed }                    // Remove headers and other
             .sorted { lhs, rhs -> Bool in lhs.timestampMs < rhs.timestampMs }
         
         // We load messages from newest to oldest so having a pageOffset larger than zero means
@@ -314,20 +409,31 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                                     cellViewModel.id == sortedData
                                         .filter {
                                             $0.authorId == threadData.currentUserPublicKey ||
-                                            $0.authorId == threadData.currentUserBlindedPublicKey
+                                            $0.authorId == threadData.currentUserBlinded15PublicKey ||
+                                            $0.authorId == threadData.currentUserBlinded25PublicKey
                                         }
                                         .last?
                                         .id
                                 ),
-                                currentUserBlindedPublicKey: threadData.currentUserBlindedPublicKey
+                                currentUserBlinded15PublicKey: threadData.currentUserBlinded15PublicKey,
+                                currentUserBlinded25PublicKey: threadData.currentUserBlinded25PublicKey
                             )
                         }
                         .reduce([]) { result, message in
+                            let updatedResult: [MessageViewModel] = result
+                                .appending(initialUnreadInteractionId == nil || message.id != initialUnreadInteractionId ?
+                                   nil :
+                                    MessageViewModel(
+                                        timestampMs: message.timestampMs,
+                                        cellType: .unreadMarker
+                                    )
+                            )
+                            
                             guard message.shouldShowDateHeader else {
-                                return result.appending(message)
+                                return updatedResult.appending(message)
                             }
                             
-                            return result
+                            return updatedResult
                                 .appending(
                                     MessageViewModel(
                                         timestampMs: message.timestampMs,
@@ -350,12 +456,185 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         self.interactionData = updatedData
     }
     
-    public func expandReactions(for interactionId: Int64) {
-        reactionExpandedInteractionIds.insert(interactionId)
+    // MARK: - Optimistic Message Handling
+    
+    public typealias OptimisticMessageData = (
+        id: UUID,
+        messageViewModel: MessageViewModel,
+        interaction: Interaction,
+        attachmentData: Attachment.PreparedData?,
+        linkPreviewDraft: LinkPreviewDraft?,
+        linkPreviewAttachment: Attachment?,
+        quoteModel: QuotedReplyModel?
+    )
+    
+    private var optimisticallyInsertedMessages: Atomic<[UUID: OptimisticMessageData]> = Atomic([:])
+    private var optimisticMessageAssociatedInteractionIds: Atomic<[Int64: UUID]> = Atomic([:])
+    
+    public func optimisticallyAppendOutgoingMessage(
+        text: String?,
+        sentTimestampMs: Int64,
+        attachments: [SignalAttachment]?,
+        linkPreviewDraft: LinkPreviewDraft?,
+        quoteModel: QuotedReplyModel?
+    ) -> OptimisticMessageData {
+        // Generate the optimistic data
+        let optimisticMessageId: UUID = UUID()
+        let currentUserProfile: Profile = Profile.fetchOrCreateCurrentUser()
+        let interaction: Interaction = Interaction(
+            threadId: threadData.threadId,
+            authorId: (threadData.currentUserBlinded15PublicKey ?? threadData.currentUserPublicKey),
+            variant: .standardOutgoing,
+            body: text,
+            timestampMs: sentTimestampMs,
+            hasMention: Interaction.isUserMentioned(
+                publicKeysToCheck: [
+                    threadData.currentUserPublicKey,
+                    threadData.currentUserBlinded15PublicKey,
+                    threadData.currentUserBlinded25PublicKey
+                ].compactMap { $0 },
+                body: text
+            ),
+            expiresInSeconds: threadData.disappearingMessagesConfiguration
+                .map { disappearingConfig in
+                    guard disappearingConfig.isEnabled else { return nil }
+
+                    return disappearingConfig.durationSeconds
+                },
+            linkPreviewUrl: linkPreviewDraft?.urlString
+        )
+        let optimisticAttachments: Attachment.PreparedData? = attachments
+            .map { Attachment.prepare(attachments: $0) }
+        let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
+            try? LinkPreview.generateAttachmentIfPossible(
+                imageData: draft.jpegImageData,
+                mimeType: OWSMimeTypeImageJpeg
+            )
+        }
+        
+        // Generate the actual 'MessageViewModel'
+        let messageViewModel: MessageViewModel = MessageViewModel(
+            optimisticMessageId: optimisticMessageId,
+            threadId: threadData.threadId,
+            threadVariant: threadData.threadVariant,
+            threadHasDisappearingMessagesEnabled: (threadData.disappearingMessagesConfiguration?.isEnabled ?? false),
+            threadOpenGroupServer: threadData.openGroupServer,
+            threadOpenGroupPublicKey: threadData.openGroupPublicKey,
+            threadContactNameInternal: threadData.threadContactName(),
+            timestampMs: interaction.timestampMs,
+            receivedAtTimestampMs: interaction.receivedAtTimestampMs,
+            authorId: interaction.authorId,
+            authorNameInternal: currentUserProfile.displayName(),
+            body: interaction.body,
+            expiresStartedAtMs: interaction.expiresStartedAtMs,
+            expiresInSeconds: interaction.expiresInSeconds,
+            isSenderOpenGroupModerator: OpenGroupManager.isUserModeratorOrAdmin(
+                threadData.currentUserPublicKey,
+                for: threadData.openGroupRoomToken,
+                on: threadData.openGroupServer
+            ),
+            currentUserProfile: currentUserProfile,
+            quote: quoteModel.map { model in
+                // Don't care about this optimistic quote (the proper one will be generated in the database)
+                Quote(
+                    interactionId: -1,    // Can't save to db optimistically
+                    authorId: model.authorId,
+                    timestampMs: model.timestampMs,
+                    body: model.body,
+                    attachmentId: model.attachment?.id
+                )
+            },
+            quoteAttachment: quoteModel?.attachment,
+            linkPreview: linkPreviewDraft.map { draft in
+                LinkPreview(
+                    url: draft.urlString,
+                    title: draft.title,
+                    attachmentId: nil    // Can't save to db optimistically
+                )
+            },
+            linkPreviewAttachment: linkPreviewAttachment,
+            attachments: optimisticAttachments?.attachments
+        )
+        let optimisticData: OptimisticMessageData = (
+            optimisticMessageId,
+            messageViewModel,
+            interaction,
+            optimisticAttachments,
+            linkPreviewDraft,
+            linkPreviewAttachment,
+            quoteModel
+        )
+        
+        optimisticallyInsertedMessages.mutate { $0[optimisticMessageId] = optimisticData }
+        forceUpdateDataIfPossible()
+        
+        return optimisticData
     }
     
-    public func collapseReactions(for interactionId: Int64) {
-        reactionExpandedInteractionIds.remove(interactionId)
+    public func failedToStoreOptimisticOutgoingMessage(id: UUID, error: Error) {
+        optimisticallyInsertedMessages.mutate {
+            $0[id] = $0[id].map {
+                (
+                    $0.id,
+                    $0.messageViewModel.with(
+                        state: .failed,
+                        mostRecentFailureText: "FAILED_TO_STORE_OUTGOING_MESSAGE".localized()
+                    ),
+                    $0.interaction,
+                    $0.attachmentData,
+                    $0.linkPreviewDraft,
+                    $0.linkPreviewAttachment,
+                    $0.quoteModel
+                )
+            }
+        }
+        
+        forceUpdateDataIfPossible()
+    }
+    
+    /// Record an association between an `optimisticMessageId` and a specific `interactionId`
+    public func associate(optimisticMessageId: UUID, to interactionId: Int64?) {
+        guard let interactionId: Int64 = interactionId else { return }
+        
+        optimisticMessageAssociatedInteractionIds.mutate { $0[interactionId] = optimisticMessageId }
+    }
+    
+    public func optimisticMessageData(for optimisticMessageId: UUID) -> OptimisticMessageData? {
+        return optimisticallyInsertedMessages.wrappedValue[optimisticMessageId]
+    }
+    
+    /// Remove any optimisticUpdate entries which have an associated interactionId in the provided data
+    private func resolveOptimisticUpdates(with data: [MessageViewModel]) {
+        let interactionIds: [Int64] = data.map { $0.id }
+        let idsToRemove: [UUID] = optimisticMessageAssociatedInteractionIds
+            .mutate { associatedIds in interactionIds.compactMap { associatedIds.removeValue(forKey: $0) } }
+        
+        optimisticallyInsertedMessages.mutate { messages in idsToRemove.forEach { messages.removeValue(forKey: $0) } }
+    }
+    
+    private func forceUpdateDataIfPossible() {
+        // If we can't get the current page data then don't bother trying to update (it's not going to work)
+        guard let currentPageInfo: PagedData.PageInfo = self.pagedDataObserver?.pageInfo.wrappedValue else { return }
+        
+        /// **MUST** have the same logic as in the 'PagedDataObserver.onChangeUnsorted' above
+        let currentData: [SectionModel] = (unobservedInteractionDataChanges?.0 ?? interactionData)
+        
+        PagedData.processAndTriggerUpdates(
+            updatedData: process(
+                data: (currentData.first(where: { $0.model == .messages })?.elements ?? []),
+                for: currentPageInfo,
+                optimisticMessages: optimisticallyInsertedMessages.wrappedValue.values.map { $0.messageViewModel },
+                initialUnreadInteractionId: initialUnreadInteractionId
+            ),
+            currentDataRetriever: { [weak self] in self?.interactionData },
+            onDataChange: self.onInteractionChange,
+            onUnobservedDataChange: { [weak self] updatedData, changeset in
+                self?.unobservedInteractionDataChanges = (changeset.isEmpty ?
+                    nil :
+                    (updatedData, changeset)
+                )
+            }
+        )
     }
     
     // MARK: - Mentions
@@ -367,7 +646,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             .read { db -> [MentionInfo] in
                 let userPublicKey: String = getUserHexEncodedPublicKey(db)
                 let pattern: FTS5Pattern? = try? SessionThreadViewModel.pattern(db, searchTerm: query, forTable: Profile.self)
-                let capabilities: Set<Capability.Variant> = (threadData.threadVariant != .openGroup ?
+                let capabilities: Set<Capability.Variant> = (threadData.threadVariant != .community ?
                     nil :
                     try? Capability
                         .select(.variant)
@@ -376,9 +655,9 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         .fetchSet(db)
                 )
                 .defaulting(to: [])
-                let targetPrefix: SessionId.Prefix = (capabilities.contains(.blind) ?
-                    .blinded :
-                    .standard
+                let targetPrefixes: [SessionId.Prefix] = (capabilities.contains(.blind) ?
+                    [.blinded15, .blinded25] :
+                    [.standard]
                 )
                 
                 return (try MentionInfo
@@ -386,7 +665,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         userPublicKey: userPublicKey,
                         threadId: threadData.threadId,
                         threadVariant: threadData.threadVariant,
-                        targetPrefix: targetPrefix,
+                        targetPrefixes: targetPrefixes,
                         pattern: pattern
                     )?
                     .fetchAll(db))
@@ -419,37 +698,53 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
-    /// This method will mark all interactions as read before the specified interaction id, if no id is provided then all interactions for
-    /// the thread will be marked as read
-    public func markAsRead(beforeInclusive interactionId: Int64?) {
+    /// This method marks a thread as read and depending on the target may also update the interactions within a thread as read
+    public func markAsRead(
+        target: SessionThreadViewModel.ReadTarget,
+        timestampMs: Int64?
+    ) {
         /// Since this method now gets triggered when scrolling we want to try to optimise it and avoid busying the database
         /// write queue when it isn't needed, in order to do this we:
+        /// - Throttle the updates to 100ms (quick enough that users shouldn't notice, but will help the DB when the user flings the list)
+        /// - Only mark interactions as read if they have newer `timestampMs` or `id` values (ie. were sent later or were more-recent
+        /// entries in the database), **Note:** Old messages will be marked as read upon insertion so shouldn't be an issue
         ///
-        ///   - Don't bother marking anything as read if there are no unread interactions (we can rely on the
-        ///     `threadData.threadUnreadCount` to always be accurate)
-        ///   - Don't bother marking anything as read if this was called with the same `interactionId` that we
-        ///     previously marked as read (ie. when scrolling and the last message hasn't changed)
-        guard
-            (self.threadData.threadUnreadCount ?? 0) > 0,
-            let targetInteractionId: Int64 = (interactionId ?? self.threadData.interactionId),
-            self.lastInteractionIdMarkedAsRead != targetInteractionId
-        else { return }
-        
-        let threadId: String = self.threadData.threadId
-        let threadVariant: SessionThread.Variant = self.threadData.threadVariant
-        let trySendReadReceipt: Bool = (self.threadData.threadIsMessageRequest == false)
-        self.lastInteractionIdMarkedAsRead = targetInteractionId
-        
-        Storage.shared.writeAsync { db in
-            try Interaction.markAsRead(
-                db,
-                interactionId: targetInteractionId,
-                threadId: threadId,
-                threadVariant: threadVariant,
-                includingOlder: true,
-                trySendReadReceipt: trySendReadReceipt
-            )
+        /// The `ThreadViewModel.markAsRead` method also tries to avoid marking as read if a conversation is already fully read
+        if markAsReadPublisher == nil {
+            markAsReadPublisher = markAsReadTrigger
+                .throttle(for: .milliseconds(100), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
+                .handleEvents(
+                    receiveOutput: { [weak self] target, timestampMs in
+                        switch target {
+                            case .thread: self?.threadData.markAsRead(target: target)
+                            case .threadAndInteractions(let interactionId):
+                                guard
+                                    timestampMs == nil ||
+                                    (self?.lastInteractionTimestampMsMarkedAsRead ?? 0) < (timestampMs ?? 0) ||
+                                    (self?.lastInteractionIdMarkedAsRead ?? 0) < (interactionId ?? 0)
+                                else {
+                                    self?.threadData.markAsRead(target: .thread)
+                                    return
+                                }
+                                
+                                // If we were given a timestamp then update the 'lastInteractionTimestampMsMarkedAsRead'
+                                // to avoid needless updates
+                                if let timestampMs: Int64 = timestampMs {
+                                    self?.lastInteractionTimestampMsMarkedAsRead = timestampMs
+                                }
+                                
+                                self?.lastInteractionIdMarkedAsRead = (interactionId ?? self?.threadData.interactionId)
+                                self?.threadData.markAsRead(target: target)
+                        }
+                    }
+                )
+                .map { _ in () }
+                .eraseToAnyPublisher()
+            
+            markAsReadPublisher?.sinkUntilComplete()
         }
+        
+        markAsReadTrigger.send((target, timestampMs))
     }
     
     public func swapToThread(updatedThreadId: String) {
@@ -465,7 +760,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         self.pagedDataObserver = self.setupPagedObserver(
             for: updatedThreadId,
             userPublicKey: getUserHexEncodedPublicKey(),
-            blindedPublicKey: nil
+            blinded15PublicKey: nil,
+            blinded25PublicKey: nil
         )
         
         // Try load everything up to the initial visible message, fallback to just the initial page of messages
@@ -515,12 +811,16 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         Storage.shared.writeAsync { db in
             try Contact
                 .filter(id: threadId)
-                .updateAll(db, Contact.Columns.isBlocked.set(to: false))
-        
-            try MessageSender
-                .syncConfiguration(db, forceSyncNow: true)
-                .retainUntilComplete()
+                .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
         }
+    }
+    
+    public func expandReactions(for interactionId: Int64) {
+        reactionExpandedInteractionIds.insert(interactionId)
+    }
+    
+    public func collapseReactions(for interactionId: Int64) {
+        reactionExpandedInteractionIds.remove(interactionId)
     }
     
     // MARK: - Audio Playback
@@ -624,6 +924,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         // Then setup the state for the new audio
         currentPlayingInteraction.mutate { $0 = viewModel.id }
         
+        let currentPlaybackTime: TimeInterval? = playbackInfo.wrappedValue[viewModel.id]?.progress
         audioPlayer.mutate { [weak self] player in
             // Note: We clear the delegate and explicitly set to nil here as when the OWSAudioPlayer
             // gets deallocated it triggers state changes which cause UI bugs when auto-playing
@@ -636,7 +937,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 delegate: self
             )
             audioPlayer.play()
-            audioPlayer.setCurrentTime(playbackInfo.wrappedValue[viewModel.id]?.progress ?? 0)
+            audioPlayer.setCurrentTime(currentPlaybackTime ?? 0)
             player = audioPlayer
         }
     }

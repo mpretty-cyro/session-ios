@@ -2,7 +2,6 @@
 
 import UIKit
 import AVFoundation
-import PromiseKit
 import SessionUIKit
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -87,13 +86,15 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         scanQRCodePlaceholderVC.constrainHeight(to: height)
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        Onboarding.Flow.register.unregister()
+    }
+    
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         tabBarTopConstraint.constant = navigationController!.navigationBar.height()
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - General
@@ -133,54 +134,37 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         dismiss(animated: true, completion: nil)
     }
     
-    func controller(_ controller: QRCodeScanningViewController, didDetectQRCodeWith string: String) {
+    func controller(_ controller: QRCodeScanningViewController, didDetectQRCodeWith string: String, onError: (() -> ())?) {
         let seed = Data(hex: string)
-        continueWithSeed(seed)
+        continueWithSeed(seed, onError: onError)
     }
     
-    func continueWithSeed(_ seed: Data) {
+    func continueWithSeed(_ seed: Data, onError: (() -> ())?) {
         if (seed.count != 16) {
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "invalid_recovery_phrase".localized(),
-                    explanation: "INVALID_RECOVERY_PHRASE_MESSAGE".localized(),
+                    body: .text("INVALID_RECOVERY_PHRASE_MESSAGE".localized()),
                     cancelTitle: "BUTTON_OK".localized(),
                     cancelStyle: .alert_text,
-                    afterClosed: { [weak self] in
-                        self?.scanQRCodeWrapperVC.startCapture()
-                    }
+                    afterClosed: onError
                 )
             )
             present(modal, animated: true)
             return
         }
         let (ed25519KeyPair, x25519KeyPair) = try! Identity.generate(from: seed)
-        Onboarding.Flow.link.preregister(with: seed, ed25519KeyPair: ed25519KeyPair, x25519KeyPair: x25519KeyPair)
         
-        Identity.didRegister()
+        Onboarding.Flow.link
+            .preregister(
+                with: seed,
+                ed25519KeyPair: ed25519KeyPair,
+                x25519KeyPair: x25519KeyPair
+            )
         
-        // Now that we have registered get the Snode pool
-        GetSnodePoolJob.run()
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(handleInitialConfigurationMessageReceived), name: .initialConfigurationMessageReceived, object: nil)
-        
-        ModalActivityIndicatorViewController
-            .present(
-                // There was some crashing here due to force-unwrapping so just falling back to
-                // using self if there is no nav controller
-                fromViewController: (self.navigationController ?? self)
-            ) { [weak self] modal in
-                self?.activityIndicatorModal = modal
-            }
-    }
-    
-    @objc private func handleInitialConfigurationMessageReceived(_ notification: Notification) {
-        DispatchQueue.main.async {
-            self.navigationController!.dismiss(animated: true) {
-                let pnModeVC = PNModeVC()
-                self.navigationController!.setViewControllers([ pnModeVC ], animated: true)
-            }
-        }
+            // Otherwise continue on to request push notifications permissions
+            let pnModeVC: PNModeVC = PNModeVC(flow: .link)
+            self.navigationController?.pushViewController(pnModeVC, animated: true)
     }
 }
 
@@ -321,19 +305,20 @@ private final class RecoveryPhraseVC: UIViewController {
                 targetView: self.view,
                 info: ConfirmationModal.Info(
                     title: title,
-                    explanation: message,
+                    body: .text(message),
                     cancelTitle: "BUTTON_OK".localized(),
                     cancelStyle: .alert_text
                 )
             )
             self.present(modal, animated: true)
         }
-        let mnemonic = mnemonicTextView.text!.lowercased()
+        
         do {
+            let mnemonic = (mnemonicTextView.text ?? "").lowercased()
             let hexEncodedSeed = try Mnemonic.decode(mnemonic: mnemonic)
             let seed = Data(hex: hexEncodedSeed)
             mnemonicTextView.resignFirstResponder()
-            linkDeviceVC.continueWithSeed(seed)
+            linkDeviceVC.continueWithSeed(seed, onError: nil)
         } catch let error {
             let error = error as? Mnemonic.DecodingError ?? Mnemonic.DecodingError.generic
             showError(title: error.errorDescription!)

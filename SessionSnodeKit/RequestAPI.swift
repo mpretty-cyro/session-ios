@@ -50,7 +50,7 @@ public enum RequestAPI: RequestAPIType {
         case direct
         case onionAndLokiComparison
         
-        public static let defaultLayer: NetworkLayer = .onionRequest
+        public static let defaultLayer: NetworkLayer = .onionAndLokiComparison
         
         public var name: String {
             switch self {

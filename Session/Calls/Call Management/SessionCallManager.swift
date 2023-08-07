@@ -4,6 +4,8 @@ import UIKit
 import CallKit
 import GRDB
 import SessionMessagingKit
+import SignalCoreKit
+import SignalUtilitiesKit
 
 public final class SessionCallManager: NSObject, CallManagerProtocol {
     let provider: CXProvider?
@@ -186,7 +188,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         if CurrentAppContext().isInBackground() {
             // Stop all jobs except for message sending and when completed suspend the database
             JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend) {
-                NotificationCenter.default.post(name: Database.suspendNotification, object: self)
+                Storage.suspendDatabaseAccess()
             }
         }
     }
@@ -205,9 +207,9 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
                 return
             }
             
-            guard CurrentAppContext().isMainAppAndActive else { return }
-            
             DispatchQueue.main.async {
+                guard CurrentAppContext().isMainAppAndActive else { return }
+                
                 guard let presentingVC = CurrentAppContext().frontmostViewController() else {
                     preconditionFailure()   // FIXME: Handle more gracefully
                 }

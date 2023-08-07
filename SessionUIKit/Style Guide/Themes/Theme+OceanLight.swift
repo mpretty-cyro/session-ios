@@ -48,6 +48,9 @@ internal enum Theme_OceanLight: ThemeColors {
         .radioButton_unselectedBackground: .clear,
         .radioButton_selectedBorder: .oceanLight1,
         .radioButton_unselectedBorder: .oceanLight3,
+        .radioButton_disabledSelectedBackground: .disabledLight,
+        .radioButton_disabledUnselectedBackground: .clear,
+        .radioButton_disabledBorder: .disabledLight,
         
         // SessionButton
         .sessionButton_text: .oceanLight1,
@@ -66,6 +69,7 @@ internal enum Theme_OceanLight: ThemeColors {
         .solidButton_background: .oceanLight5,
         
         // Settings
+        .settings_tertiaryAction: .oceanLight1,
         .settings_tabBackground: .oceanLight6,
         
         // Appearance
@@ -86,6 +90,7 @@ internal enum Theme_OceanLight: ThemeColors {
         .conversationButton_swipeDestructive: .dangerLight,
         .conversationButton_swipeSecondary: .oceanLight2,
         .conversationButton_swipeTertiary: Theme.PrimaryColor.orange.color,
+        .conversationButton_swipeRead: .primary,
         
         // InputButton
         .inputButton_background: .oceanLight5,
@@ -105,6 +110,14 @@ internal enum Theme_OceanLight: ThemeColors {
         .reactions_contextMoreBackground: .oceanLight6,
         
         // NewConversation
-        .newConversation_background: .oceanLight7
+        .newConversation_background: .oceanLight7,
+        
+        // Profile
+        .profileIcon: .primary,
+        .profileIcon_greenPrimaryColor: .primary,
+        .profileIcon_background: .oceanLight1,
+        
+        // Unread Marker
+        .unreadMarker: .black
     ]
 }

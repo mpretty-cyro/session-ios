@@ -368,10 +368,12 @@ final class ReactionListSheet: BaseVC {
         dismiss(animated: true, completion: nil)
     }
     
-    @objc private func clearAllTapped() {
+    @objc private func clearAllTapped() { clearAll() }
+    
+    private func clearAll(using dependencies: Dependencies = Dependencies()) {
         guard let selectedReaction: EmojiWithSkinTones = self.reactionSummaries.first(where: { $0.isSelected })?.emoji else { return }
         
-        delegate?.removeAllReactions(messageViewModel, for: selectedReaction.rawValue)
+        delegate?.removeAllReactions(messageViewModel, for: selectedReaction.rawValue, using: dependencies)
     }
 }
 
@@ -431,7 +433,8 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
         cell.update(
             with: SessionCell.Info(
                 id: cellViewModel,
-                leftAccessory: .profile(authorId, cellViewModel.profile),
+                position: Position.with(indexPath.row, count: self.selectedReactionUserList.count),
+                leftAccessory: .profile(id: authorId, profile: cellViewModel.profile),
                 title: (
                     cellViewModel.profile?.displayName() ??
                     Profile.truncated(
@@ -446,10 +449,9 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
                         size: .fit
                     )
                 ),
+                styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge),
                 isEnabled: (authorId == self.messageViewModel.currentUserPublicKey)
-            ),
-            style: .edgeToEdge,
-            position: Position.with(indexPath.row, count: self.selectedReactionUserList.count)
+            )
         )
         
         return cell
@@ -599,7 +601,13 @@ extension ReactionListSheet {
 // MARK: - Delegate
 
 protocol ReactionDelegate: AnyObject {
-    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones)
-    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones)
-    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String)
+    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones, using dependencies: Dependencies)
+    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones, using dependencies: Dependencies)
+    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String, using dependencies: Dependencies)
+}
+
+extension ReactionDelegate {
+    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones) {
+        removeReact(cellViewModel, for: emoji, using: Dependencies())
+    }
 }

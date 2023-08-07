@@ -2,13 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>BuildDetails</key>
-	<dict>
-		<key>CarthageVersion</key>
-		<string>0.36.0</string>
-		<key>OSXVersion</key>
-		<string>10.15.6</string>
-	</dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -64,6 +57,8 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
 			<key>public.loki.foundation</key>
@@ -97,21 +92,19 @@
 		</dict>
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>Signal needs to use Apple Music to play media attachments.</string>
+	<string>Session needs to use Apple Music to play media attachments.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Session needs camera access to take pictures and scan QR codes.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Signal uses your contacts to find users you know. We do not store your contacts on the server.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Session's Screen Lock feature uses Face ID.</string>
+	<string>Session&apos;s Screen Lock feature uses Face ID.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>com.loki-project.loki-messenger</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Session needs access to your microphone to record media.</string>
+	<string>Session needs access to your microphone for calls and to send to audio messages.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Session needs access to your library to save photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Session needs access to your library to send photos.</string>
+	<string>Session needs access to your library to update your avatar and send photos.</string>
 	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
 	<true/>
 	<key>UIAppFonts</key>
@@ -162,6 +155,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>

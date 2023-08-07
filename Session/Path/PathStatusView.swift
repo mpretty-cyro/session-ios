@@ -4,6 +4,7 @@ import UIKit
 import Reachability
 import SessionUIKit
 import SessionSnodeKit
+import SessionMessagingKit
 
 final class PathStatusView: UIView {
     enum Size {
@@ -62,9 +63,9 @@ final class PathStatusView: UIView {
     
     // MARK: - Initialization
     
-    public let size: Size
+    private let size: Size
     private let networkLayer: RequestAPI.NetworkLayer
-    private let reachability: Reachability = Reachability.forInternetConnection()
+    private let reachability: Reachability? = Environment.shared?.reachabilityManager.reachability
     
     init(size: Size = .small, networkLayer: RequestAPI.NetworkLayer) {
         self.size = size
@@ -119,11 +120,11 @@ final class PathStatusView: UIView {
         }
         
         // For the settings view we want to change the path colour to gray if it's not currently active
-        switch (networkLayer != currentLayer, reachability.isReachable(), OnionRequestAPI.paths.isEmpty) {
+        switch (networkLayer != currentLayer, reachability?.isReachable(), OnionRequestAPI.paths.isEmpty) {
             case (true, _, _): setStatus(to: .unknown)
-            case (_, false, _): setStatus(to: .error)
-            case (_, true, true): setStatus(to: .connecting)
-            case (_, true, false): setStatus(to: .connected)
+            case (_, .some(false), _), (nil, _): setStatus(to: .error)
+            case (_, .some(true), true): setStatus(to: .connecting)
+            case (_, .some(true), false): setStatus(to: .connected)
         }
     }
     
@@ -215,6 +216,11 @@ final class PathStatusView: UIView {
     }
 
     @objc private func handleBuildingPathsNotification() {
+        guard reachability?.isReachable() == true else {
+            setStatus(to: .error)
+            return
+        }
+        
         let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
             .defaulting(to: .defaultLayer)
         
@@ -233,7 +239,7 @@ final class PathStatusView: UIView {
     }
 
     @objc private func handlePathsBuiltNotification() {
-        guard reachability.isReachable() else {
+        guard reachability?.isReachable() == true  else {
             setStatus(to: .error)
             return
         }
@@ -320,7 +326,7 @@ final class PathStatusView: UIView {
             return
         }
         
-        guard reachability.isReachable() else {
+        guard reachability?.isReachable() == true else {
             setStatus(to: .error)
             return
         }

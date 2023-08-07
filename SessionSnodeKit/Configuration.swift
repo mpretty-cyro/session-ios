@@ -1,10 +1,11 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import GRDB
 import SessionUtilitiesKit
 
-public enum SNSnodeKit { // Just to make the external API nice
-    public static func migrations() -> TargetMigrations {
+public enum SNSnodeKit: MigratableTarget { // Just to make the external API nice
+    public static func migrations(_ db: Database) -> TargetMigrations {
         return TargetMigrations(
             identifier: .snodeKit,
             migrations: [
@@ -17,13 +18,14 @@ public enum SNSnodeKit { // Just to make the external API nice
                 ],
                 [
                     _004_FlagMessageHashAsDeletedOrInvalid.self
-                ]
+                ],
+                []  // Add job priorities
             ]
         )
     }
 
     public static func configure() {
         // Configure the job executors
-        JobRunner.add(executor: GetSnodePoolJob.self, for: .getSnodePool)
+        JobRunner.setExecutor(GetSnodePoolJob.self, for: .getSnodePool)
     }
 }

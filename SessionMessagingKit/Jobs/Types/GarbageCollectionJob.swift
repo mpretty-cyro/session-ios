@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import PromiseKit
 import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -21,9 +20,10 @@ public enum GarbageCollectionJob: JobExecutor {
     public static func run(
         _ job: Job,
         queue: DispatchQueue,
-        success: @escaping (Job, Bool) -> (),
-        failure: @escaping (Job, Error?, Bool) -> (),
-        deferred: @escaping (Job) -> ()
+        success: @escaping (Job, Bool, Dependencies) -> (),
+        failure: @escaping (Job, Error?, Bool, Dependencies) -> (),
+        deferred: @escaping (Job, Dependencies) -> (),
+        using dependencies: Dependencies
     ) {
         /// Determine what types of data we want to collect (if we didn't provide any then assume we want to collect everything)
         ///
@@ -33,18 +33,18 @@ public enum GarbageCollectionJob: JobExecutor {
             .map { try? JSONDecoder().decode(Details.self, from: $0) }?
             .typesToCollect)
             .defaulting(to: Types.allCases)
-        let timestampNow: TimeInterval = Date().timeIntervalSince1970
+        let timestampNow: TimeInterval = dependencies.dateNow.timeIntervalSince1970
         
         /// Only do a full collection if the job isn't the recurring one or it's been 23 hours since it last ran (23 hours so a user who opens the
         /// app at about the same time every day will trigger the garbage collection) - since this runs when the app becomes active we
         /// want to prevent it running to frequently (the app becomes active if a system alert, the notification center or the control panel
         /// are shown)
-        let lastGarbageCollection: Date = UserDefaults.standard[.lastGarbageCollection]
+        let lastGarbageCollection: Date = dependencies.standardUserDefaults[.lastGarbageCollection]
             .defaulting(to: Date.distantPast)
         let finalTypesToCollect: Set<Types> = {
             guard
                 job.behaviour != .recurringOnActive ||
-                Date().timeIntervalSince(lastGarbageCollection) > (23 * 60 * 60)
+                dependencies.dateNow.timeIntervalSince(lastGarbageCollection) > (23 * 60 * 60)
             else {
                 // Note: This should only contain the `Types` which are unlikely to ever cause
                 // a startup delay (ie. avoid mass deletions and file management)
@@ -57,7 +57,7 @@ public enum GarbageCollectionJob: JobExecutor {
             return typesToCollect.asSet()
         }()
         
-        Storage.shared.writeAsync(
+        dependencies.storage.writeAsync(
             updates: { db in
                 /// Remove any typing indicators
                 if finalTypesToCollect.contains(.threadTypingIndicators) {
@@ -85,7 +85,7 @@ public enum GarbageCollectionJob: JobExecutor {
                             SELECT \(interaction.alias[Column.rowID])
                             FROM \(Interaction.self)
                             JOIN \(SessionThread.self) ON (
-                                \(SQL("\(thread[.variant]) = \(SessionThread.Variant.openGroup)")) AND
+                                \(SQL("\(thread[.variant]) = \(SessionThread.Variant.community)")) AND
                                 \(thread[.id]) = \(interaction[.threadId])
                             )
                             JOIN (
@@ -117,6 +117,8 @@ public enum GarbageCollectionJob: JobExecutor {
                             LEFT JOIN \(SessionThread.self) ON \(thread[.id]) = \(job[.threadId])
                             LEFT JOIN \(Interaction.self) ON \(interaction[.id]) = \(job[.interactionId])
                             WHERE (
+                                -- Never delete config sync jobs, even if their threads were deleted
+                                \(SQL("\(job[.variant]) != \(Job.Variant.configurationSync)")) AND
                                 (
                                     \(job[.threadId]) IS NOT NULL AND
                                     \(thread[.id]) IS NULL
@@ -295,6 +297,34 @@ public enum GarbageCollectionJob: JobExecutor {
                         .filter(PendingReadReceipt.Columns.serverExpirationTimestamp <= timestampNow)
                         .deleteAll(db)
                 }
+                
+                if finalTypesToCollect.contains(.shadowThreads) {
+                    // Shadow threads are thread records which were created to start a conversation that
+                    // didn't actually get turned into conversations (ie. the app was closed or crashed
+                    // before the user sent a message)
+                    let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
+                    let contact: TypedTableAlias<Contact> = TypedTableAlias()
+                    let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
+                    let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
+                    
+                    try db.execute(literal: """
+                        DELETE FROM \(SessionThread.self)
+                        WHERE \(Column.rowID) IN (
+                            SELECT \(thread.alias[Column.rowID])
+                            FROM \(SessionThread.self)
+                            LEFT JOIN \(Contact.self) ON \(contact[.id]) = \(thread[.id])
+                            LEFT JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(thread[.id])
+                            LEFT JOIN \(ClosedGroup.self) ON \(closedGroup[.threadId]) = \(thread[.id])
+                            WHERE (
+                                \(contact[.id]) IS NULL AND
+                                \(openGroup[.threadId]) IS NULL AND
+                                \(closedGroup[.threadId]) IS NULL AND
+                                \(thread[.shouldBeVisible]) = false AND
+                                \(SQL("\(thread[.id]) != \(getUserHexEncodedPublicKey(db))"))
+                            )
+                        )
+                    """)
+                }
             },
             completion: { _, _ in
                 // Dispatch async so we can swap from the write queue to a read one (we are done writing)
@@ -339,7 +369,7 @@ public enum GarbageCollectionJob: JobExecutor {
                     
                     // If we couldn't get the file lists then fail (invalid state and don't want to delete all attachment/profile files)
                     guard let fileInfo: FileInfo = maybeFileInfo else {
-                        failure(job, StorageError.generic, false)
+                        failure(job, StorageError.generic, false, dependencies)
                         return
                     }
                         
@@ -414,17 +444,17 @@ public enum GarbageCollectionJob: JobExecutor {
                     
                     // Report a single file deletion as a job failure (even if other content was successfully removed)
                     guard deletionErrors.isEmpty else {
-                        failure(job, (deletionErrors.first ?? StorageError.generic), false)
+                        failure(job, (deletionErrors.first ?? StorageError.generic), false, dependencies)
                         return
                     }
                     
                     // If we did a full collection then update the 'lastGarbageCollection' date to
                     // prevent a full collection from running again in the next 23 hours
-                    if job.behaviour == .recurringOnActive && Date().timeIntervalSince(lastGarbageCollection) > (23 * 60 * 60) {
-                        UserDefaults.standard[.lastGarbageCollection] = Date()
+                    if job.behaviour == .recurringOnActive && dependencies.dateNow.timeIntervalSince(lastGarbageCollection) > (23 * 60 * 60) {
+                        dependencies.standardUserDefaults[.lastGarbageCollection] = dependencies.dateNow
                     }
                     
-                    success(job, false)
+                    success(job, false, dependencies)
                 }
             }
         )
@@ -449,6 +479,7 @@ extension GarbageCollectionJob {
         case orphanedAttachmentFiles
         case orphanedProfileAvatars
         case expiredPendingReadReceipts
+        case shadowThreads
     }
     
     public struct Details: Codable {

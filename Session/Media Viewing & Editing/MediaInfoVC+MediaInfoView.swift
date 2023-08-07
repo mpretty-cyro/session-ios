@@ -3,6 +3,8 @@
 import UIKit
 import SessionUIKit
 import SessionUtilitiesKit
+import SessionMessagingKit
+import SignalUtilitiesKit
 
 extension MediaInfoVC {
     final class MediaInfoView: UIView {
@@ -170,6 +172,7 @@ extension MediaInfoVC {
         }
         
         // MARK: - Interaction
+        
         public func update(attachment: Attachment?) {
             guard let attachment: Attachment = attachment else { return }
             
@@ -177,7 +180,7 @@ extension MediaInfoVC {
             
             fileIdLabel.text = attachment.serverId
             fileTypeLabel.text = attachment.contentType
-            fileSizeLabel.text = OWSFormat.formatFileSize(attachment.byteCount)
+            fileSizeLabel.text = Format.fileSize(attachment.byteCount)
             resolutionLabel.text = {
                 guard let width = attachment.width, let height = attachment.height else { return "N/A" }
                 return "\(width)×\(height)"

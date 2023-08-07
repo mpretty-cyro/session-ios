@@ -1,88 +1,95 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
-import PromiseKit
 import SessionUtilitiesKit
 
 public enum SendReadReceiptsJob: JobExecutor {
     public static let maxFailureCount: Int = -1
     public static let requiresThreadId: Bool = false
     public static let requiresInteractionId: Bool = false
-    private static let minRunFrequency: TimeInterval = 3
+    private static let maxRunFrequency: TimeInterval = 3
     
     public static func run(
         _ job: Job,
         queue: DispatchQueue,
-        success: @escaping (Job, Bool) -> (),
-        failure: @escaping (Job, Error?, Bool) -> (),
-        deferred: @escaping (Job) -> ()
+        success: @escaping (Job, Bool, Dependencies) -> (),
+        failure: @escaping (Job, Error?, Bool, Dependencies) -> (),
+        deferred: @escaping (Job, Dependencies) -> (),
+        using dependencies: Dependencies
     ) {
         guard
             let threadId: String = job.threadId,
             let detailsData: Data = job.details,
             let details: Details = try? JSONDecoder().decode(Details.self, from: detailsData)
         else {
-            failure(job, JobRunnerError.missingRequiredDetails, true)
-            return
+            return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
         // If there are no timestampMs values then the job can just complete (next time
         // something is marked as read we want to try and run immediately so don't scuedule
         // another run in this case)
         guard !details.timestampMsValues.isEmpty else {
-            success(job, true)
-            return
+            return success(job, true, dependencies)
         }
         
-        Storage.shared
-            .writeAsync { db in
-                try MessageSender.sendImmediate(
+        dependencies.storage
+            .writePublisher { db in
+                try MessageSender.preparedSendData(
                     db,
                     message: ReadReceipt(
                         timestamps: details.timestampMsValues.map { UInt64($0) }
                     ),
                     to: details.destination,
+                    namespace: details.destination.defaultNamespace,
                     interactionId: nil,
                     isSyncMessage: false
                 )
             }
-            .done(on: queue) {
-                // When we complete the 'SendReadReceiptsJob' we want to immediately schedule
-                // another one for the same thread but with a 'nextRunTimestamp' set to the
-                // 'minRunFrequency' value to throttle the read receipt requests
-                var shouldFinishCurrentJob: Bool = false
-                let nextRunTimestamp: TimeInterval = (Date().timeIntervalSince1970 + minRunFrequency)
-                
-                let updatedJob: Job? = Storage.shared.write { db in
-                    // If another 'sendReadReceipts' job was scheduled then update that one
-                    // to run at 'nextRunTimestamp' and make the current job stop
-                    if
-                        let existingJob: Job = try? Job
-                            .filter(Job.Columns.id != job.id)
-                            .filter(Job.Columns.variant == Job.Variant.sendReadReceipts)
-                            .filter(Job.Columns.threadId == threadId)
-                            .fetchOne(db),
-                        !JobRunner.isCurrentlyRunning(existingJob)
-                    {
-                        _ = try existingJob
-                            .with(nextRunTimestamp: nextRunTimestamp)
-                            .saved(db)
-                        shouldFinishCurrentJob = true
-                        return job
+            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+            .subscribe(on: queue)
+            .receive(on: queue)
+            .sinkUntilComplete(
+                receiveCompletion: { result in
+                    switch result {
+                        case .failure(let error): failure(job, error, false, dependencies)
+                        case .finished:
+                            // When we complete the 'SendReadReceiptsJob' we want to immediately schedule
+                            // another one for the same thread but with a 'nextRunTimestamp' set to the
+                            // 'maxRunFrequency' value to throttle the read receipt requests
+                            var shouldFinishCurrentJob: Bool = false
+                            let nextRunTimestamp: TimeInterval = (dependencies.dateNow.timeIntervalSince1970 + maxRunFrequency)
+                            
+                            let updatedJob: Job? = Storage.shared.write { db in
+                                // If another 'sendReadReceipts' job was scheduled then update that one
+                                // to run at 'nextRunTimestamp' and make the current job stop
+                                if
+                                    let existingJob: Job = try? Job
+                                        .filter(Job.Columns.id != job.id)
+                                        .filter(Job.Columns.variant == Job.Variant.sendReadReceipts)
+                                        .filter(Job.Columns.threadId == threadId)
+                                        .fetchOne(db),
+                                    !JobRunner.isCurrentlyRunning(existingJob)
+                                {
+                                    _ = try existingJob
+                                        .with(nextRunTimestamp: nextRunTimestamp)
+                                        .saved(db)
+                                    shouldFinishCurrentJob = true
+                                    return job
+                                }
+                                
+                                return try job
+                                    .with(details: Details(destination: details.destination, timestampMsValues: []))
+                                    .defaulting(to: job)
+                                    .with(nextRunTimestamp: nextRunTimestamp)
+                                    .saved(db)
+                            }
+                            
+                            success(updatedJob ?? job, shouldFinishCurrentJob, dependencies)
                     }
-                    
-                    return try job
-                        .with(details: Details(destination: details.destination, timestampMsValues: []))
-                        .defaulting(to: job)
-                        .with(nextRunTimestamp: nextRunTimestamp)
-                        .saved(db)
                 }
-                
-                success(updatedJob ?? job, shouldFinishCurrentJob)
-            }
-            .catch(on: queue) { error in failure(job, error, false) }
-            .retainUntilComplete()
+            )
     }
 }
 

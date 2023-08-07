@@ -48,6 +48,9 @@ internal enum Theme_ClassicDark: ThemeColors {
         .radioButton_unselectedBackground: .clear,
         .radioButton_selectedBorder: .classicDark6,
         .radioButton_unselectedBorder: .classicDark6,
+        .radioButton_disabledSelectedBackground: .disabledDark,
+        .radioButton_disabledUnselectedBackground: .clear,
+        .radioButton_disabledBorder: .disabledDark,
         
         // SessionButton
         .sessionButton_text: .primary,
@@ -66,6 +69,7 @@ internal enum Theme_ClassicDark: ThemeColors {
         .solidButton_background: .classicDark3,
         
         // Settings
+        .settings_tertiaryAction: .primary,
         .settings_tabBackground: .classicDark1,
         
         // Appearance
@@ -86,6 +90,7 @@ internal enum Theme_ClassicDark: ThemeColors {
         .conversationButton_swipeDestructive: .dangerDark,
         .conversationButton_swipeSecondary: .classicDark2,
         .conversationButton_swipeTertiary: Theme.PrimaryColor.orange.color,
+        .conversationButton_swipeRead: .classicDark3,
         
         // InputButton
         .inputButton_background: .classicDark2,
@@ -105,6 +110,14 @@ internal enum Theme_ClassicDark: ThemeColors {
         .reactions_contextMoreBackground: .classicDark1,
         
         // NewConversation
-        .newConversation_background: .classicDark1
+        .newConversation_background: .classicDark1,
+        
+        // Profile
+        .profileIcon: .primary,
+        .profileIcon_greenPrimaryColor: .black,
+        .profileIcon_background: .white,
+        
+        // Unread Marker
+        .unreadMarker: .primary
     ]
 }

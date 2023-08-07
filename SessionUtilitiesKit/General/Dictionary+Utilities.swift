@@ -36,7 +36,7 @@ public extension Dictionary {
     
     func getting(_ key: Key?) -> Value? {
         guard let key: Key = key else { return nil }
-
+        
         return self[key]
     }
     
@@ -66,5 +66,19 @@ public extension Dictionary {
         updatedDictionary.removeValue(forKey: key)
 
         return updatedDictionary
+    }
+    
+    mutating func append<T>(_ value: T?, toArrayOn key: Key?) where Value == [T] {
+        guard let key: Key = key, let value: T = value else { return }
+        
+        self[key] = (self[key] ?? []).appending(value)
+    }
+}
+
+extension Dictionary where Value == Array<() -> Void> {
+    mutating func appendTo(_ key: Key?, _ value: @escaping () -> Void) {
+        guard let key: Key = key else { return }
+        
+        self[key] = (self[key] ?? []).appending(value)
     }
 }

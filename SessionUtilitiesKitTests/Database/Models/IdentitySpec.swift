@@ -16,10 +16,10 @@ class IdentitySpec: QuickSpec {
         
         describe("an Identity") {
             beforeEach {
-                mockStorage = Storage(
+                mockStorage = SynchronousStorage(
                     customWriter: try! DatabaseQueue(),
-                    customMigrations: [
-                        SNUtilitiesKit.migrations()
+                    customMigrationTargets: [
+                        SNUtilitiesKit.self
                     ]
                 )
             }

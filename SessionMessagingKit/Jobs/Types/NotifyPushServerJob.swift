@@ -1,7 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import PromiseKit
+import Combine
 import SessionSnodeKit
 import SessionUtilitiesKit
 
@@ -13,28 +13,35 @@ public enum NotifyPushServerJob: JobExecutor {
     public static func run(
         _ job: Job,
         queue: DispatchQueue,
-        success: @escaping (Job, Bool) -> (),
-        failure: @escaping (Job, Error?, Bool) -> (),
-        deferred: @escaping (Job) -> ()
+        success: @escaping (Job, Bool, Dependencies) -> (),
+        failure: @escaping (Job, Error?, Bool, Dependencies) -> (),
+        deferred: @escaping (Job, Dependencies) -> (),
+        using dependencies: Dependencies
     ) {
         guard
             let detailsData: Data = job.details,
             let details: Details = try? JSONDecoder().decode(Details.self, from: detailsData)
         else {
-            failure(job, JobRunnerError.missingRequiredDetails, true)
-            return
+            SNLog("[NotifyPushServerJob] Failing due to missing details")
+            return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
         PushNotificationAPI
             .notify(
                 recipient: details.message.recipient,
                 with: details.message.data,
-                maxRetryCount: 4,
-                queue: queue
+                maxRetryCount: 4
             )
-            .done(on: queue) { _ in success(job, false) }
-            .catch(on: queue) { error in failure(job, error, false) }
-            .retainUntilComplete()
+            .subscribe(on: queue)
+            .receive(on: queue)
+            .sinkUntilComplete(
+                receiveCompletion: { result in
+                    switch result {
+                        case .finished: success(job, false, dependencies)
+                        case .failure(let error): failure(job, error, false, dependencies)
+                    }
+                }
+            )
     }
 }
 

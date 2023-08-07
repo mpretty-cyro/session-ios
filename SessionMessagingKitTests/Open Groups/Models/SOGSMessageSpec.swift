@@ -16,9 +16,8 @@ class SOGSMessageSpec: QuickSpec {
             var messageJson: String!
             var messageData: Data!
             var decoder: JSONDecoder!
-            var mockSign: MockSign!
-            var mockEd25519: MockEd25519!
-            var dependencies: SMKDependencies!
+            var mockCrypto: MockCrypto!
+            var dependencies: Dependencies!
             
             beforeEach {
                 messageJson = """
@@ -35,18 +34,16 @@ class SOGSMessageSpec: QuickSpec {
                 }
                 """
                 messageData = messageJson.data(using: .utf8)!
-                mockSign = MockSign()
-                mockEd25519 = MockEd25519()
-                dependencies = SMKDependencies(
-                    sign: mockSign,
-                    ed25519: mockEd25519
+                mockCrypto = MockCrypto()
+                dependencies = Dependencies(
+                    crypto: mockCrypto
                 )
                 decoder = JSONDecoder()
                 decoder.userInfo = [ Dependencies.userInfoKey: dependencies as Any ]
             }
             
             afterEach {
-                mockSign = nil
+                mockCrypto = nil
             }
             
             context("when decoding") {
@@ -106,7 +103,7 @@ class SOGSMessageSpec: QuickSpec {
                         expect {
                             try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                         }
-                        .to(throwError(HTTP.Error.parsingFailed))
+                        .to(throwError(HTTPError.parsingFailed))
                     }
                     
                     it("errors if the data is not a base64 encoded string") {
@@ -128,7 +125,7 @@ class SOGSMessageSpec: QuickSpec {
                         expect {
                             try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                         }
-                        .to(throwError(HTTP.Error.parsingFailed))
+                        .to(throwError(HTTPError.parsingFailed))
                     }
                     
                     it("errors if the signature is not a base64 encoded string") {
@@ -150,7 +147,7 @@ class SOGSMessageSpec: QuickSpec {
                         expect {
                             try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                         }
-                        .to(throwError(HTTP.Error.parsingFailed))
+                        .to(throwError(HTTPError.parsingFailed))
                     }
                     
                     it("errors if the dependencies are not provided to the JSONDecoder") {
@@ -159,7 +156,7 @@ class SOGSMessageSpec: QuickSpec {
                         expect {
                             try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                         }
-                        .to(throwError(HTTP.Error.parsingFailed))
+                        .to(throwError(HTTPError.parsingFailed))
                     }
                     
                     it("errors if the session_id value is not valid") {
@@ -181,7 +178,7 @@ class SOGSMessageSpec: QuickSpec {
                         expect {
                             try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                         }
-                        .to(throwError(HTTP.Error.parsingFailed))
+                        .to(throwError(HTTPError.parsingFailed))
                     }
                     
                     
@@ -204,8 +201,10 @@ class SOGSMessageSpec: QuickSpec {
                         }
                         
                         it("succeeds if it succeeds verification") {
-                            mockSign
-                                .when { $0.verify(message: anyArray(), publicKey: anyArray(), signature: anyArray()) }
+                            mockCrypto
+                                .when {
+                                    $0.verify(.signature(message: anyArray(), publicKey: anyArray(), signature: anyArray()))
+                                }
                                 .thenReturn(true)
                             
                             expect {
@@ -215,37 +214,45 @@ class SOGSMessageSpec: QuickSpec {
                         }
                         
                         it("provides the correct values as parameters") {
-                            mockSign
-                                .when { $0.verify(message: anyArray(), publicKey: anyArray(), signature: anyArray()) }
+                            mockCrypto
+                                .when {
+                                    $0.verify(.signature(message: anyArray(), publicKey: anyArray(), signature: anyArray()))
+                                }
                                 .thenReturn(true)
                             
                             _ = try? decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                             
-                            expect(mockSign)
+                            expect(mockCrypto)
                                 .to(call(matchingParameters: true) {
                                     $0.verify(
-                                        message: Data(base64Encoded: "VGVzdERhdGE=")!.bytes,
-                                        publicKey: Data(hex: TestConstants.publicKey).bytes,
-                                        signature: Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!.bytes
+                                        .signature(
+                                            message: Data(base64Encoded: "VGVzdERhdGE=")!.bytes,
+                                            publicKey: Data(hex: TestConstants.publicKey).bytes,
+                                            signature: Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!.bytes
+                                        )
                                     )
                                 })
                         }
                         
                         it("throws if it fails verification") {
-                            mockSign
-                                .when { $0.verify(message: anyArray(), publicKey: anyArray(), signature: anyArray()) }
+                            mockCrypto
+                                .when {
+                                    $0.verify(.signature(message: anyArray(), publicKey: anyArray(), signature: anyArray()))
+                                }
                                 .thenReturn(false)
                             
                             expect {
                                 try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                             }
-                            .to(throwError(HTTP.Error.parsingFailed))
+                            .to(throwError(HTTPError.parsingFailed))
                         }
                     }
                     
                     context("that is unblinded") {
                         it("succeeds if it succeeds verification") {
-                            mockEd25519.when { try $0.verifySignature(any(), publicKey: any(), data: any()) }.thenReturn(true)
+                            mockCrypto
+                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .thenReturn(true)
                             
                             expect {
                                 try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
@@ -254,27 +261,33 @@ class SOGSMessageSpec: QuickSpec {
                         }
                         
                         it("provides the correct values as parameters") {
-                            mockEd25519.when { try $0.verifySignature(any(), publicKey: any(), data: any()) }.thenReturn(true)
+                            mockCrypto
+                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .thenReturn(true)
                             
                             _ = try? decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                             
-                            expect(mockEd25519)
+                            expect(mockCrypto)
                                 .to(call(matchingParameters: true) {
-                                    try $0.verifySignature(
-                                        Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!,
-                                        publicKey: Data(hex: TestConstants.publicKey),
-                                        data: Data(base64Encoded: "VGVzdERhdGE=")!
+                                    $0.verify(
+                                        .signatureEd25519(
+                                            Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!,
+                                            publicKey: Data(hex: TestConstants.publicKey),
+                                            data: Data(base64Encoded: "VGVzdERhdGE=")!
+                                        )
                                     )
                                 })
                         }
                         
                         it("throws if it fails verification") {
-                            mockEd25519.when { try $0.verifySignature(any(), publicKey: any(), data: any()) }.thenReturn(false)
+                            mockCrypto
+                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .thenReturn(false)
                             
                             expect {
                                 try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
                             }
-                            .to(throwError(HTTP.Error.parsingFailed))
+                            .to(throwError(HTTPError.parsingFailed))
                         }
                     }
                 }

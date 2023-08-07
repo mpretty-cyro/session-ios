@@ -1,5 +1,7 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+
 import Foundation
-import PromiseKit
+import Combine
 
 public enum HTTP {
     private static let seedNodeURLSession = URLSession(configuration: .ephemeral, delegate: seedNodeURLSessionDelegate, delegateQueue: nil)
@@ -7,7 +9,7 @@ public enum HTTP {
     private static let snodeURLSession = URLSession(configuration: .ephemeral, delegate: snodeURLSessionDelegate, delegateQueue: nil)
     private static let snodeURLSessionDelegate = SnodeURLSessionDelegateImplementation()
 
-    // MARK: Certificates
+    // MARK: - Certificates
     
     /// **Note:** These certificates will need to be regenerated and replaced at the start of April 2025, iOS has a restriction after iOS 13
     /// where certificates can have a maximum lifetime of 825 days (https://support.apple.com/en-au/HT210176) as a result we
@@ -30,10 +32,12 @@ public enum HTTP {
         return SecCertificateCreateWithData(nil, data as CFData)!
     }()
     
-    // MARK: Settings
-    public static let timeout: TimeInterval = 10
+    // MARK: - Settings
+    
+    public static let defaultTimeout: TimeInterval = 10
 
-    // MARK: Seed Node URL Session Delegate Implementation
+    // MARK: - Seed Node URL Session Delegate Implementation
+    
     private final class SeedNodeURLSessionDelegateImplementation : NSObject, URLSessionDelegate {
 
         func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
@@ -89,7 +93,8 @@ public enum HTTP {
         }
     }
     
-    // MARK: Snode URL Session Delegate Implementation
+    // MARK: - Snode URL Session Delegate Implementation
+    
     private final class SnodeURLSessionDelegateImplementation : NSObject, URLSessionDelegate {
 
         func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
@@ -97,89 +102,40 @@ public enum HTTP {
             completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))
         }
     }
-
-    // MARK: - Verb
     
-    public enum Verb: String, Codable {
-        case get = "GET"
-        case put = "PUT"
-        case post = "POST"
-        case delete = "DELETE"
+    // MARK: - Execution
         
-        public static func from(_ value: String?) -> Verb? {
-            switch value?.uppercased() {
-                case "GET": return .get
-                case "PUT": return .put
-                case "POST": return .post
-                case "DELETE": return .delete
-                default: return nil
-            }
-        }
+    public static func execute(
+        _ method: HTTPMethod,
+        _ url: String,
+        timeout: TimeInterval = HTTP.defaultTimeout,
+        useSeedNodeURLSession: Bool = false
+    ) -> AnyPublisher<Data, Error> {
+        return execute(
+            method,
+            url,
+            body: nil,
+            timeout: timeout,
+            useSeedNodeURLSession: useSeedNodeURLSession
+        )
     }
-
-    // MARK: - Error
     
-    public enum Error: LocalizedError, Equatable {
-        case generic
-        case invalidURL
-        case invalidJSON
-        case parsingFailed
-        case invalidResponse
-        case maxFileSizeExceeded
-        case httpRequestFailed(statusCode: UInt, data: Data?)
-        case timeout
-        case cancelled
+    public static func execute(
+        _ method: HTTPMethod,
+        _ url: String,
+        headers: [String: String]? = nil,
+        body: Data?,
+        timeout: TimeInterval = HTTP.defaultTimeout,
+        useSeedNodeURLSession: Bool = false
+    ) -> AnyPublisher<Data, Error> {
+        guard let url: URL = URL(string: url) else {
+            return Fail<Data, Error>(error: HTTPError.invalidURL)
+                .eraseToAnyPublisher()
+        }
         
-        public var errorDescription: String? {
-            switch self {
-                case .generic: return "An error occurred."
-                case .invalidURL: return "Invalid URL."
-                case .invalidJSON: return "Invalid JSON."
-                case .parsingFailed, .invalidResponse: return "Invalid response."
-                case .maxFileSizeExceeded: return "Maximum file size exceeded."
-                case .httpRequestFailed(let statusCode, _): return "HTTP request failed with status code: \(statusCode)."
-                case .timeout: return "The request timed out."
-                case .cancelled: return "The request was cancelled."
-            }
-        }
-    }
-
-    // MARK: - Main
-    
-    public static func execute(_ verb: Verb, _ url: String, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<Data> {
-        return execute(verb, url, body: nil, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-    }
-
-    public static func execute(_ verb: Verb, _ url: String, parameters: JSON?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<Data> {
-        if let parameters = parameters {
-            do {
-                guard JSONSerialization.isValidJSONObject(parameters) else { return Promise(error: Error.invalidJSON) }
-                let body = try JSONSerialization.data(withJSONObject: parameters, options: [ .fragmentsAllowed ])
-                return execute(verb, url, body: body, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-            }
-            catch (let error) {
-                return Promise(error: error)
-            }
-        }
-        else {
-            return execute(verb, url, body: nil, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-        }
-    }
-    
-    public static func execute(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> Promise<Data> {
-        let (promise, _) = execute2(verb, url, headers: headers, body: body, timeout: timeout, useSeedNodeURLSession: useSeedNodeURLSession)
-        
-        return promise
-    }
-    
-    public static func execute2(_ verb: Verb, _ url: String, headers: [String: String]? = nil, body: Data?, timeout: TimeInterval = HTTP.timeout, useSeedNodeURLSession: Bool = false) -> (Promise<Data>, URLSessionDataTask?) {
-        guard
-            let urlSafeString: String = url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
-            let url: URL = URL(string: urlSafeString)
-        else { return (Promise(error: HTTP.Error.invalidURL), nil) }
-        
+        let urlSession: URLSession = (useSeedNodeURLSession ? seedNodeURLSession : snodeURLSession)
         var request = URLRequest(url: url)
-        request.httpMethod = verb.rawValue
+        request.httpMethod = method.rawValue
         request.httpBody = body
         request.timeoutInterval = timeout
         request.allHTTPHeaderFields?.removeValue(forKey: "User-Agent")
@@ -189,56 +145,53 @@ public enum HTTP {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let (promise, seal) = Promise<Data>.pending()
-        let urlSession = useSeedNodeURLSession ? seedNodeURLSession : snodeURLSession
-        let task = urlSession.dataTask(with: request) { data, response, error in
-            guard let data = data, let response = response as? HTTPURLResponse else {
-                if let error = error {
-                    SNLog("\(verb.rawValue) request to \(url) failed due to error: \(error).")
-                } else {
-                    SNLog("\(verb.rawValue) request to \(url) failed.")
+        return urlSession
+            .dataTaskPublisher(for: request)
+            .mapError { error in
+                SNLog("\(method.rawValue) request to \(url) failed due to error: \(error).")
+                
+                // Override the actual error so that we can correctly catch failed requests
+                // in sendOnionRequest(invoking:on:with:)
+                switch (error as NSError).code {
+                    case NSURLErrorTimedOut: return HTTPError.timeout
+                    case NSURLErrorCancelled: return HTTPError.cancelled
+                    default: return HTTPError.httpRequestFailed(statusCode: 0, data: nil)
+                }
+            }
+            .flatMap { data, response in
+                guard let response = response as? HTTPURLResponse else {
+                    SNLog("\(method.rawValue) request to \(url) failed.")
+                    return Fail<Data, Error>(error: HTTPError.httpRequestFailed(statusCode: 0, data: data))
+                        .eraseToAnyPublisher()
+                }
+                let statusCode = UInt(response.statusCode)
+                // TODO: Remove all the JSON handling?
+                guard 200...299 ~= statusCode else {
+                    var json: JSON? = nil
+                    if let processedJson: JSON = try? JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON {
+                        json = processedJson
+                    }
+                    else if let result: String = String(data: data, encoding: .utf8) {
+                        json = [ "result": result ]
+                    }
+                    
+                    let jsonDescription: String = (json?.prettifiedDescription ?? "no debugging info provided")
+                    SNLog("\(method.rawValue) request to \(url) failed with status code: \(statusCode) (\(jsonDescription)).")
+                    return Fail<Data, Error>(error: HTTPError.httpRequestFailed(statusCode: statusCode, data: data))
+                        .eraseToAnyPublisher()
                 }
                 
-                // Override the actual error so that we can correctly catch failed requests in sendOnionRequest(invoking:on:with:)
-                switch (error as? NSError)?.code {
-                    case NSURLErrorTimedOut: return seal.reject(Error.timeout)
-                    case NSURLErrorCancelled: return seal.reject(Error.cancelled)
-                    default: return seal.reject(Error.httpRequestFailed(statusCode: 0, data: nil))
-                }
-                
+                return Just(data)
+                    .setFailureType(to: Error.self)
+                    .eraseToAnyPublisher()
             }
-            if let error = error {
-                SNLog("\(verb.rawValue) request to \(url) failed due to error: \(error).")
-                // Override the actual error so that we can correctly catch failed requests in sendOnionRequest(invoking:on:with:)
-                return seal.reject(Error.httpRequestFailed(statusCode: 0, data: data))
-            }
-            let statusCode = UInt(response.statusCode)
-
-            guard 200...299 ~= statusCode else {
-                var json: JSON? = nil
-                if let processedJson: JSON = try? JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON {
-                    json = processedJson
-                }
-                else if let result: String = String(data: data, encoding: .utf8) {
-                    json = [ "result": result ]
-                }
-                
-                let jsonDescription: String = (json?.prettifiedDescription ?? "no debugging info provided")
-                SNLog("\(verb.rawValue) request to \(url) failed with status code: \(statusCode) (\(jsonDescription)).")
-                return seal.reject(Error.httpRequestFailed(statusCode: statusCode, data: data))
-            }
-            
-            seal.fulfill(data)
-        }
-        task.resume()
-        return (promise, task)
+            .eraseToAnyPublisher()
     }
     
     // FIXME: Either use or remove the web socket logic
-    @available(iOS 13.0, *)
     private static let socketDelegate = WebSocket()
-    @available(iOS 13.0, *)
-    public static func openSocket(_ verb: Verb, _ url: String, body: Data?, timeout: TimeInterval = HTTP.timeout) -> URLSessionWebSocketTask? {
+    
+    public static func openSocket(_ verb: HTTPMethod, _ url: String, body: Data?, timeout: TimeInterval = HTTP.defaultTimeout) -> URLSessionWebSocketTask? {
         // Note: No need to do a secure web socket ('wss') as the packets are encrypted over Lokinet already
         // and doing a 'wss' connection would actually be slightly slower
         var request = URLRequest(url: URL(string: "ws://\(url)")!)
@@ -272,11 +225,9 @@ public enum HTTP {
 //
 //        let webSocketTask = session.webSocketTask(with: request)
 //        webSocketTask.resume()
-
     }
 }
 
-@available(iOS 13.0, *)
 class WebSocket: NSObject, URLSessionWebSocketDelegate {
  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
   print("Web Socket did connect")

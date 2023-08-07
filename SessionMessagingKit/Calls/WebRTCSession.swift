@@ -1,8 +1,8 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
-import PromiseKit
 import WebRTC
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -81,7 +81,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
     
     // MARK: - Error
     
-    public enum Error : LocalizedError {
+    public enum WebRTCSessionError: LocalizedError {
         case noThread
         
         public var errorDescription: String? {
@@ -124,131 +124,162 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         _ db: Database,
         message: CallMessage,
         interactionId: Int64?,
-        in thread: SessionThread
-    ) throws -> Promise<Void> {
+        in thread: SessionThread,
+        using dependencies: Dependencies = Dependencies()
+    ) throws -> AnyPublisher<Void, Error> {
         SNLog("[Calls] Sending pre-offer message.")
         
-        return try MessageSender
-            .sendNonDurably(
-                db,
-                message: message,
-                interactionId: interactionId,
-                in: thread
+        return MessageSender
+            .sendImmediate(
+                data: try MessageSender
+                    .preparedSendData(
+                        db,
+                        message: message,
+                        to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
+                        namespace: try Message.Destination
+                            .from(db, threadId: thread.id, threadVariant: thread.variant)
+                            .defaultNamespace,
+                        interactionId: interactionId,
+                        using: dependencies
+                    ),
+                using: dependencies
             )
-            .done2 {
-                SNLog("[Calls] Pre-offer message has been sent.")
-            }
+            .handleEvents(receiveOutput: { _ in SNLog("[Calls] Pre-offer message has been sent.") })
+            .eraseToAnyPublisher()
     }
     
     public func sendOffer(
-        _ db: Database,
-        to sessionId: String,
-        isRestartingICEConnection: Bool = false
-    ) -> Promise<Void> {
+        to thread: SessionThread,
+        isRestartingICEConnection: Bool = false,
+        using dependencies: Dependencies = Dependencies()
+    ) -> AnyPublisher<Void, Error> {
         SNLog("[Calls] Sending offer message.")
-        let (promise, seal) = Promise<Void>.pending()
         let uuid: String = self.uuid
         let mediaConstraints: RTCMediaConstraints = mediaConstraints(isRestartingICEConnection)
         
-        guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId) else {
-            return Promise(error: Error.noThread)
-        }
-        
-        self.peerConnection?.offer(for: mediaConstraints) { [weak self] sdp, error in
-            if let error = error {
-                seal.reject(error)
-                return
-            }
-            
-            guard let sdp: RTCSessionDescription = self?.correctSessionDescription(sdp: sdp) else {
-                preconditionFailure()
-            }
-            
-            self?.peerConnection?.setLocalDescription(sdp) { error in
-                if let error = error {
-                    print("Couldn't initiate call due to error: \(error).")
-                    return seal.reject(error)
-                }
-            }
-            
-            Storage.shared
-                .writeAsync { db in
-                    try MessageSender
-                        .sendNonDurably(
-                            db,
-                            message: CallMessage(
-                                uuid: uuid,
-                                kind: .offer,
-                                sdps: [ sdp.sdp ],
-                                sentTimestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs())
-                            ),
-                            interactionId: nil,
-                            in: thread
+        return Deferred {
+            Future<Void, Error> { [weak self] resolver in
+                self?.peerConnection?.offer(for: mediaConstraints) { sdp, error in
+                    if let error = error {
+                        return
+                    }
+                    
+                    guard let sdp: RTCSessionDescription = self?.correctSessionDescription(sdp: sdp) else {
+                        preconditionFailure()
+                    }
+                    
+                    self?.peerConnection?.setLocalDescription(sdp) { error in
+                        if let error = error {
+                            print("Couldn't initiate call due to error: \(error).")
+                            resolver(Result.failure(error))
+                            return
+                        }
+                    }
+                    
+                    dependencies.storage
+                        .writePublisher { db in
+                            try MessageSender
+                                .preparedSendData(
+                                    db,
+                                    message: CallMessage(
+                                        uuid: uuid,
+                                        kind: .offer,
+                                        sdps: [ sdp.sdp ],
+                                        sentTimestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs())
+                                    ),
+                                    to: try Message.Destination
+                                        .from(db, threadId: thread.id, threadVariant: thread.variant),
+                                    namespace: try Message.Destination
+                                        .from(db, threadId: thread.id, threadVariant: thread.variant)
+                                        .defaultNamespace,
+                                    interactionId: nil,
+                                    using: dependencies
+                                )
+                        }
+                        .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+                        .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                        .sinkUntilComplete(
+                            receiveCompletion: { result in
+                                switch result {
+                                    case .finished: resolver(Result.success(()))
+                                    case .failure(let error): resolver(Result.failure(error))
+                                }
+                            }
                         )
                 }
-                .done2 {
-                    seal.fulfill(())
-                }
-                .catch2 { error in
-                    seal.reject(error)
-                }
-                .retainUntilComplete()
+            }
         }
-        
-        return promise
+        .eraseToAnyPublisher()
     }
     
-    public func sendAnswer(to sessionId: String) -> Promise<Void> {
+    public func sendAnswer(
+        to sessionId: String,
+        using dependencies: Dependencies = Dependencies()
+    ) -> AnyPublisher<Void, Error> {
         SNLog("[Calls] Sending answer message.")
-        let (promise, seal) = Promise<Void>.pending()
         let uuid: String = self.uuid
         let mediaConstraints: RTCMediaConstraints = mediaConstraints(false)
         
-        Storage.shared.writeAsync { [weak self] db in
-            guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId) else {
-                seal.reject(Error.noThread)
-                return
+        return dependencies.storage
+            .readPublisher { db -> SessionThread in
+                guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId) else {
+                    throw WebRTCSessionError.noThread
+                }
+                
+                return thread
             }
-        
-            self?.peerConnection?.answer(for: mediaConstraints) { [weak self] sdp, error in
-                if let error = error {
-                    seal.reject(error)
-                    return
-                }
-                
-                guard let sdp: RTCSessionDescription = self?.correctSessionDescription(sdp: sdp) else {
-                    preconditionFailure()
-                }
-                
-                self?.peerConnection?.setLocalDescription(sdp) { error in
-                    if let error = error {
-                        print("Couldn't accept call due to error: \(error).")
-                        return seal.reject(error)
+            .flatMap { [weak self] thread in
+                Future<Void, Error> { resolver in
+                    self?.peerConnection?.answer(for: mediaConstraints) { [weak self] sdp, error in
+                        if let error = error {
+                            resolver(Result.failure(error))
+                            return
+                        }
+                        
+                        guard let sdp: RTCSessionDescription = self?.correctSessionDescription(sdp: sdp) else {
+                            preconditionFailure()
+                        }
+                        
+                        self?.peerConnection?.setLocalDescription(sdp) { error in
+                            if let error = error {
+                                print("Couldn't accept call due to error: \(error).")
+                                return resolver(Result.failure(error))
+                            }
+                        }
+                        
+                        dependencies.storage
+                            .writePublisher { db in
+                                try MessageSender
+                                    .preparedSendData(
+                                        db,
+                                        message: CallMessage(
+                                            uuid: uuid,
+                                            kind: .answer,
+                                            sdps: [ sdp.sdp ]
+                                        ),
+                                        to: try Message.Destination
+                                            .from(db, threadId: thread.id, threadVariant: thread.variant),
+                                        namespace: try Message.Destination
+                                            .from(db, threadId: thread.id, threadVariant: thread.variant)
+                                            .defaultNamespace,
+                                        interactionId: nil,
+                                        using: dependencies
+                                    )
+                            }
+                            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+                            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                            .sinkUntilComplete(
+                                receiveCompletion: { result in
+                                    switch result {
+                                        case .finished: resolver(Result.success(()))
+                                        case .failure(let error): resolver(Result.failure(error))
+                                    }
+                                }
+                            )
                     }
                 }
-                
-                try? MessageSender
-                    .sendNonDurably(
-                        db,
-                        message: CallMessage(
-                            uuid: uuid,
-                            kind: .answer,
-                            sdps: [ sdp.sdp ]
-                        ),
-                        interactionId: nil,
-                        in: thread
-                    )
-                    .done2 {
-                        seal.fulfill(())
-                    }
-                    .catch2 { error in
-                        seal.reject(error)
-                    }
-                    .retainUntilComplete()
             }
-        }
-        
-        return promise
+            .eraseToAnyPublisher()
     }
     
     private func queueICECandidateForSending(_ candidate: RTCIceCandidate) {
@@ -261,7 +292,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         }
     }
     
-    private func sendICECandidates() {
+    private func sendICECandidates(using dependencies: Dependencies = Dependencies()) {
         let candidates: [RTCIceCandidate] = self.queuedICECandidates
         let uuid: String = self.uuid
         let contactSessionId: String = self.contactSessionId
@@ -269,44 +300,68 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         // Empty the queue
         self.queuedICECandidates.removeAll()
         
-        Storage.shared.writeAsync { db in
-            guard let thread: SessionThread = try SessionThread.fetchOne(db, id: contactSessionId) else { return }
-            
-            SNLog("[Calls] Batch sending \(candidates.count) ICE candidates.")
-            
-            try MessageSender.sendNonDurably(
-                db,
-                message: CallMessage(
-                    uuid: uuid,
-                    kind: .iceCandidates(
-                        sdpMLineIndexes: candidates.map { UInt32($0.sdpMLineIndex) },
-                        sdpMids: candidates.map { $0.sdpMid! }
-                    ),
-                    sdps: candidates.map { $0.sdp }
-                ),
-                interactionId: nil,
-                in: thread
-            )
-            .retainUntilComplete()
-        }
+        dependencies.storage
+            .writePublisher { db in
+                guard let thread: SessionThread = try SessionThread.fetchOne(db, id: contactSessionId) else {
+                    throw WebRTCSessionError.noThread
+                }
+                
+                SNLog("[Calls] Batch sending \(candidates.count) ICE candidates.")
+                
+                return try MessageSender
+                    .preparedSendData(
+                        db,
+                        message: CallMessage(
+                            uuid: uuid,
+                            kind: .iceCandidates(
+                                sdpMLineIndexes: candidates.map { UInt32($0.sdpMLineIndex) },
+                                sdpMids: candidates.map { $0.sdpMid! }
+                            ),
+                            sdps: candidates.map { $0.sdp }
+                        ),
+                        to: try Message.Destination
+                            .from(db, threadId: thread.id, threadVariant: thread.variant),
+                        namespace: try Message.Destination
+                            .from(db, threadId: thread.id, threadVariant: thread.variant)
+                            .defaultNamespace,
+                        interactionId: nil,
+                        using: dependencies
+                    )
+            }
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+            .sinkUntilComplete()
     }
     
-    public func endCall(_ db: Database, with sessionId: String) throws {
+    public func endCall(
+        _ db: Database,
+        with sessionId: String,
+        using dependencies: Dependencies = Dependencies()
+    ) throws {
         guard let thread: SessionThread = try SessionThread.fetchOne(db, id: sessionId) else { return }
         
         SNLog("[Calls] Sending end call message.")
         
-        try MessageSender.sendNonDurably(
-            db,
-            message: CallMessage(
-                uuid: self.uuid,
-                kind: .endCall,
-                sdps: []
-            ),
-            interactionId: nil,
-            in: thread
-        )
-        .retainUntilComplete()
+        let preparedSendData: MessageSender.PreparedSendData = try MessageSender
+            .preparedSendData(
+                db,
+                message: CallMessage(
+                    uuid: self.uuid,
+                    kind: .endCall,
+                    sdps: []
+                ),
+                to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
+                namespace: try Message.Destination
+                    .from(db, threadId: thread.id, threadVariant: thread.variant)
+                    .defaultNamespace,
+                interactionId: nil,
+                using: dependencies
+            )
+        
+        MessageSender
+            .sendImmediate(data: preparedSendData, using: dependencies)
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .sinkUntilComplete()
     }
     
     public func dropConnection() {

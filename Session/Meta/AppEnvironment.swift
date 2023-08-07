@@ -1,7 +1,9 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import SessionUtilitiesKit
 import SignalUtilitiesKit
+import SignalCoreKit
 
 public class AppEnvironment {
 
@@ -10,7 +12,7 @@ public class AppEnvironment {
     public class var shared: AppEnvironment {
         get { return _shared }
         set {
-            guard CurrentAppContext().isRunningTests else {
+            guard SNUtilitiesKit.isRunningTests else {
                 owsFailDebug("Can only switch environments in tests.")
                 return
             }

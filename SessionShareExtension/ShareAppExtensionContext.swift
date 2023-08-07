@@ -4,6 +4,7 @@ import UIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 import SessionMessagingKit
+import SignalCoreKit
 
 /// This is _NOT_ a singleton and will be instantiated each time that the SAE is used.
 final class ShareAppExtensionContext: NSObject, AppContext {
@@ -30,7 +31,6 @@ final class ShareAppExtensionContext: NSObject, AppContext {
     }()
 
     var isRTL: Bool { return ShareAppExtensionContext._isRTL }
-    var isRunningTests: Bool { return false } // We don't need to distinguish this in the SAE
     
     var statusBarHeight: CGFloat { return 20 }
     var openSystemSettingsAction: UIAlertAction?

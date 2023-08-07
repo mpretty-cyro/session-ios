@@ -15,6 +15,7 @@ public class TypingIndicators {
     
     private class Indicator {
         fileprivate let threadId: String
+        fileprivate let threadVariant: SessionThread.Variant
         fileprivate let direction: Direction
         fileprivate let timestampMs: Int64
         
@@ -24,6 +25,7 @@ public class TypingIndicators {
         init?(
             threadId: String,
             threadVariant: SessionThread.Variant,
+            threadIsBlocked: Bool,
             threadIsMessageRequest: Bool,
             direction: Direction,
             timestampMs: Int64?
@@ -33,23 +35,30 @@ public class TypingIndicators {
             // or show typing indicators for other users
             //
             // We also don't want to show/send typing indicators for message requests
-            guard Storage.shared[.typingIndicatorsEnabled] && !threadIsMessageRequest else {
-                return nil
-            }
+            guard
+                Storage.shared[.typingIndicatorsEnabled] &&
+                !threadIsBlocked &&
+                !threadIsMessageRequest
+            else { return nil }
             
             // Don't send typing indicators in group threads
-            guard threadVariant != .closedGroup && threadVariant != .openGroup else { return nil }
+            guard
+                threadVariant != .legacyGroup &&
+                threadVariant != .group &&
+                threadVariant != .community
+            else { return nil }
             
             self.threadId = threadId
+            self.threadVariant = threadVariant
             self.direction = direction
             self.timestampMs = (timestampMs ?? SnodeAPI.currentOffsetTimestampMs())
         }
         
-        fileprivate func start(_ db: Database) {
+        fileprivate func start(_ db: Database, using dependencies: Dependencies = Dependencies()) {
             // Start the typing indicator
             switch direction {
                 case .outgoing:
-                    scheduleRefreshCallback(db, shouldSend: (refreshTimer == nil))
+                    scheduleRefreshCallback(db, shouldSend: (refreshTimer == nil), using: dependencies)
                     
                 case .incoming:
                     try? ThreadTypingIndicator(
@@ -63,7 +72,7 @@ public class TypingIndicators {
             refreshTimeout()
         }
         
-        fileprivate func stop(_ db: Database) {
+        fileprivate func stop(_ db: Database, using dependencies: Dependencies = Dependencies()) {
             self.refreshTimer?.invalidate()
             self.refreshTimer = nil
             self.stopTimer?.invalidate()
@@ -71,15 +80,13 @@ public class TypingIndicators {
             
             switch direction {
                 case .outgoing:
-                    guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: self.threadId) else {
-                        return
-                    }
-                    
                     try? MessageSender.send(
                         db,
                         message: TypingIndicator(kind: .stopped),
                         interactionId: nil,
-                        in: thread
+                        threadId: threadId,
+                        threadVariant: threadVariant,
+                        using: dependencies
                     )
                     
                 case .incoming:
@@ -105,17 +112,19 @@ public class TypingIndicators {
             }
         }
         
-        private func scheduleRefreshCallback(_ db: Database, shouldSend: Bool = true) {
+        private func scheduleRefreshCallback(
+            _ db: Database,
+            shouldSend: Bool = true,
+            using dependencies: Dependencies
+        ) {
             if shouldSend {
-                guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: self.threadId) else {
-                    return
-                }
-                
                 try? MessageSender.send(
                     db,
                     message: TypingIndicator(kind: .started),
                     interactionId: nil,
-                    in: thread
+                    threadId: threadId,
+                    threadVariant: threadVariant,
+                    using: dependencies
                 )
             }
             
@@ -124,8 +133,8 @@ public class TypingIndicators {
                 withTimeInterval: 10,
                 repeats: false
             ) { [weak self] _ in
-                Storage.shared.writeAsync { db in
-                    self?.scheduleRefreshCallback(db)
+                dependencies.storage.writeAsync { db in
+                    self?.scheduleRefreshCallback(db, using: dependencies)
                 }
             }
         }
@@ -143,6 +152,7 @@ public class TypingIndicators {
     public static func didStartTypingNeedsToStart(
         threadId: String,
         threadVariant: SessionThread.Variant,
+        threadIsBlocked: Bool,
         threadIsMessageRequest: Bool,
         direction: Direction,
         timestampMs: Int64?
@@ -159,6 +169,7 @@ public class TypingIndicators {
                 let newIndicator: Indicator? = Indicator(
                     threadId: threadId,
                     threadVariant: threadVariant,
+                    threadIsBlocked: threadIsBlocked,
                     threadIsMessageRequest: threadIsMessageRequest,
                     direction: direction,
                     timestampMs: timestampMs
@@ -179,6 +190,7 @@ public class TypingIndicators {
                 let newIndicator: Indicator? = Indicator(
                     threadId: threadId,
                     threadVariant: threadVariant,
+                    threadIsBlocked: threadIsBlocked,
                     threadIsMessageRequest: threadIsMessageRequest,
                     direction: direction,
                     timestampMs: timestampMs

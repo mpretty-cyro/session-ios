@@ -6,6 +6,7 @@
 #import "AppContext.h"
 #import <SignalCoreKit/SignalCoreKit.h>
 #import <SignalCoreKit/Threading.h>
+#import <SessionUtilitiesKit/SessionUtilitiesKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,14 +54,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)runNowOrWhenAppWillBecomeReady:(AppReadyBlock)block
 {
-    DispatchMainThreadSafe(^{
+    if ([NSThread isMainThread]) {
         [self.sharedManager runNowOrWhenAppWillBecomeReady:block];
-    });
+    }
+    else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.sharedManager runNowOrWhenAppWillBecomeReady:block];
+        });
+    }
 }
 
 - (void)runNowOrWhenAppWillBecomeReady:(AppReadyBlock)block
 {
-    if (CurrentAppContext().isRunningTests) {
+    if ([SNUtilitiesKitConfiguration isRunningTests]) {
         // We don't need to do any "on app ready" work in the tests.
         return;
     }
@@ -75,14 +81,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)runNowOrWhenAppDidBecomeReady:(AppReadyBlock)block
 {
-    DispatchMainThreadSafe(^{
+    if ([NSThread isMainThread]) {
         [self.sharedManager runNowOrWhenAppDidBecomeReady:block];
-    });
+    }
+    else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.sharedManager runNowOrWhenAppDidBecomeReady:block];
+        });
+    }
 }
 
 - (void)runNowOrWhenAppDidBecomeReady:(AppReadyBlock)block
 {
-    if (CurrentAppContext().isRunningTests) {
+    if ([SNUtilitiesKitConfiguration isRunningTests]) {
         // We don't need to do any "on app ready" work in the tests.
         return;
     }
@@ -93,6 +104,16 @@ NS_ASSUME_NONNULL_BEGIN
     }
 
     [self.appDidBecomeReadyBlocks addObject:block];
+}
+
++ (void)invalidate
+{
+    [self.sharedManager invalidate];
+}
+
+- (void)invalidate
+{
+    self.isAppReady = NO;
 }
 
 + (void)setAppIsReady

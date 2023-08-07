@@ -218,9 +218,21 @@ final class PathVC: BaseVC {
     }
 
     private func getPathRow(snode: Snode, location: LineView.Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double, isGuardSnode: Bool) -> UIStackView {
-        let country = IP2Country.isInitialized ? (IP2Country.shared.countryNamesCache[snode.ip] ?? "Resolving...") : "Resolving..."
-        let title = isGuardSnode ? NSLocalizedString("vc_path_guard_node_row_title", comment: "") : NSLocalizedString("vc_path_service_node_row_title", comment: "")
-        return getPathRow(title: title, subtitle: country, location: location, dotAnimationStartDelay: dotAnimationStartDelay, dotAnimationRepeatInterval: dotAnimationRepeatInterval)
+        let country: String = (IP2Country.isInitialized ?
+            IP2Country.shared.countryNamesCache.wrappedValue[snode.ip].defaulting(to: "Resolving...") :
+            "Resolving..."
+        )
+        
+        return getPathRow(
+            title: (isGuardSnode ?
+                "vc_path_guard_node_row_title".localized() :
+                "vc_path_service_node_row_title".localized()
+            ),
+            subtitle: country,
+            location: location,
+            dotAnimationStartDelay: dotAnimationStartDelay,
+            dotAnimationRepeatInterval: dotAnimationRepeatInterval
+        )
     }
     
     // MARK: - Interaction
@@ -241,7 +253,7 @@ private final class LineView: UIView {
     private var dotViewWidthConstraint: NSLayoutConstraint!
     private var dotViewHeightConstraint: NSLayoutConstraint!
     private var dotViewAnimationTimer: Timer!
-    private let reachability: Reachability = Reachability.forInternetConnection()
+    private let reachability: Reachability? = Environment.shared?.reachabilityManager.reachability
 
     enum Location {
         case top, middle, bottom
@@ -326,10 +338,10 @@ private final class LineView: UIView {
             }
         }
         
-        switch (reachability.isReachable(), OnionRequestAPI.paths.isEmpty) {
-            case (false, _): setStatus(to: .error)
-            case (true, true): setStatus(to: .connecting)
-            case (true, false): setStatus(to: .connected)
+        switch (reachability?.isReachable(), OnionRequestAPI.paths.isEmpty) {
+            case (.some(false), _), (nil, _): setStatus(to: .error)
+            case (.some(true), true): setStatus(to: .connecting)
+            case (.some(true), false): setStatus(to: .connected)
         }
     }
     
@@ -380,7 +392,7 @@ private final class LineView: UIView {
     }
     
     @objc private func handleBuildingPathsNotification() {
-        guard reachability.isReachable() else {
+        guard reachability?.isReachable() == true else {
             setStatus(to: .error)
             return
         }
@@ -389,7 +401,7 @@ private final class LineView: UIView {
     }
 
     @objc private func handlePathsBuiltNotification() {
-        guard reachability.isReachable() else {
+        guard reachability?.isReachable() == true else {
             setStatus(to: .error)
             return
         }
@@ -403,7 +415,7 @@ private final class LineView: UIView {
             return
         }
         
-        guard reachability.isReachable() else {
+        guard reachability?.isReachable() == true else {
             setStatus(to: .error)
             return
         }

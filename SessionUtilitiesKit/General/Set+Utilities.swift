@@ -3,6 +3,12 @@
 import Foundation
 
 public extension Set {
+    mutating func insert(contentsOf value: Set<Element>?) {
+        guard let value: Set<Element> = value else { return }
+        
+        value.forEach { self.insert($0) }
+    }
+    
     func inserting(_ value: Element?) -> Set<Element> {
         guard let value: Element = value else { return self }
         
@@ -28,5 +34,12 @@ public extension Set {
         updatedSet.remove(value)
         
         return updatedSet
+    }
+    
+    mutating func popRandomElement() -> Element? {
+        guard let value: Element = randomElement() else { return nil }
+        
+        self.remove(value)
+        return value
     }
 }
