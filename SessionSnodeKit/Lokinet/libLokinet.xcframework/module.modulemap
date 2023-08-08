@@ -1,4 +1,0 @@
-module Lokinet {
-  umbrella header "lokinet.h"
-  export *
-}

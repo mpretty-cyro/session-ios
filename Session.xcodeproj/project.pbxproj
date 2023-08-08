@@ -650,7 +650,7 @@
 		FD6985992A7CC0EA0061C56F /* BatchResponseSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9B30F2293EA0BF008DEE3E /* BatchResponseSpec.swift */; };
 		FD69859A2A7CC0EA0061C56F /* VersionSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD29598F2A43BE5F00888A17 /* VersionSpec.swift */; };
 		FD69859D2A7CC1C90061C56F /* LokinetRequestAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69859B2A7CC1C90061C56F /* LokinetRequestAPI.swift */; };
-		FD69859E2A7CC1C90061C56F /* LokinetWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69859C2A7CC1C90061C56F /* LokinetWrapper.swift */; };
+		FD69859E2A7CC1C90061C56F /* Lokinet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69859C2A7CC1C90061C56F /* Lokinet.swift */; };
 		FD6985A22A7CC1ED0061C56F /* Network+Selectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69859F2A7CC1ED0061C56F /* Network+Selectable.swift */; };
 		FD6985A32A7CC1ED0061C56F /* DirectRequestAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6985A02A7CC1ED0061C56F /* DirectRequestAPI.swift */; };
 		FD6985A42A7CC1ED0061C56F /* NativeLokinetRequestAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6985A12A7CC1ED0061C56F /* NativeLokinetRequestAPI.swift */; };
@@ -721,7 +721,6 @@
 		FD7F8CA82A7CBE76008289D8 /* NotificationContentViewModelSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD71161928D00E1100B47552 /* NotificationContentViewModelSpec.swift */; };
 		FD7F8CAC2A7CBEFD008289D8 /* SessionMessagingKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C3C2A6F025539DE700C340D1 /* SessionMessagingKit.framework */; platformFilter = ios; };
 		FD7F8CAE2A7CBF0C008289D8 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionMessagingKit_SessionMessagingKitTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FD7F8CAD2A7CBF0C008289D8 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionMessagingKit_SessionMessagingKitTests.framework */; };
-		FD7F8CAF2A7CBF18008289D8 /* libLokinet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FDE72139287573A60093DF33 /* libLokinet.xcframework */; };
 		FD7F8CB02A7CBF3A008289D8 /* Mock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC290A527D860CE005DAE71 /* Mock.swift */; };
 		FD7F8CB12A7CBF3A008289D8 /* Mocked.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD0969F82A69FFE700C5C365 /* Mocked.swift */; };
 		FD7F8CB22A7CBF3A008289D8 /* MockCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD23CE272A67755C0000B97C /* MockCrypto.swift */; };
@@ -794,6 +793,7 @@
 		FD9004142818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */; };
 		FD9004152818B46300ABAAF6 /* JobRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B7432804EF1B004C14C5 /* JobRunner.swift */; };
 		FD9004162818B46700ABAAF6 /* JobRunnerError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE77F68280F9EDA002CFC5D /* JobRunnerError.swift */; };
+		FD915FBB2A81C6B400256612 /* libLokinet.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD915FB32A81C2B000256612 /* libLokinet.a */; };
 		FD97B2402A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD97B23F2A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift */; };
 		FD97B2422A3FEBF30027DD57 /* UnreadMarkerCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD97B2412A3FEBF30027DD57 /* UnreadMarkerCell.swift */; };
 		FD9BDE002A5D22B7005F1EBC /* libSessionUtil.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD9BDDF82A5D2294005F1EBC /* libSessionUtil.a */; };
@@ -848,7 +848,6 @@
 		FDE6E99829F8E63A00F93C5D /* Accessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE6E99729F8E63A00F93C5D /* Accessibility.swift */; };
 		FDE721352875712D0093DF33 /* mainnet.signed in Resources */ = {isa = PBXBuildFile; fileRef = FDE721332875712D0093DF33 /* mainnet.signed */; };
 		FDE721362875712D0093DF33 /* testnet.signed in Resources */ = {isa = PBXBuildFile; fileRef = FDE721342875712D0093DF33 /* testnet.signed */; };
-		FDE721472876A3620093DF33 /* libLokinet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FDE72139287573A60093DF33 /* libLokinet.xcframework */; };
 		FDE77F6B280FEB28002CFC5D /* ControlMessageProcessRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE77F6A280FEB28002CFC5D /* ControlMessageProcessRecord.swift */; };
 		FDED2E3C282E1B5D00B2CD2A /* UICollectionView+ReusableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDED2E3B282E1B5D00B2CD2A /* UICollectionView+ReusableView.swift */; };
 		FDF0B73C27FFD3D6004C14C5 /* LinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B73B27FFD3D6004C14C5 /* LinkPreview.swift */; };
@@ -1836,7 +1835,7 @@
 		FD5D201D27B0D87C00FEA984 /* SessionId.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionId.swift; sourceTree = "<group>"; };
 		FD6985852A7CC0BB0061C56F /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionUtilitiesKit_SessionUtilitiesKitTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionUtilitiesKit_SessionUtilitiesKitTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD69859B2A7CC1C90061C56F /* LokinetRequestAPI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LokinetRequestAPI.swift; sourceTree = "<group>"; };
-		FD69859C2A7CC1C90061C56F /* LokinetWrapper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LokinetWrapper.swift; sourceTree = "<group>"; };
+		FD69859C2A7CC1C90061C56F /* Lokinet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Lokinet.swift; sourceTree = "<group>"; };
 		FD69859F2A7CC1ED0061C56F /* Network+Selectable.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Network+Selectable.swift"; sourceTree = "<group>"; };
 		FD6985A02A7CC1ED0061C56F /* DirectRequestAPI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DirectRequestAPI.swift; sourceTree = "<group>"; };
 		FD6985A12A7CC1ED0061C56F /* NativeLokinetRequestAPI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NativeLokinetRequestAPI.swift; sourceTree = "<group>"; };
@@ -1923,6 +1922,7 @@
 		FD8ECF912938552800C0D1BB /* Threading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Threading.swift; sourceTree = "<group>"; };
 		FD8ECF93293856AF00C0D1BB /* Randomness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Randomness.swift; sourceTree = "<group>"; };
 		FD9004132818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _002_SetupStandardJobs.swift; sourceTree = "<group>"; };
+		FD915FB32A81C2B000256612 /* libLokinet.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libLokinet.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD96F3A429DBC3DC00401309 /* MessageSendJobSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSendJobSpec.swift; sourceTree = "<group>"; };
 		FD96F3A629DBD43D00401309 /* MockJobRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockJobRunner.swift; sourceTree = "<group>"; };
 		FD97B23F2A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARC4RandomNumberGenerator.swift; sourceTree = "<group>"; };
@@ -2004,7 +2004,6 @@
 		FDE6E99729F8E63A00F93C5D /* Accessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Accessibility.swift; sourceTree = "<group>"; };
 		FDE721332875712D0093DF33 /* mainnet.signed */ = {isa = PBXFileReference; lastKnownFileType = file; path = mainnet.signed; sourceTree = "<group>"; };
 		FDE721342875712D0093DF33 /* testnet.signed */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testnet.signed; sourceTree = "<group>"; };
-		FDE72139287573A60093DF33 /* libLokinet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = libLokinet.xcframework; sourceTree = "<group>"; };
 		FDE7214F287E50D50093DF33 /* ProtoWrappers.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = ProtoWrappers.py; sourceTree = "<group>"; };
 		FDE72150287E50D50093DF33 /* LintLocalizableStrings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LintLocalizableStrings.swift; sourceTree = "<group>"; };
 		FDE77F68280F9EDA002CFC5D /* JobRunnerError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobRunnerError.swift; sourceTree = "<group>"; };
@@ -2154,7 +2153,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FDE721472876A3620093DF33 /* libLokinet.xcframework in Frameworks */,
+				FD915FBB2A81C6B400256612 /* libLokinet.a in Frameworks */,
 				C3C2A6C62553896A00C340D1 /* SessionUtilitiesKit.framework in Frameworks */,
 				05D33DA3CC661BF2CFFAF278 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_SessionSnodeKit.framework in Frameworks */,
 				6D6C9F16F244E7FADB1ACBE9 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_SessionSnodeKit.framework in Frameworks */,
@@ -2234,7 +2233,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FD7F8CAF2A7CBF18008289D8 /* libLokinet.xcframework in Frameworks */,
 				FD7F8CAC2A7CBEFD008289D8 /* SessionMessagingKit.framework in Frameworks */,
 				FD7F8CAE2A7CBF0C008289D8 /* Pods_GlobalDependencies_FrameworkAndExtensionDependencies_ExtendedDependencies_SessionMessagingKit_SessionMessagingKitTests.framework in Frameworks */,
 			);
@@ -3589,6 +3587,7 @@
 				FD83B9AF27CF200A005E1583 /* SessionUtilitiesKitTests.xctest */,
 				FD71160928D00BAE00B47552 /* SessionTests.xctest */,
 				FD9BDDF82A5D2294005F1EBC /* libSessionUtil.a */,
+				FD915FB32A81C2B000256612 /* libLokinet.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -4411,8 +4410,7 @@
 		FDC6D6FF2861359000B04575 /* Lokinet */ = {
 			isa = PBXGroup;
 			children = (
-				FD69859C2A7CC1C90061C56F /* LokinetWrapper.swift */,
-				FDE72139287573A60093DF33 /* libLokinet.xcframework */,
+				FD69859C2A7CC1C90061C56F /* Lokinet.swift */,
 			);
 			path = Lokinet;
 			sourceTree = "<group>";
@@ -4854,6 +4852,21 @@
 			productReference = FD83B9AF27CF200A005E1583 /* SessionUtilitiesKitTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		FD915FB22A81C2B000256612 /* Lokinet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FD915FB92A81C2B000256612 /* Build configuration list for PBXNativeTarget "Lokinet" */;
+			buildPhases = (
+				FD915FBA2A81C2BA00256612 /* Build libLokinet if Needed */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Lokinet;
+			productName = Lokinet;
+			productReference = FD915FB32A81C2B000256612 /* libLokinet.a */;
+			productType = "com.apple.product-type.library.static";
+		};
 		FD9BDDF72A5D2294005F1EBC /* SessionUtil */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FD9BDDFC2A5D2294005F1EBC /* Build configuration list for PBXNativeTarget "SessionUtil" */;
@@ -4993,6 +5006,9 @@
 					FD83B9AE27CF200A005E1583 = {
 						CreatedOnToolsVersion = 13.2.1;
 					};
+					FD915FB22A81C2B000256612 = {
+						CreatedOnToolsVersion = 14.3;
+					};
 					FD9BDDF72A5D2294005F1EBC = {
 						CreatedOnToolsVersion = 14.3;
 					};
@@ -5047,6 +5063,7 @@
 				FDC4388D27B9FFC700C60D73 /* SessionMessagingKitTests */,
 				FD83B9AE27CF200A005E1583 /* SessionUtilitiesKitTests */,
 				FD9BDDF72A5D2294005F1EBC /* SessionUtil */,
+				FD915FB22A81C2B000256612 /* Lokinet */,
 			);
 		};
 /* End PBXProject section */
@@ -5506,6 +5523,26 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-GlobalDependencies-Session-SessionTests/Pods-GlobalDependencies-Session-SessionTests-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		FD915FBA2A81C2BA00256612 /* Build libLokinet if Needed */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build libLokinet if Needed";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Scripts/build_libLokinet.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		FD9BDDFF2A5D229B005F1EBC /* Build libSessionUtil if Needed */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -5745,7 +5782,7 @@
 				FD17D7A427F40F8100122BE0 /* _003_YDBToGRDBMigration.swift in Sources */,
 				C3C2A5DE2553860B00C340D1 /* String+Trimming.swift in Sources */,
 				FDFC4D9A29F0C51500992FB6 /* String+Trimming.swift in Sources */,
-				FD69859E2A7CC1C90061C56F /* LokinetWrapper.swift in Sources */,
+				FD69859E2A7CC1C90061C56F /* Lokinet.swift in Sources */,
 				FDF848C629405C5B007DCAE5 /* DeleteAllMessagesRequest.swift in Sources */,
 				FDF848D429405C5B007DCAE5 /* DeleteAllBeforeResponse.swift in Sources */,
 				FDF848D629405C5B007DCAE5 /* SnodeMessage.swift in Sources */,
@@ -7170,6 +7207,7 @@
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/YapDatabase/YapDatabase.framework/Headers\"",
 					"\"${PODS_XCFRAMEWORKS_BUILD_DIR}/Sodium/Headers\"",
 					"$(PODS_ROOT)/SQLCipher",
+					"${SRCROOT}/LibLokinet/include/**",
 				);
 				INFOPLIST_FILE = SessionSnodeKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -7179,6 +7217,13 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${DT_TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}\"",
+					"\"${PODS_XCFRAMEWORKS_BUILD_DIR}/Sodium\"",
+					/usr/lib/swift,
+					"\"$(TARGET_BUILD_DIR)/libLokinet\"",
+				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.loki-project.SessionSnodeKit";
@@ -7186,6 +7231,7 @@
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_INCLUDE_PATHS = "$(inherited) \"${PODS_XCFRAMEWORKS_BUILD_DIR}/Clibsodium\" \"$(TARGET_BUILD_DIR)/libLokinet\"";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -7262,6 +7308,7 @@
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/YapDatabase/YapDatabase.framework/Headers\"",
 					"\"${PODS_XCFRAMEWORKS_BUILD_DIR}/Sodium/Headers\"",
 					"$(PODS_ROOT)/SQLCipher",
+					"${SRCROOT}/LibLokinet/include/**",
 				);
 				INFOPLIST_FILE = SessionSnodeKit/Meta/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -7271,6 +7318,13 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${DT_TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}\"",
+					"\"${PODS_XCFRAMEWORKS_BUILD_DIR}/Sodium\"",
+					/usr/lib/swift,
+					"\"$(TARGET_BUILD_DIR)/libLokinet\"",
+				);
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.loki-project.SessionSnodeKit";
@@ -7279,6 +7333,7 @@
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_INCLUDE_PATHS = "$(inherited) \"${PODS_XCFRAMEWORKS_BUILD_DIR}/Clibsodium\" \"$(TARGET_BUILD_DIR)/libLokinet\"";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -8125,6 +8180,101 @@
 			};
 			name = "App Store Release";
 		};
+		FD915FB72A81C2B000256612 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FD915FB82A81C2B000256612 /* App Store Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "App Store Release";
+		};
 		FD9BDDFD2A5D2294005F1EBC /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -8431,6 +8581,15 @@
 			buildConfigurations = (
 				FD83B9B727CF200A005E1583 /* Debug */,
 				FD83B9B827CF200A005E1583 /* App Store Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "App Store Release";
+		};
+		FD915FB92A81C2B000256612 /* Build configuration list for PBXNativeTarget "Lokinet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FD915FB72A81C2B000256612 /* Debug */,
+				FD915FB82A81C2B000256612 /* App Store Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "App Store Release";

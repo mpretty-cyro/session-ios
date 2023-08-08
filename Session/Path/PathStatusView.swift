@@ -141,9 +141,9 @@ final class PathStatusView: UIView {
         let reachabilityStatus: Status = (reachability?.isReachable() == false ? .error : .connected)
         let onionRequestStatus: Status = (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting)
         let lokinetStatus: Status = {
-            guard !LokinetWrapper.didError else { return .error }
+            guard !Lokinet.didError else { return .error }
             
-            return (LokinetWrapper.isReady ? .connected : .connecting)
+            return (Lokinet.isReady ? .connected : .connecting)
         }()
         
         // Determine the applicable statuses and then update the state accordingly

@@ -94,7 +94,7 @@ public enum NativeLokinetRequestAPI {
                     
                 case .snode(let snode):
                     guard
-                        let targetLokiAddress = LokinetWrapper.base32SnodePublicKey(
+                        let targetLokiAddress = Lokinet.base32SnodePublicKey(
                             publicKey: snode.ed25519PublicKey
                         )
                     else { return nil }

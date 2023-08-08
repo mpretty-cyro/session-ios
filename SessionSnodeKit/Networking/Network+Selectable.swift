@@ -197,7 +197,7 @@ public extension Network {
         public static func didChangeNetworkLayer() {
             NotificationCenter.default.post(name: .networkLayerChanged, object: nil, userInfo: nil)
             
-            LokinetWrapper.stop()
+            Lokinet.stop()
             GetSnodePoolJob.run()
             
             // Cancel and remove all current requests

@@ -91,7 +91,7 @@ public enum LokinetRequestAPI {
         destination: OnionRequestAPIDestination,
         timeout: TimeInterval = HTTP.defaultTimeout
     ) -> AnyPublisher<(ResponseInfoType, Data?), Error> {
-        guard LokinetWrapper.isReady else {
+        guard Lokinet.isReady else {
             return Fail(error: HTTPError.networkWrappersNotReady).eraseToAnyPublisher()
         }
         
@@ -103,7 +103,7 @@ public enum LokinetRequestAPI {
                     }
                     
                     guard
-                        let targetAddress: String = try? LokinetWrapper.getDestinationFor(
+                        let targetAddress: String = try? Lokinet.getDestinationFor(
                             host: addressInfo.address,
                             port: addressInfo.port
                         )
@@ -114,12 +114,12 @@ public enum LokinetRequestAPI {
                     return "http://\(targetAddress)/\(endpoint)"
                     
                 case .snode(let snode):
-                    guard let targetLokiAddress = LokinetWrapper.base32SnodePublicKey(publicKey: snode.ed25519PublicKey) else {
+                    guard let targetLokiAddress = Lokinet.base32SnodePublicKey(publicKey: snode.ed25519PublicKey) else {
                         return nil
                     }
                     
                     guard
-                        let targetAddress: String = try? LokinetWrapper.getDestinationFor(
+                        let targetAddress: String = try? Lokinet.getDestinationFor(
                             host: "https://\(targetLokiAddress).snode",
                             port: snode.port
                         )

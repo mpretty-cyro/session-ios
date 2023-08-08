@@ -26,7 +26,7 @@ public enum GetSnodePoolJob: JobExecutor {
         
         // Force Lokinet to start building (want to do this regardless of the
         // network layer to get a proper status comparison between them)
-        if layers.contains(.lokinet) { LokinetWrapper.setupIfNeeded() }
+        if layers.contains(.lokinet) { Lokinet.setupIfNeeded() }
         if layers.contains(.direct) {
             DispatchQueue.main.async(using: dependencies) {
                 NotificationCenter.default.post(name: .directNetworkReady, object: nil)
