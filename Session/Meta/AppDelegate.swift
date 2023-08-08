@@ -79,18 +79,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                     return
                 }
                 
-                // FIXME: Remove this (or create a proper migration if we want to keep it)
-                let networkLayer: RequestAPI.NetworkLayer? = Storage.shared[.debugNetworkLayer]
-                
-                if networkLayer == nil {
-                    let previousNetworkLayer: RequestAPI.NetworkLayer = RequestAPI.NetworkLayer(rawValue: UserDefaults.standard.string(forKey: "networkLayer") ?? "")
-                        .defaulting(to: .defaultLayer)
-                    
-                    Storage.shared.writeAsync { db in
-                        db[.debugNetworkLayer] = previousNetworkLayer
-                    }
-                }
-                
                 /// Store a weak reference in the ThemeManager so it can properly apply themes as needed
                 ///
                 /// **Note:** Need to do this after the db migrations because theme preferences are stored in the database and

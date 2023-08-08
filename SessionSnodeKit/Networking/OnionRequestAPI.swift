@@ -7,17 +7,36 @@ import GRDB
 import SessionUtilitiesKit
 
 public extension Network.RequestType {
-    static func onionRequest(_ payload: Data, to snode: Snode, timeout: TimeInterval = HTTP.defaultTimeout) -> Network.RequestType<Data?> {
+    /// Sends an onion request to `snode`. Builds new paths as needed.
+    static func onionRequest(
+        _ payload: Data,
+        to snode: Snode,
+        timeout: TimeInterval = HTTP.defaultTimeout
+    ) -> Network.RequestType<Data?> {
         return Network.RequestType(
             id: "onionRequest",
             url: snode.address,
             method: "POST",
             body: payload,
             args: [payload, snode, timeout]
-        ) { OnionRequestAPI.sendOnionRequest(payload, to: snode, timeout: timeout) }
+        ) {
+            /// **Note:** Currently the service nodes only support V3 Onion Requests
+            OnionRequestAPI.sendRequest(
+                with: payload,
+                to: OnionRequestAPIDestination.snode(snode),
+                version: .v3,
+                timeout: timeout
+            )
+        }
     }
     
-    static func onionRequest(_ request: URLRequest, to server: String, with x25519PublicKey: String, timeout: TimeInterval = HTTP.defaultTimeout) -> Network.RequestType<Data?> {
+    /// Sends an onion request to `server`. Builds new paths as needed.
+    static func onionRequest(
+        _ request: URLRequest,
+        to server: String,
+        with x25519PublicKey: String,
+        timeout: TimeInterval = HTTP.defaultTimeout
+    ) -> Network.RequestType<Data?> {
         return Network.RequestType(
             id: "onionRequest",
             url: request.url?.absoluteString,
@@ -25,7 +44,43 @@ public extension Network.RequestType {
             headers: request.allHTTPHeaderFields,
             body: request.httpBody,
             args: [request, server, x25519PublicKey, timeout]
-        ) { OnionRequestAPI.sendOnionRequest(request, to: server, with: x25519PublicKey, timeout: timeout) }
+        ) {
+            guard let url = request.url, let host = request.url?.host else {
+                return Fail(error: OnionRequestAPIError.invalidURL)
+                    .eraseToAnyPublisher()
+            }
+            
+            let scheme: String? = url.scheme
+            let port: UInt16? = url.port.map { UInt16($0) }
+            
+            guard let payload: Data = OnionRequestAPI.generateV4Payload(for: request) else {
+                return Fail(error: OnionRequestAPIError.invalidRequestInfo)
+                    .eraseToAnyPublisher()
+            }
+            
+            return OnionRequestAPI
+                .sendRequest(
+                    with: payload,
+                    to: OnionRequestAPIDestination.server(
+                        host: host,
+                        target: OnionRequestAPIVersion.v4.rawValue,
+                        x25519PublicKey: x25519PublicKey,
+                        scheme: scheme,
+                        port: port
+                    ),
+                    version: .v4,
+                    timeout: timeout
+                )
+                .handleEvents(
+                    receiveCompletion: { result in
+                        switch result {
+                            case .finished: break
+                            case .failure(let error): SNLog("Couldn't reach server: \(url) due to error: \(error).")
+                        }
+                    }
+                )
+                .eraseToAnyPublisher()
+        }
     }
 }
 
@@ -442,69 +497,9 @@ public enum OnionRequestAPI {
             .eraseToAnyPublisher()
     }
 
-    // MARK: - Public API
+    // MARK: - Request Sending
     
-    /// Sends an onion request to `snode`. Builds new paths as needed.
-    public static func sendOnionRequest(
-        _ payload: Data,
-        to snode: Snode,
-        timeout: TimeInterval = HTTP.defaultTimeout
-    ) -> AnyPublisher<(ResponseInfoType, Data?), Error> {
-        /// **Note:** Currently the service nodes only support V3 Onion Requests
-        return sendOnionRequest(
-            with: payload,
-            to: OnionRequestAPIDestination.snode(snode),
-            version: .v3,
-            timeout: timeout
-        )
-    }
-    
-    /// Sends an onion request to `server`. Builds new paths as needed.
-    public static func sendOnionRequest(
-        _ request: URLRequest,
-        to server: String,
-        with x25519PublicKey: String,
-        timeout: TimeInterval = HTTP.defaultTimeout
-    ) -> AnyPublisher<(ResponseInfoType, Data?), Error> {
-        guard let url = request.url, let host = request.url?.host else {
-            return Fail(error: OnionRequestAPIError.invalidURL)
-                .eraseToAnyPublisher()
-        }
-        
-        let scheme: String? = url.scheme
-        let port: UInt16? = url.port.map { UInt16($0) }
-        
-        guard let payload: Data = generateV4Payload(for: request) else {
-            return Fail(error: OnionRequestAPIError.invalidRequestInfo)
-                .eraseToAnyPublisher()
-        }
-        
-        return OnionRequestAPI
-            .sendOnionRequest(
-                with: payload,
-                to: OnionRequestAPIDestination.server(
-                    host: host,
-                    target: OnionRequestAPIVersion.v4.rawValue,
-                    x25519PublicKey: x25519PublicKey,
-                    scheme: scheme,
-                    port: port
-                ),
-                version: .v4,
-                timeout: timeout
-            )
-            .handleEvents(
-                receiveCompletion: { result in
-                    switch result {
-                        case .finished: break
-                        case .failure(let error):
-                            SNLog("Couldn't reach server: \(url) due to error: \(error).")
-                    }
-                }
-            )
-            .eraseToAnyPublisher()
-    }
-    
-    public static func sendOnionRequest(
+    fileprivate static func sendRequest(
         with payload: Data,
         to destination: OnionRequestAPIDestination,
         version: OnionRequestAPIVersion,
@@ -629,7 +624,7 @@ public enum OnionRequestAPI {
     
     // MARK: - Version Handling
     
-    private static func generateV4Payload(for request: URLRequest) -> Data? {
+    fileprivate static func generateV4Payload(for request: URLRequest) -> Data? {
         guard let url = request.url else { return nil }
         
         // Note: We need to remove the leading forward slash unless we are explicitly hitting

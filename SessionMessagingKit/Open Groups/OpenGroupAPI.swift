@@ -1368,12 +1368,6 @@ public enum OpenGroupAPI {
         }
         
         return PreparedSendData(
-            finalRequest: .onionRequest(
-                request,
-                to: request.server,
-                with: publicKey,
-                timeout: timeout
-            ),
             request: request,
             urlRequest: signedRequest,
             publicKey: publicKey,
@@ -1392,11 +1386,9 @@ public enum OpenGroupAPI {
                 .eraseToAnyPublisher()
         }
         
-//        return dependencies.requestApi.sendRequest(db, request: signedRequest, to: request.server, with: publicKey, timeout: timeout)
-        
         return dependencies.network
             .send(
-                .onionRequest(
+                .selectedNetworkRequest(
                     validData.request,
                     to: validData.server,
                     with: validData.publicKey,

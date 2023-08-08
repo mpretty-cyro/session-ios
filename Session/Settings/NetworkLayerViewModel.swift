@@ -1,24 +1,27 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
 import DifferenceKit
 import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
-class NetworkLayerViewModel: SessionTableViewModel<NoNav, NetworkLayerViewModel.Section, RequestAPI.NetworkLayer> {
-    private let storage: Storage
-    private let scheduler: ValueObservationScheduler
+class NetworkLayerViewModel: SessionTableViewModel<NoNav, NetworkLayerViewModel.Section, Network.Layers> {
+    private let dependencies: Dependencies
+    private let currentSelectionSubject: CurrentValueSubject<Network.Layers, Error>
     
     // MARK: - Initialization
     
-    init(
-        storage: Storage = Storage.shared,
-        scheduling scheduler: ValueObservationScheduler = Storage.defaultPublisherScheduler
-    ) {
-        self.storage = storage
-        self.scheduler = scheduler
+    init(using dependencies: Dependencies = Dependencies()) {
+        self.dependencies = dependencies
+        self.currentSelectionSubject = CurrentValueSubject(
+            (dependencies.storage[.networkLayers]
+                .map { Int8($0) }
+                .map { Network.Layers(rawValue: $0) })
+                .defaulting(to: .defaultLayers)
+        )
     }
     
     // MARK: - Section
@@ -29,43 +32,45 @@ class NetworkLayerViewModel: SessionTableViewModel<NoNav, NetworkLayerViewModel.
     
     // MARK: - Content
     
-    override var title: String { "Network Layer" }
+    override var title: String { "Network Layers" }
     
-    private var _settingsData: [SectionModel] = []
-    public override var settingsData: [SectionModel] { _settingsData }
+    override var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> {
+        currentSelectionSubject
+            .catch { _ in Just([]).eraseToAnyPublisher() }
+            .prepend([])
+            .map { currentSelection in
+                SessionButton.Info(
+                    style: .destructive,
+                    title: "Set",
+                    isEnabled: !currentSelection.isEmpty,
+                    onTap: { [weak self] in self?.saveChanges() }
+                )
+            }
+            .eraseToAnyPublisher()
+    }
     
-    public override var observableSettingsData: ObservableData { _observableSettingsData }
+    public override var observableTableData: ObservableData { _observableTableData }
     
-    /// This is all the data the screen needs to populate itself, please see the following link for tips to help optimise
-    /// performance https://github.com/groue/GRDB.swift#valueobservation-performance
-    ///
-    /// **Note:** This observation will be triggered twice immediately (and be de-duped by the `removeDuplicates`)
-    /// this is due to the behaviour of `ValueConcurrentObserver.asyncStartObservation` which triggers it's own
-    /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
-    /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
-    private lazy var _observableSettingsData: ObservableData = ValueObservation
-        .trackingConstantRegion { [storage] db -> [SectionModel] in
-            let currentSelection: RequestAPI.NetworkLayer? = db[.debugNetworkLayer]
-                .defaulting(to: .defaultLayer)
-            
+    private lazy var _observableTableData: ObservableData = currentSelectionSubject
+        .map { selectedLayers -> [SectionModel] in
             return [
                 SectionModel(
                     model: .content,
-                    elements: RequestAPI.NetworkLayer.allCases
+                    elements: Network.Layers.all
                         .map { networkLayer in
                             SessionCell.Info(
                                 id: networkLayer,
                                 title: networkLayer.name,
+                                subtitle: networkLayer.description,
                                 rightAccessory: .radio(
-                                    isSelected: { (currentSelection == networkLayer) }
+                                    isSelected: { selectedLayers.contains(networkLayer) }
                                 ),
                                 onTap: { [weak self] in
-                                    storage.write { db in
-                                        db[.debugNetworkLayer] = networkLayer
-                                    }
-                                    
-                                    RequestAPI.NetworkLayer.didChangeNetworkLayer()
-                                    self?.dismissScreen()
+                                    let updatedSelection: Network.Layers = (selectedLayers.contains(networkLayer) ?
+                                        selectedLayers.subtracting(networkLayer) :
+                                        selectedLayers.union(networkLayer)
+                                    )
+                                    self?.currentSelectionSubject.send(updatedSelection)
                                 }
                             )
                         }
@@ -73,11 +78,23 @@ class NetworkLayerViewModel: SessionTableViewModel<NoNav, NetworkLayerViewModel.
             ]
         }
         .removeDuplicates()
-        .publisher(in: storage, scheduling: scheduler)
+        .eraseToAnyPublisher()
+        .mapToSessionTableViewData(for: self)
     
     // MARK: - Functions
-
-    public override func updateSettings(_ updatedSettings: [SectionModel]) {
-        self._settingsData = updatedSettings
+    
+    private func saveChanges() {
+        let currentSelection: Network.Layers = self.currentSelectionSubject.value
+        
+        guard !currentSelection.isEmpty else { return }
+        
+        dependencies.storage.writeAsync(
+            using: dependencies,
+            updates: { db in db[.networkLayers] = Int(currentSelection.rawValue) },
+            completion: { [weak self] _, _ in
+                Network.Layers.didChangeNetworkLayer()
+                self?.dismissScreen()
+            }
+        )
     }
 }

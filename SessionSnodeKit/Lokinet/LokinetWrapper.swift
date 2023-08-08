@@ -13,6 +13,7 @@ import SessionUtilitiesKit
 public enum LokinetWrapper {
     private static let setupQueue = DispatchQueue(label: "SessionSnodeKit.lokinetQueue", qos: .userInitiated)
     public static private(set) var isReady: Bool = false
+    public static private(set) var didError: Bool = false
     public static private(set) var startTime: CFTimeInterval = 0
     private static var context: OpaquePointer?
     private static var loggerFunc: lokinet_logger_func?
@@ -42,15 +43,18 @@ public enum LokinetWrapper {
                 )!
             )
             var bootstrapBytes: [CChar] = bootstrapContent.bytes.map { CChar(bitPattern: $0) }
+            LokinetWrapper.didError = false
             LokinetWrapper.context = context
-            RequestAPI.lokinetRequestTiming.mutate {
-                $0["Startup"] = RequestAPI.Timing(
+            Network.requestTiming.mutate { timing in
+                var updatedTiming: [String: Network.Timing] = (timing[.lokinet] ?? [:])
+                updatedTiming["Startup"] = Network.Timing(
                     requestType: "Startup",
                     startTime: start,
                     endTime: -1,
                     didError: false,
                     didTimeout: false
                 )
+                timing[.lokinet] = updatedTiming
             }
             
             // Set the data directory so we can cache the nodedb
@@ -79,6 +83,16 @@ public enum LokinetWrapper {
                 SNLog("[Lokinet] Startup failed")
                 LokinetWrapper.context = nil
                 LokinetWrapper.startTime = 0
+                LokinetWrapper.didError = true
+                
+                Network.requestTiming.mutate { timing in
+                    let updatedTiming: Network.Timing? = (timing[.lokinet] ?? [:])?["Startup"]?.with(
+                        endTime: CACurrentMediaTime(),
+                        didError: true,
+                        didTimeout: false
+                    )
+                    timing[.lokinet]?["Startup"] = updatedTiming
+                }
                 return
             }
             
@@ -98,8 +112,9 @@ public enum LokinetWrapper {
                     SNLog("[Lokinet] Ready: \(end - start)s")
                     LokinetWrapper.startTime = (end - start)
                     LokinetWrapper.isReady = true
-                    RequestAPI.lokinetRequestTiming.mutate {
-                        $0["Startup"] = $0["Startup"]?.with(endTime: end)
+                    Network.requestTiming.mutate { timing in
+                        let updatedTiming: Network.Timing? = (timing[.lokinet] ?? [:])?["Startup"]?.with(endTime: end)
+                        timing[.lokinet]?["Startup"] = updatedTiming
                     }
                     
                     DispatchQueue.main.async {
@@ -110,6 +125,16 @@ public enum LokinetWrapper {
                     SNLog("[Lokinet] Failed")
                     LokinetWrapper.context = nil
                     LokinetWrapper.isReady = false
+                    LokinetWrapper.didError = true
+                    
+                    Network.requestTiming.mutate { timing in
+                        let updatedTiming: Network.Timing? = (timing[.lokinet] ?? [:])?["Startup"]?.with(
+                            endTime: CACurrentMediaTime(),
+                            didError: true,
+                            didTimeout: false
+                        )
+                        timing[.lokinet]?["Startup"] = updatedTiming
+                    }
             }
         }
     }
@@ -121,6 +146,7 @@ public enum LokinetWrapper {
         lokinet_context_stop(LokinetWrapper.context)
         LokinetWrapper.context = nil
         LokinetWrapper.isReady = false
+        LokinetWrapper.didError = true
     }
     
     public static func getDestinationFor(host: String, port: UInt16) throws -> String {
@@ -170,12 +196,5 @@ public enum LokinetWrapper {
                 }
             }
         }
-    }
-}
-
-@objc(SSKLokinetWrapper)
-public class objc_LokinetWrapper: NSObject {
-    @objc public static func setupIfNeeded() {
-        LokinetWrapper.setupIfNeeded()
     }
 }

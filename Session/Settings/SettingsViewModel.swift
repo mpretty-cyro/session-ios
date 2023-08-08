@@ -234,8 +234,10 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
         .trackingConstantRegion { [weak self] db -> [SectionModel] in
             let userPublicKey: String = getUserHexEncodedPublicKey(db)
             let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
-            let networkLayer: RequestAPI.NetworkLayer = db[.debugNetworkLayer]
-                .defaulting(to: .defaultLayer)
+            let networkLayers: Network.Layers = (db[.networkLayers]
+                .map { Int8($0) }
+                .map { Network.Layers(rawValue: $0) })
+                .defaulting(to: .defaultLayers)
             
             return [
                 SectionModel(
@@ -335,17 +337,15 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                             id: .networkLayer,
                             leftAccessory: .icon(
                                 UIImage(
-                                    systemName: (networkLayer == .direct ?
+                                    systemName: (networkLayers.contains(.direct) ?
                                         "network" :
                                         "network.badge.shield.half.filled"
                                     )
                                 )?
                                 .withRenderingMode(.alwaysTemplate)
                             ),
-                            title: "Network Layer",
-                            rightAccessory: .dropDown(
-                                .dynamicString { networkLayer.name }
-                            ),
+                            title: "Network Layers",
+                            subtitle: "All requests will be sent via: \(networkLayers.name)",
                             onTap: { [weak self] in
                                 self?.transitionToScreen(
                                     SessionTableViewController(viewModel: NetworkLayerViewModel())
@@ -360,7 +360,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
                                 let result: UIView = UIView()
                                 let pathView: PathStatusView = PathStatusView(
                                     size: .large,
-                                    networkLayer: networkLayer
+                                    targetLayers: networkLayers
                                 )
                                 result.addSubview(pathView)
                                 

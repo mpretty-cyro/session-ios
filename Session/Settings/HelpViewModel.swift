@@ -18,6 +18,7 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
     
     public enum Section: SessionTableSection {
         case report
+        case exportNetworkTiming
         case translate
         case feedback
         case faq
@@ -58,6 +59,23 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
                             onTapView: { HelpViewModel.shareLogs(targetView: $0) }
                         )
                     ]
+                ),
+                (AppBuild.current == .appStore ? nil :
+                    // Allow non-AppStore builds to export the network request timing
+                    SectionModel(
+                        model: .exportNetworkTiming,
+                        elements: [
+                            SessionCell.Info(
+                                id: .exportNetworkTiming,
+                                title: "Export Network Timing",
+                                subtitle: "Export your network request timing for debugging or performance testing purposes.",
+                                rightAccessory: .highlightingBackgroundLabel(
+                                    title: "Export"
+                                ),
+                                onTapView: { HelpViewModel.shareNetworkTiming(targetView: $0) }
+                            )
+                        ]
+                    )
                 ),
                 SectionModel(
                     model: .translate,
@@ -143,7 +161,7 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
                         )
                     ]
                 )
-            ]
+            ].compactMap { $0 }
 #if DEBUG
             .appending(
                 SectionModel(
@@ -193,6 +211,42 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
         let showShareSheet: () -> () = {
             let shareVC = UIActivityViewController(
                 activityItems: [ URL(fileURLWithPath: latestLogFilePath) ],
+                applicationActivities: nil
+            )
+            shareVC.completionWithItemsHandler = { _, _, _, _ in onShareComplete?() }
+            
+            if UIDevice.current.isIPad {
+                shareVC.excludedActivityTypes = []
+                shareVC.popoverPresentationController?.permittedArrowDirections = (targetView != nil ? [.up] : [])
+                shareVC.popoverPresentationController?.sourceView = (targetView ?? viewController.view)
+                shareVC.popoverPresentationController?.sourceRect = (targetView ?? viewController.view).bounds
+            }
+            viewController.present(shareVC, animated: animated, completion: nil)
+        }
+        
+        guard let viewControllerToDismiss: UIViewController = viewControllerToDismiss else {
+            showShareSheet()
+            return
+        }
+
+        viewControllerToDismiss.dismiss(animated: animated) {
+            showShareSheet()
+        }
+    }
+    
+    public static func shareNetworkTiming(
+        viewControllerToDismiss: UIViewController? = nil,
+        targetView: UIView? = nil,
+        animated: Bool = true,
+        onShareComplete: (() -> ())? = nil
+    ) {
+        let networkTiming: String = Network.printTimingComparison()
+        
+        guard let viewController: UIViewController = CurrentAppContext().frontmostViewController() else { return }
+        
+        let showShareSheet: () -> () = {
+            let shareVC = UIActivityViewController(
+                activityItems: [networkTiming],
                 applicationActivities: nil
             )
             shareVC.completionWithItemsHandler = { _, _, _, _ in onShareComplete?() }

@@ -56,7 +56,21 @@ final class PathStatusView: UIView {
     private lazy var layerLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .boldSystemFont(ofSize: 6)
+        result.text = targetLayers.name
+            .replacingOccurrences(of: " and ", with: ", ")
+            .components(separatedBy: ", ")
+            .asSet()
+            .sorted()
+            .map { name in
+                name
+                    .components(separatedBy: " ")
+                    .compactMap { $0.first.map { "\($0)" } }
+                    .joined()
+            }
+            .joined(separator: "/")
         result.textAlignment = .center
+        result.adjustsFontSizeToFitWidth = true
+        result.numberOfLines = 2
         
         return result
     }()
@@ -64,17 +78,17 @@ final class PathStatusView: UIView {
     // MARK: - Initialization
     
     private let size: Size
-    private let networkLayer: RequestAPI.NetworkLayer
+    private let targetLayers: Network.Layers
     private let reachability: Reachability? = Environment.shared?.reachabilityManager.reachability
     
-    init(size: Size = .small, networkLayer: RequestAPI.NetworkLayer) {
+    init(size: Size = .small, targetLayers: Network.Layers) {
         self.size = size
-        self.networkLayer = networkLayer
+        self.targetLayers = targetLayers
         
         super.init(frame: .zero)
         
-        setUpViewHierarchy(networkLayer: networkLayer)
-        registerObservers(networkLayer: networkLayer)
+        setUpViewHierarchy()
+        registerObservers()
     }
     
     required init?(coder: NSCoder) {
@@ -87,50 +101,68 @@ final class PathStatusView: UIView {
     
     // MARK: - Layout
     
-    private func setUpViewHierarchy(networkLayer: RequestAPI.NetworkLayer) {
+    private func setUpViewHierarchy() {
         layer.cornerRadius = (self.size.pointSize / 2)
         layer.masksToBounds = false
         self.set(.width, to: self.size.pointSize)
         self.set(.height, to: self.size.pointSize)
         
         addSubview(layerLabel)
-        layerLabel.pin(to: self, withInset: 2)
-        
-        let currentLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .onionRequest:
-                layerLabel.text = "O"
-                setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
-                
-            case .lokinet:
-                layerLabel.text = "L"
-                setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
-                
-            case .nativeLokinet: break
-                
-            case .direct:
-                layerLabel.text = "D"
-                setStatus(to: .connected)
-                
-            case .onionAndLokiComparison:
-                layerLabel.text = "O/L"
-                setStatus(to: .connected)
-        }
-        
-        // For the settings view we want to change the path colour to gray if it's not currently active
-        switch (networkLayer != currentLayer, reachability?.isReachable(), OnionRequestAPI.paths.isEmpty) {
-            case (true, _, _): setStatus(to: .unknown)
-            case (_, .some(false), _), (nil, _): setStatus(to: .error)
-            case (_, .some(true), true): setStatus(to: .connecting)
-            case (_, .some(true), false): setStatus(to: .connected)
-        }
+        layerLabel.pin(to: self, withInset: 1)
+        updateNetworkStatus()
     }
     
     // MARK: - Functions
+
+    private func setStatus(to status: Status) {
+        layerLabel.themeTextColor = status.textThemeColor
+        themeBackgroundColor = status.themeColor
+        layer.themeShadowColor = status.themeColor
+        layer.shadowOffset = CGSize(width: 0, height: 0.8)
+        layer.shadowPath = UIBezierPath(
+            ovalIn: CGRect(
+                origin: CGPoint.zero,
+                size: CGSize(width: self.size.pointSize, height: self.size.pointSize)
+            )
+        ).cgPath
+        
+        ThemeManager.onThemeChange(observer: self) { [weak self] theme, _ in
+            self?.layer.shadowOpacity = (theme.interfaceStyle == .light ? 0.4 : 1)
+            self?.layer.shadowRadius = (self?.size.offset(for: theme.interfaceStyle) ?? 0)
+        }
+    }
     
-    private func registerObservers(networkLayer: RequestAPI.NetworkLayer) {
+    private func updateNetworkStatus() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.updateNetworkStatus() }
+            return
+        }
+        
+        let reachabilityStatus: Status = (reachability?.isReachable() == false ? .error : .connected)
+        let onionRequestStatus: Status = (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting)
+        let lokinetStatus: Status = {
+            guard !LokinetWrapper.didError else { return .error }
+            
+            return (LokinetWrapper.isReady ? .connected : .connecting)
+        }()
+        
+        // Determine the applicable statuses and then update the state accordingly
+        let allStatuses: [Status] = [
+            reachabilityStatus,
+            (targetLayers.contains(.onionRequest) ? onionRequestStatus : nil),
+            (targetLayers.contains(.lokinet) ? lokinetStatus : nil)
+        ].compactMap { $0 }
+        
+        guard !allStatuses.contains(.error) else { return setStatus(to: .error) }
+        guard !allStatuses.contains(.unknown) else { return setStatus(to: .unknown) }
+        guard !allStatuses.contains(.connecting) else { return setStatus(to: .connecting) }
+        
+        setStatus(to: .connected)
+    }
+    
+    // MARK: - Notification Handling
+    
+    private func registerObservers() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleNetworkLayerChangedNotification),
@@ -174,169 +206,12 @@ final class PathStatusView: UIView {
             object: nil
         )
     }
-
-    private func setStatus(to status: Status) {
-        layerLabel.themeTextColor = status.textThemeColor
-        themeBackgroundColor = status.themeColor
-        layer.themeShadowColor = status.themeColor
-        layer.shadowOffset = CGSize(width: 0, height: 0.8)
-        layer.shadowPath = UIBezierPath(
-            ovalIn: CGRect(
-                origin: CGPoint.zero,
-                size: CGSize(width: self.size.pointSize, height: self.size.pointSize)
-            )
-        ).cgPath
-        
-        ThemeManager.onThemeChange(observer: self) { [weak self] theme, _ in
-            self?.layer.shadowOpacity = (theme.interfaceStyle == .light ? 0.4 : 1)
-            self?.layer.shadowRadius = (self?.size.offset(for: theme.interfaceStyle) ?? 0)
-        }
-    }
     
-    // MARK: - Notification Handling
-    
-    @objc private func handleNetworkLayerChangedNotification() {
-        let newLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch (networkLayer, newLayer) {
-            case (.onionRequest, .onionRequest):
-                setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
-                
-            case (.lokinet, .lokinet):
-                setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
-                
-            case (.nativeLokinet, .nativeLokinet): fallthrough
-            case (.direct, .direct):
-                setStatus(to: .connected)
-                
-            default:
-                setStatus(to: .unknown)
-        }
-    }
-
-    @objc private func handleBuildingPathsNotification() {
-        guard reachability?.isReachable() == true else {
-            setStatus(to: .error)
-            return
-        }
-        
-        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .onionRequest:
-                setStatus(to: .connecting)
-                
-            case .lokinet: fallthrough
-            case .nativeLokinet: fallthrough
-            case .direct: fallthrough
-            case .onionAndLokiComparison:
-                guard cachedLayer != .onionAndLokiComparison else { return }
-                
-                setStatus(to: .unknown)
-        }
-    }
-
-    @objc private func handlePathsBuiltNotification() {
-        guard reachability?.isReachable() == true  else {
-            setStatus(to: .error)
-            return
-        }
-        
-        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .onionRequest:
-                setStatus(to: .connected)
-                
-            case .lokinet: fallthrough
-            case .nativeLokinet: fallthrough
-            case .direct: fallthrough
-            case .onionAndLokiComparison:
-                guard cachedLayer != .onionAndLokiComparison else { return }
-                
-                setStatus(to: .unknown)
-        }
-    }
-    
-    @objc private func handleBuildingPathsLokiNotification() {
-        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .lokinet:
-                setStatus(to: .connecting)
-                
-            case .onionRequest: fallthrough
-            case .nativeLokinet: fallthrough
-            case .direct: fallthrough
-            case .onionAndLokiComparison:
-                guard cachedLayer != .onionAndLokiComparison else { return }
-                
-                setStatus(to: .unknown)
-        }
-    }
-
-    @objc private func handlePathsBuiltLokiNotification() {
-        guard reachability.isReachable() else {
-            setStatus(to: .error)
-            return
-        }
-        
-        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .lokinet:
-                setStatus(to: .connected)
-                
-            case .onionRequest: fallthrough
-            case .nativeLokinet: fallthrough
-            case .direct: fallthrough
-            case .onionAndLokiComparison:
-                guard cachedLayer != .onionAndLokiComparison else { return }
-                
-                setStatus(to: .unknown)
-        }
-    }
-    
-    @objc private func handleDirectNetworkReadyNotification() {
-        let cachedLayer: RequestAPI.NetworkLayer = Storage.shared[.debugNetworkLayer]
-            .defaulting(to: .defaultLayer)
-        
-        switch networkLayer {
-            case .nativeLokinet: fallthrough
-            case .direct:
-                setStatus(to: .connected)
-                
-            case .onionRequest: fallthrough
-            case .lokinet: fallthrough
-            case .onionAndLokiComparison:
-                guard cachedLayer != .onionAndLokiComparison else { return }
-                
-                setStatus(to: .unknown)
-        }
-    }
-    
-    @objc private func reachabilityChanged() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in self?.reachabilityChanged() }
-            return
-        }
-        
-        guard reachability?.isReachable() == true else {
-            setStatus(to: .error)
-            return
-        }
-        
-        switch networkLayer {
-            case .onionRequest: setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
-            case .lokinet: setStatus(to: (LokinetWrapper.isReady ? .connected : .connecting))
-            case .nativeLokinet: setStatus(to: .connected)
-            case .direct: setStatus(to: .connected)
-            case .onionAndLokiComparison: setStatus(to: .unknown)
-        }
-    }
+    @objc private func handleNetworkLayerChangedNotification() { updateNetworkStatus() }
+    @objc private func handleBuildingPathsNotification() { updateNetworkStatus() }
+    @objc private func handlePathsBuiltNotification() { updateNetworkStatus() }
+    @objc private func handleBuildingPathsLokiNotification() { updateNetworkStatus() }
+    @objc private func handlePathsBuiltLokiNotification() { updateNetworkStatus() }
+    @objc private func handleDirectNetworkReadyNotification() { updateNetworkStatus() }
+    @objc private func reachabilityChanged() { updateNetworkStatus() }
 }

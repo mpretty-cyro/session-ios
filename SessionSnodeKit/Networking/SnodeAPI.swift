@@ -1200,7 +1200,7 @@ public final class SnodeAPI {
         }
         
         return dependencies.network
-            .send(.onionRequest(payload, to: snode))
+            .send(.selectedNetworkRequest(payload, to: snode))
             .mapError { error in
                 switch error {
                     case HTTPError.httpRequestFailed(let statusCode, let data):

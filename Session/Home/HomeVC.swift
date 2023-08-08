@@ -512,15 +512,15 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         profilePictureView.addGestureRecognizer(tapGestureRecognizer)
         
         // Path status indicator
-        let pathStatusView = PathStatusView(networkLayer: .onionRequest)
+        let pathStatusView = PathStatusView(targetLayers: .onionRequest)
         pathStatusView.accessibilityLabel = "Current onion routing path indicator"
         
         // Path status indicator
-        let pathStatusView2 = PathStatusView(networkLayer: .lokinet)
+        let pathStatusView2 = PathStatusView(targetLayers: .lokinet)
         pathStatusView2.accessibilityLabel = "Current loki routing path indicator"
         
         // Path status indicator
-        let pathStatusView3 = PathStatusView(networkLayer: .direct)
+        let pathStatusView3 = PathStatusView(targetLayers: .direct)
         pathStatusView3.accessibilityLabel = "Current direct routing path indicator"
         
         // Container view
