@@ -377,6 +377,8 @@ public enum DeadlockWorkAround {
                     threadId: openGroup.id,
                     threadVariant: .community,
                     message: processedMessage.messageInfo.message,
+                    preparedAttachments: message.attachments?
+                        .reduce(into: [:]) { result, next in result[next.serverId ?? ""] = next },
                     serverExpirationTimestamp: processedMessage.messageInfo.serverExpirationTimestamp,
                     associatedWithProto: processedMessage.proto,
                     using: dependencies
