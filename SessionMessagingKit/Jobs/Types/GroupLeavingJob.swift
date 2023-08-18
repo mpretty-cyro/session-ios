@@ -48,6 +48,7 @@ public enum GroupLeavingJob: JobExecutor {
                     message: ClosedGroupControlMessage(
                         kind: .memberLeft
                     ),
+                    preparedAttachments: nil,
                     to: destination,
                     namespace: destination.defaultNamespace,
                     interactionId: job.interactionId,

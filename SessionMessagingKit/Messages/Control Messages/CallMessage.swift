@@ -165,7 +165,7 @@ public final class CallMessage: ControlMessage {
         )
     }
     
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         let type: SNProtoCallMessage.SNProtoCallMessageType
         
         switch kind {
@@ -232,7 +232,13 @@ public extension CallMessage {
             self.state = state
         }
         
-        // MARK: - Content
+        // MARK: - Functions
+        
+        public func messageInfoString() throws -> String? {
+            let data: Data = try JSONEncoder().encode(self)
+            
+            return String(data: data, encoding: .utf8)
+        }
         
         func previewText(threadContactDisplayName: String) -> String {
             switch state {

@@ -61,7 +61,7 @@ public final class UnsendRequest: ControlMessage {
         return UnsendRequest(timestamp: timestamp, author: author)
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         guard let timestamp = timestamp, let author = author else {
             SNLog("Couldn't construct unsend request proto from: \(self).")
             return nil

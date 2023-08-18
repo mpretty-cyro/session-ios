@@ -22,23 +22,25 @@ extension MessageReceiver {
             message.sentTimestamp.map { Int64($0) } ??
             SnodeAPI.currentOffsetTimestampMs()
         )
+        let variant: Interaction.Variant = {
+            switch messageKind {
+                case .screenshot: return .infoScreenshotNotification
+                case .mediaSaved: return .infoMediaSavedNotification
+            }
+        }()
         _ = try Interaction(
             serverHash: message.serverHash,
             threadId: threadId,
             authorId: sender,
-            variant: {
-                switch messageKind {
-                    case .screenshot: return .infoScreenshotNotification
-                    case .mediaSaved: return .infoMediaSavedNotification
-                }
-            }(),
+            variant: variant,
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: Interaction.isAlreadyRead(
+                db,
                 threadId: threadId,
                 threadVariant: threadVariant,
-                timestampMs: (timestampMs * 1000),
-                userPublicKey: getUserHexEncodedPublicKey(db),
-                openGroup: nil
+                variant: variant,
+                timestampMs: timestampMs,
+                currentUserPublicKey: getUserHexEncodedPublicKey(db)
             )
         ).inserted(db)
     }

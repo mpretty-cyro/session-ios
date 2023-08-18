@@ -81,7 +81,7 @@ public final class DataExtractionNotification: ControlMessage {
         return DataExtractionNotification(kind: kind)
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         guard let kind = kind else {
             SNLog("Couldn't construct data extraction notification proto from: \(self).")
             return nil

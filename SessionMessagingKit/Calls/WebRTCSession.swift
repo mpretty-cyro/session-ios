@@ -135,6 +135,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                     .preparedSendData(
                         db,
                         message: message,
+                        preparedAttachments: nil,
                         to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
                         namespace: try Message.Destination
                             .from(db, threadId: thread.id, threadVariant: thread.variant)
@@ -187,6 +188,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                                         sdps: [ sdp.sdp ],
                                         sentTimestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs())
                                     ),
+                                    preparedAttachments: nil,
                                     to: try Message.Destination
                                         .from(db, threadId: thread.id, threadVariant: thread.variant),
                                     namespace: try Message.Destination
@@ -257,6 +259,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                                             kind: .answer,
                                             sdps: [ sdp.sdp ]
                                         ),
+                                        preparedAttachments: nil,
                                         to: try Message.Destination
                                             .from(db, threadId: thread.id, threadVariant: thread.variant),
                                         namespace: try Message.Destination
@@ -319,6 +322,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                             ),
                             sdps: candidates.map { $0.sdp }
                         ),
+                        preparedAttachments: nil,
                         to: try Message.Destination
                             .from(db, threadId: thread.id, threadVariant: thread.variant),
                         namespace: try Message.Destination
@@ -350,6 +354,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                     kind: .endCall,
                     sdps: []
                 ),
+                preparedAttachments: nil,
                 to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
                 namespace: try Message.Destination
                     .from(db, threadId: thread.id, threadVariant: thread.variant)

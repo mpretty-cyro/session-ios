@@ -30,11 +30,7 @@ public extension VisibleMessage {
             )
         }
 
-        public func toProto() -> SNProtoDataMessagePreview? {
-            preconditionFailure("Use toProto(using:) instead.")
-        }
-
-        public func toProto(_ db: Database) -> SNProtoDataMessagePreview? {
+        public func toProto(attachment: Attachment?) throws -> SNProtoDataMessagePreview? {
             guard let url = url else {
                 SNLog("Couldn't construct link preview proto from: \(self).")
                 return nil
@@ -43,8 +39,8 @@ public extension VisibleMessage {
             if let title = title { linkPreviewProto.setTitle(title) }
             
             if
-                let attachmentId = attachmentId,
-                let attachment: Attachment = try? Attachment.fetchOne(db, id: attachmentId),
+                attachmentId != nil,
+                let attachment: Attachment = attachment,
                 let attachmentProto = attachment.buildProto()
             {
                 linkPreviewProto.setImage(attachmentProto)

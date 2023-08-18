@@ -84,12 +84,13 @@ extension MessageReceiver {
                 )
             ),
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: Interaction.isAlreadyRead(
+                db,
                 threadId: threadId,
                 threadVariant: threadVariant,
-                timestampMs: (timestampMs * 1000),
-                userPublicKey: currentUserPublicKey,
-                openGroup: nil
+                variant: .infoDisappearingMessagesUpdate,
+                timestampMs: timestampMs,
+                currentUserPublicKey: currentUserPublicKey
             )
         ).inserted(db)
         

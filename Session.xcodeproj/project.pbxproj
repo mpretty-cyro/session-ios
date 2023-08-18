@@ -635,6 +635,7 @@
 		FD52090928B59411006098F6 /* ScreenLockUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD52090828B59411006098F6 /* ScreenLockUI.swift */; };
 		FD52090B28B59BB4006098F6 /* ScreenLockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD52090A28B59BB4006098F6 /* ScreenLockViewController.swift */; };
 		FD559DF52A7368CB00C7C62A /* DispatchQueue+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD559DF42A7368CB00C7C62A /* DispatchQueue+Utilities.swift */; };
+		FD5931A32A89FBBB0040147D /* DeadlockWorkAround.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931A22A89FBBB0040147D /* DeadlockWorkAround.swift */; };
 		FD5931A72A8DA5DA0040147D /* SQLInterpolation+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931A62A8DA5DA0040147D /* SQLInterpolation+Utilities.swift */; };
 		FD5931AB2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931AA2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift */; };
 		FD5C72F7284F0E560029977D /* MessageReceiver+ReadReceipts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5C72F6284F0E560029977D /* MessageReceiver+ReadReceipts.swift */; };
@@ -1757,6 +1758,7 @@
 		FD52090828B59411006098F6 /* ScreenLockUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenLockUI.swift; sourceTree = "<group>"; };
 		FD52090A28B59BB4006098F6 /* ScreenLockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenLockViewController.swift; sourceTree = "<group>"; };
 		FD559DF42A7368CB00C7C62A /* DispatchQueue+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DispatchQueue+Utilities.swift"; sourceTree = "<group>"; };
+		FD5931A22A89FBBB0040147D /* DeadlockWorkAround.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlockWorkAround.swift; sourceTree = "<group>"; };
 		FD5931A62A8DA5DA0040147D /* SQLInterpolation+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SQLInterpolation+Utilities.swift"; sourceTree = "<group>"; };
 		FD5931AA2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScopeAdapter+Utilities.swift"; sourceTree = "<group>"; };
 		FD5C72F6284F0E560029977D /* MessageReceiver+ReadReceipts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MessageReceiver+ReadReceipts.swift"; sourceTree = "<group>"; };
@@ -3220,6 +3222,7 @@
 				C33FDB75255A581000E217F9 /* AppReadiness.m */,
 				FD23CE232A675C440000B97C /* Crypto+SessionMessagingKit.swift */,
 				FD859EF127BF6BA200510D0C /* Data+Utilities.swift */,
+				FD5931A22A89FBBB0040147D /* DeadlockWorkAround.swift */,
 				C38EF309255B6DBE007E1867 /* DeviceSleepManager.swift */,
 				FDF0B7542807C4BB004C14C5 /* Environment.swift */,
 				C3BBE0C62554F1570050F1E3 /* FixedWidthInteger+BigEndian.swift */,
@@ -5802,6 +5805,7 @@
 				FDA8EB00280E8D58002B68E5 /* FailedAttachmentDownloadsJob.swift in Sources */,
 				FD09798927FD1C5A00936362 /* OpenGroup.swift in Sources */,
 				FD848B9628422A2A000E298B /* MessageViewModel.swift in Sources */,
+				FD5931A32A89FBBB0040147D /* DeadlockWorkAround.swift in Sources */,
 				FDF0B7472804F0CE004C14C5 /* DisappearingMessagesJob.swift in Sources */,
 				FDF0B73C27FFD3D6004C14C5 /* LinkPreview.swift in Sources */,
 				FD09797527FAB64300936362 /* ProfileManager.swift in Sources */,

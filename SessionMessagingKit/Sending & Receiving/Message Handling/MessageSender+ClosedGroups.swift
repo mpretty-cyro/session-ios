@@ -102,6 +102,7 @@ extension MessageSender {
                                 // the 'ClosedGroup' object we created
                                 sentTimestampMs: UInt64(floor(formationTimestamp * 1000))
                             ),
+                            preparedAttachments: nil,
                             to: .contact(publicKey: memberId),
                             namespace: Message.Destination.contact(publicKey: memberId).defaultNamespace,
                             interactionId: nil,
@@ -210,6 +211,7 @@ extension MessageSender {
                                 }
                             )
                         ),
+                        preparedAttachments: nil,
                         to: try Message.Destination
                             .from(db, threadId: closedGroup.threadId, threadVariant: .legacyGroup),
                         namespace: try Message.Destination
@@ -550,6 +552,7 @@ extension MessageSender {
                                 members: removedMembers.map { Data(hex: $0) }
                             )
                         ),
+                        preparedAttachments: nil,
                         to: try Message.Destination
                             .from(db, threadId: closedGroup.threadId, threadVariant: .legacyGroup),
                         namespace: try Message.Destination

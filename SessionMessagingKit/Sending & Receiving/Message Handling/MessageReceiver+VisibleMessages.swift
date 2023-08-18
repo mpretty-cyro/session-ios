@@ -12,6 +12,7 @@ extension MessageReceiver {
         threadId: String,
         threadVariant: SessionThread.Variant,
         message: VisibleMessage,
+        preparedAttachments: [String: Attachment]?,
         associatedWithProto proto: SNProtoContent,
         using dependencies: Dependencies = Dependencies()
     ) throws -> Int64 {
@@ -74,54 +75,6 @@ extension MessageReceiver {
             
             return try? OpenGroup.fetchOne(db, id: threadId)
         }()
-        let variant: Interaction.Variant = try {
-            guard
-                let senderSessionId: SessionId = SessionId(from: sender),
-                let openGroup: OpenGroup = maybeOpenGroup
-            else {
-                return (sender == currentUserPublicKey ?
-                    .standardOutgoing :
-                    .standardIncoming
-                )
-            }
-
-            // Need to check if the blinded id matches for open groups
-            switch senderSessionId.prefix {
-                case .blinded15, .blinded25:
-                    let sodium: Sodium = Sodium()
-                    
-                    guard
-                        let userEdKeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                        let blindedKeyPair: KeyPair = try? dependencies.crypto.generate(
-                            .blindedKeyPair(
-                                serverPublicKey: openGroup.publicKey,
-                                edKeyPair: userEdKeyPair,
-                                using: dependencies
-                            )
-                        )
-                    else { return .standardIncoming }
-                    
-                    let senderIdCurrentUserBlinded: Bool = (
-                        sender == SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString ||
-                        sender == SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
-                    )
-                    
-                    return (senderIdCurrentUserBlinded ?
-                        .standardOutgoing :
-                        .standardIncoming
-                    )
-                    
-                case .standard, .unblinded:
-                    return (sender == currentUserPublicKey ?
-                        .standardOutgoing :
-                        .standardIncoming
-                    )
-                    
-                case .group:
-                    SNLog("Ignoring message with invalid sender.")
-                    throw HTTPError.parsingFailed
-            }
-        }()
         
         // Handle emoji reacts first (otherwise it's essentially an invalid message)
         if let interactionId: Int64 = try handleEmojiReactIfNeeded(
@@ -147,63 +100,39 @@ extension MessageReceiver {
         // prevent the ability to insert duplicate interactions at a database level
         // so we don't need to check for the existance of a message beforehand anymore
         let interaction: Interaction
+        let interactionVariant: Interaction.Variant = try getVariant(
+            db,
+            threadId: thread.id,
+            threadVariant: thread.variant,
+            message: message,
+            currentUserPublicKey: currentUserPublicKey,
+            openGroup: maybeOpenGroup,
+            using: dependencies
+        )
         
         do {
-            interaction = try Interaction(
-                serverHash: message.serverHash, // Keep track of server hash
+            interaction = try createInteraction(
+                db,
                 threadId: thread.id,
-                authorId: sender,
-                variant: variant,
-                body: message.text,
-                timestampMs: Int64(messageSentTimestamp * 1000),
-                wasRead: (
-                    // Auto-mark sent messages or messages older than the 'lastReadTimestampMs' as read
-                    variant == .standardOutgoing ||
-                    SessionUtil.timestampAlreadyRead(
-                        threadId: thread.id,
-                        threadVariant: thread.variant,
-                        timestampMs: Int64(messageSentTimestamp * 1000),
-                        userPublicKey: currentUserPublicKey,
-                        openGroup: maybeOpenGroup
-                    )
-                ),
-                hasMention: Interaction.isUserMentioned(
-                    db,
-                    threadId: thread.id,
-                    body: message.text,
-                    quoteAuthorId: dataMessage.quote?.author,
-                    using: dependencies
-                ),
-                // Note: Ensure we don't ever expire open group messages
-                expiresInSeconds: (disappearingMessagesConfiguration.isEnabled && message.openGroupServerMessageId == nil ?
-                    disappearingMessagesConfiguration.durationSeconds :
-                    nil
-                ),
-                expiresStartedAtMs: nil,
-                // OpenGroupInvitations are stored as LinkPreview's in the database
-                linkPreviewUrl: (message.linkPreview?.url ?? message.openGroupInvitation?.url),
-                // Keep track of the open group server message ID ↔ message ID relationship
-                openGroupServerMessageId: message.openGroupServerMessageId.map { Int64($0) },
-                openGroupWhisperMods: (message.recipient?.contains(".mods") == true),
-                openGroupWhisperTo: {
-                    guard
-                        let recipientParts: [String] = message.recipient?.components(separatedBy: "."),
-                        recipientParts.count >= 3  // 'server.roomToken.whisperTo.whisperMods'
-                    else { return nil }
-                    
-                    return recipientParts[2]
-                }()
+                threadVariant: thread.variant,
+                message: message,
+                customBody: nil,
+                interactionVariant: interactionVariant,
+                associatedWithProto: proto,
+                currentUserPublicKey: currentUserPublicKey,
+                openGroup: maybeOpenGroup,
+                disappearingMessagesConfiguration: disappearingMessagesConfiguration
             ).inserted(db)
         }
         catch {
             switch error {
                 case DatabaseError.SQLITE_CONSTRAINT_UNIQUE:
                     guard
-                        variant == .standardOutgoing,
+                        interactionVariant == .standardOutgoing,
                         let existingInteractionId: Int64 = try? thread.interactions
                             .select(.id)
                             .filter(Interaction.Columns.timestampMs == (messageSentTimestamp * 1000))
-                            .filter(Interaction.Columns.variant == variant)
+                            .filter(Interaction.Columns.variant == interactionVariant)
                             .filter(Interaction.Columns.authorId == sender)
                             .asRequest(of: Int64.self)
                             .fetchOne(db)
@@ -217,7 +146,7 @@ extension MessageReceiver {
                         thread: thread,
                         interactionId: existingInteractionId,
                         messageSentTimestamp: messageSentTimestamp,
-                        variant: variant,
+                        variant: interactionVariant,
                         syncTarget: message.syncTarget
                     )
                     
@@ -235,14 +164,15 @@ extension MessageReceiver {
             thread: thread,
             interactionId: interactionId,
             messageSentTimestamp: messageSentTimestamp,
-            variant: variant,
+            variant: interactionVariant,
             syncTarget: message.syncTarget
         )
         
         // Parse & persist attachments
         let attachments: [Attachment] = try dataMessage.attachments
             .compactMap { proto -> Attachment? in
-                let attachment: Attachment = Attachment(proto: proto)
+                // If we have a prepared attachment then use that over the proto
+                let attachment: Attachment = (preparedAttachments?["\(proto.id)"] ?? Attachment(proto: proto))
                 
                 // Attachments on received messages must have a 'downloadUrl' otherwise
                 // they are invalid and we can ignore them
@@ -339,7 +269,7 @@ extension MessageReceiver {
         }
         
         // Notify the user if needed
-        guard variant == .standardIncoming && !interaction.wasRead else { return interactionId }
+        guard interactionVariant == .standardIncoming && !interaction.wasRead else { return interactionId }
         
         // Use the same identifier for notifications when in backgroud polling to prevent spam
         Environment.shared?.notificationsManager.wrappedValue?
@@ -351,6 +281,202 @@ extension MessageReceiver {
             )
         
         return interactionId
+    }
+    
+    /// This function checks the database to see if a message trips any of the unique constraints, this should only be used as a
+    /// "likely to be a duplicate" check and we should still attempt to insert the message to rely on the actual unique constraints
+    /// just in case some are added/removed in the future
+    ///
+    /// The logic in this method should always match the unique constrants on the `Interaction` table
+    public static func isDuplicateMessage(
+        _ db: Database,
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        message: Message
+    ) -> Bool {
+        switch threadVariant {
+            case .community:
+                // If we don't have an 'openGroupServerMessageId' for some reason then the unique constraint won't
+                // be triggered
+                guard let openGroupServerMessageId: UInt64 = message.openGroupServerMessageId else { return false }
+                
+                /// Community conversations use a different identifier so we should only use that to check
+                /// if there is an existing entry:
+                ///   `threadId`                                        - Unique per thread
+                ///   `openGroupServerMessageId`     - Unique for VisibleMessage's on an OpenGroup server
+                return Interaction
+                    .filter(
+                        Interaction.Columns.threadId == threadId &&
+                        Interaction.Columns.openGroupServerMessageId == Int64(openGroupServerMessageId)
+                    )
+                    .isNotEmpty(db)
+                
+            default:
+                // If a message doesn't have a sender then it's considered invalid and we can ignore it
+                guard let sender: String = message.sender else { return false }
+                
+                /// Other conversations have a number of different combinations which indicate whether a message is a duplicate:
+                ///   "Sync" messages (messages we resend to the current to ensure it appears on all linked devices):
+                ///     `threadId`                    - Unique per thread
+                ///     `authorId`                    - Unique per user
+                ///     `timestampMs`              - Very low chance of collision (especially combined with other two)
+                ///
+                ///   Standard messages #1:
+                ///     `threadId`                    - Unique per thread
+                ///     `serverHash`                - Unique per message (deterministically generated)
+                ///
+                ///   Standard messages #1:
+                ///     `threadId`                    - Unique per thread
+                ///     `messageUuid`             - Very low chance of collision (especially combined with threadId)
+                return Interaction
+                    .filter(
+                        Interaction.Columns.threadId == threadId && (
+                            (
+                                Interaction.Columns.authorId == sender &&
+                                Interaction.Columns.timestampMs == (TimeInterval(message.sentTimestamp ?? 0) / 1000)
+                            ) || (
+                                message.serverHash != nil &&
+                                Interaction.Columns.serverHash == message.serverHash
+                            ) || (
+                                (message as? CallMessage)?.uuid != nil &&
+                                Interaction.Columns.messageUuid == (message as? CallMessage)?.uuid
+                            )
+                        )
+                    )
+                    .isNotEmpty(db)
+        }
+    }
+    
+    public static func getVariant(
+        _ db: Database,
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        message: Message,
+        currentUserPublicKey: String,
+        openGroup: OpenGroup? = nil,
+        using dependencies: Dependencies = Dependencies()
+    ) throws -> Interaction.Variant {
+        let maybeOpenGroup: OpenGroup? = {
+            guard threadVariant == .community else { return nil }
+            
+            return (openGroup ?? (try? OpenGroup.fetchOne(db, id: threadId)))
+        }()
+        
+        guard
+            let sender: String = message.sender,
+            let senderSessionId: SessionId = SessionId(from: sender),
+            let openGroup: OpenGroup = maybeOpenGroup
+        else {
+            return (message.sender == currentUserPublicKey ?
+                .standardOutgoing :
+                .standardIncoming
+            )
+        }
+
+        // Need to check if the blinded id matches for open groups
+        switch senderSessionId.prefix {
+            case .blinded15, .blinded25:
+                guard
+                    let userEdKeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
+                    let blindedKeyPair: KeyPair = dependencies.crypto.generate(
+                        .blindedKeyPair(
+                            serverPublicKey: openGroup.publicKey,
+                            edKeyPair: userEdKeyPair,
+                            using: dependencies
+                        )
+                    )
+                else { return .standardIncoming }
+                
+                let senderIdCurrentUserBlinded: Bool = (
+                    sender == SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString ||
+                    sender == SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
+                )
+                
+                return (senderIdCurrentUserBlinded ?
+                    .standardOutgoing :
+                    .standardIncoming
+                )
+                
+            case .standard, .unblinded:
+                return (sender == currentUserPublicKey ?
+                    .standardOutgoing :
+                    .standardIncoming
+                )
+                
+            case .group:
+                SNLog("Ignoring message with invalid sender.")
+                throw HTTPError.parsingFailed
+        }
+    }
+    
+    public static func createInteraction(
+        _ db: Database,
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        message: Message,
+        customBody: String?,
+        interactionVariant: Interaction.Variant,
+        associatedWithProto proto: SNProtoContent?,
+        currentUserPublicKey: String,
+        openGroup: OpenGroup? = nil,
+        disappearingMessagesConfiguration: DisappearingMessagesConfiguration? = nil,
+        using dependencies: Dependencies = Dependencies()
+    ) throws -> Interaction {
+        guard
+            let sender: String = message.sender,
+            let timestampMs: Int64 = message.sentTimestamp.map({ Int64($0) })
+        else { throw MessageReceiverError.invalidMessage }
+        
+        let disappearingMessagesConfiguration: DisappearingMessagesConfiguration = disappearingMessagesConfiguration
+            .defaulting(to: DisappearingMessagesConfiguration.defaultWith(threadId))
+        
+        return Interaction(
+            serverHash: message.serverHash, // Keep track of server hash
+            threadId: threadId,
+            authorId: sender,
+            variant: interactionVariant,
+            body: (customBody ?? (message as? VisibleMessage)?.text),
+            timestampMs: timestampMs,
+            wasRead: Interaction.isAlreadyRead(
+                db,
+                threadId: threadId,
+                threadVariant: threadVariant,
+                variant: interactionVariant,
+                timestampMs: timestampMs,
+                currentUserPublicKey: currentUserPublicKey,
+                openGroup: openGroup
+            ),
+            hasMention: (message as? VisibleMessage)
+                .map {
+                    Interaction.isUserMentioned(
+                        db,
+                        threadId: threadId,
+                        body: $0.text,
+                        quoteAuthorId: proto?.dataMessage?.quote?.author,
+                        using: dependencies
+                    )
+                }
+                .defaulting(to: false),
+            // Note: Ensure we don't ever expire open group messages
+            expiresInSeconds: (disappearingMessagesConfiguration.isEnabled && message.openGroupServerMessageId == nil ?
+                disappearingMessagesConfiguration.durationSeconds :
+                nil
+            ),
+            expiresStartedAtMs: nil,
+            // OpenGroupInvitations are stored as LinkPreview's in the database
+            linkPreviewUrl: (message as? VisibleMessage).map { ($0.linkPreview?.url ?? $0.openGroupInvitation?.url) },
+            // Keep track of the open group server message ID ↔ message ID relationship
+            openGroupServerMessageId: message.openGroupServerMessageId.map { Int64($0) },
+            openGroupWhisperMods: (message.recipient?.contains(".mods") == true),
+            openGroupWhisperTo: {
+                guard
+                    let recipientParts: [String] = message.recipient?.components(separatedBy: "."),
+                    recipientParts.count >= 3  // 'server.roomToken.whisperTo.whisperMods'
+                else { return nil }
+                
+                return recipientParts[2]
+            }()
+        )
     }
     
     private static func handleEmojiReactIfNeeded(

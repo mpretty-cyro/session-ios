@@ -123,13 +123,20 @@ public final class VisibleMessage: Message {
         )
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         let proto = SNProtoContent.builder()
-        var attachmentIds = self.attachmentIds
         let dataMessage: SNProtoDataMessage.SNProtoDataMessageBuilder
+        var processedAttachmentIds: [String] = self.attachmentIds
+        var processedAttachments: [Attachment] = (attachments ?? [])
+        
+        func allOrNothing(_ elements: [Any?]) -> Bool {
+            let existingElements: [Any] = elements.compactMap { $0 }
+            
+            return (existingElements.isEmpty || existingElements.count == elements.count)
+        }
         
         // Profile
-        if let profile = profile, let profileProto: SNProtoDataMessage = profile.toProto() {
+        if let profile = profile, let profileProto: SNProtoDataMessage = try? profile.toProto() {
             dataMessage = profileProto.asBuilder()
         }
         else {
@@ -139,36 +146,37 @@ public final class VisibleMessage: Message {
         // Text
         if let text = text { dataMessage.setBody(text) }
         
-        // Quote
+        // Quote (make sure if we have an id then we also have the attachment)
+        let quoteAttachmentId: String? = processedAttachmentIds.popFirst { $0 == quote?.attachmentId }
+        let quoteAttachment: Attachment? = processedAttachments.popFirst { $0.id == quote?.attachmentId }
         
-        if let quotedAttachmentId = quote?.attachmentId, let index = attachmentIds.firstIndex(of: quotedAttachmentId) {
-            attachmentIds.remove(at: index)
+        guard allOrNothing([quote?.attachmentId, quoteAttachmentId, quoteAttachment]) else {
+            throw MessageSenderError.invalidMessage
         }
         
-        if let quote = quote, let quoteProto = quote.toProto(db) {
+        if let quoteProto = try? quote?.toProto(attachment: quoteAttachment) {
             dataMessage.setQuote(quoteProto)
         }
         
-        // Link preview
-        if let linkPreviewAttachmentId = linkPreview?.attachmentId, let index = attachmentIds.firstIndex(of: linkPreviewAttachmentId) {
-            attachmentIds.remove(at: index)
+        // Link preview (make sure if we have an id then we also have the attachment)
+        let previewAttachmentId: String? = processedAttachmentIds.popFirst { $0 == linkPreview?.attachmentId }
+        let previewAttachment: Attachment? = processedAttachments.popFirst { $0.id == linkPreview?.attachmentId }
+                
+        guard allOrNothing([linkPreview?.attachmentId, previewAttachmentId, previewAttachment]) else {
+            throw MessageSenderError.invalidMessage
         }
         
-        if let linkPreview = linkPreview, let linkPreviewProto = linkPreview.toProto(db) {
+        if let linkPreviewProto = try? linkPreview?.toProto(attachment: previewAttachment) {
             dataMessage.setPreview([ linkPreviewProto ])
         }
         
-        // Attachments
+        // Attachments (make sure the ids match (ignoring ordering - the `attachments` array should
+        // be in the correct order)
+        guard processedAttachmentIds.asSet() == processedAttachments.map({ $0.id }).asSet() else {
+            throw MessageSenderError.invalidMessage
+        }
         
-        let attachmentIdIndexes: [String: Int] = (try? InteractionAttachment
-            .filter(self.attachmentIds.contains(InteractionAttachment.Columns.attachmentId))
-            .fetchAll(db))
-            .defaulting(to: [])
-            .reduce(into: [:]) { result, next in result[next.attachmentId] = next.albumIndex }
-        let attachments: [Attachment] = (try? Attachment.fetchAll(db, ids: self.attachmentIds))
-            .defaulting(to: [])
-            .sorted { lhs, rhs in (attachmentIdIndexes[lhs.id] ?? 0) < (attachmentIdIndexes[rhs.id] ?? 0) }
-        let attachmentProtos = attachments.compactMap { $0.buildProto() }
+        let attachmentProtos = processedAttachments.compactMap { $0.buildProto() }
         dataMessage.setAttachments(attachmentProtos)
         
         // Open group invitation
@@ -221,11 +229,12 @@ public final class VisibleMessage: Message {
 public extension VisibleMessage {
     static func from(_ db: Database, interaction: Interaction) -> VisibleMessage {
         let linkPreview: LinkPreview? = try? interaction.linkPreview.fetchOne(db)
+        let quote: Quote? = try? interaction.quote.fetchOne(db)
         
-        return VisibleMessage(
-            sender: interaction.authorId,
+        return VisibleMessage.from(
+            authorId: interaction.authorId,
             sentTimestamp: UInt64(interaction.timestampMs),
-            recipient: (try? interaction.recipientStates.fetchOne(db))?.recipientId,
+            recipientId: (try? interaction.recipientStates.fetchOne(db))?.recipientId,
             groupPublicKey: try? interaction.thread
                 .filter(
                     SessionThread.Columns.variant == SessionThread.Variant.legacyGroup ||
@@ -234,19 +243,18 @@ public extension VisibleMessage {
                 .select(.id)
                 .asRequest(of: String.self)
                 .fetchOne(db),
-            syncTarget: nil,
-            text: interaction.body,
+            body: interaction.body,
             attachmentIds: ((try? interaction.attachments.fetchAll(db)) ?? [])
-                .map { $0.id },
-            quote: (try? interaction.quote.fetchOne(db))
-                .map { VMQuote.from(db, quote: $0) },
+                .map { $0.id }
+                .appending(quote?.attachmentId)
+                .appending(linkPreview?.attachmentId),
+            quote: quote.map { VMQuote.from(db, quote: $0) },
             linkPreview: linkPreview
                 .map { linkPreview in
                     guard linkPreview.variant == .standard else { return nil }
                     
                     return VMLinkPreview.from(db, linkPreview: linkPreview)
                 },
-            profile: nil,   // Don't attach the profile to avoid sending a legacy version (set in MessageSender)
             openGroupInvitation: linkPreview.map { linkPreview in
                 guard linkPreview.variant == .openGroupInvitation else { return nil }
                 
@@ -254,7 +262,33 @@ public extension VisibleMessage {
                     db,
                     linkPreview: linkPreview
                 )
-            },
+            }
+        )
+    }
+    
+    static func from(
+        authorId: String,
+        sentTimestamp: UInt64,
+        recipientId: String?,
+        groupPublicKey: String?,
+        body: String?,
+        attachmentIds: [String],
+        quote: VMQuote?,
+        linkPreview: VMLinkPreview?,
+        openGroupInvitation: VMOpenGroupInvitation?
+    ) -> VisibleMessage {
+        return VisibleMessage(
+            sender: authorId,
+            sentTimestamp: sentTimestamp,
+            recipient: recipientId,
+            groupPublicKey: groupPublicKey,
+            syncTarget: nil,
+            text: body,
+            attachmentIds: attachmentIds,
+            quote: quote,
+            linkPreview: linkPreview,
+            profile: nil,   // Don't attach the profile to avoid sending a legacy version (set in MessageSender)
+            openGroupInvitation: openGroupInvitation,
             reaction: nil   // Reactions are custom messages sent separately
         )
     }

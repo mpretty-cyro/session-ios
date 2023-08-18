@@ -6,6 +6,7 @@ public enum AttachmentError: LocalizedError {
     case invalidStartState
     case noAttachment
     case notUploaded
+    case invalidDestination
     case invalidData
     case encryptionFailed
 
@@ -14,6 +15,7 @@ public enum AttachmentError: LocalizedError {
             case .invalidStartState: return "Cannot upload an attachment in this state."
             case .noAttachment: return "No such attachment."
             case .notUploaded: return "Attachment not uploaded."
+            case .invalidDestination: return "Invalid upload destination."
             case .invalidData: return "Invalid attachment data."
             case .encryptionFailed: return "Couldn't encrypt file."
         }

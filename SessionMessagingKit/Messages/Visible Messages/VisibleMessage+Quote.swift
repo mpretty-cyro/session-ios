@@ -34,18 +34,14 @@ public extension VisibleMessage {
             )
         }
 
-        public func toProto() -> SNProtoDataMessageQuote? {
-            preconditionFailure("Use toProto(_:) instead.")
-        }
-
-        public func toProto(_ db: Database) -> SNProtoDataMessageQuote? {
+        public func toProto(attachment: Attachment?) throws -> SNProtoDataMessageQuote? {
             guard let timestamp = timestamp, let publicKey = publicKey else {
                 SNLog("Couldn't construct quote proto from: \(self).")
                 return nil
             }
             let quoteProto = SNProtoDataMessageQuote.builder(id: timestamp, author: publicKey)
             if let text = text { quoteProto.setText(text) }
-            addAttachmentsIfNeeded(db, to: quoteProto)
+            addAttachmentIfNeeded(attachment: attachment, to: quoteProto)
             do {
                 return try quoteProto.build()
             } catch {
@@ -54,10 +50,13 @@ public extension VisibleMessage {
             }
         }
 
-        private func addAttachmentsIfNeeded(_ db: Database, to quoteProto: SNProtoDataMessageQuote.SNProtoDataMessageQuoteBuilder) {
+        private func addAttachmentIfNeeded(
+            attachment: Attachment?,
+            to quoteProto: SNProtoDataMessageQuote.SNProtoDataMessageQuoteBuilder
+        ) {
             guard let attachmentId = attachmentId else { return }
             guard
-                let attachment: Attachment = try? Attachment.fetchOne(db, id: attachmentId),
+                let attachment: Attachment = attachment,
                 attachment.state == .uploaded
             else {
                 #if DEBUG

@@ -4,6 +4,8 @@ import Foundation
 import SessionUtilitiesKit
 
 extension OpenGroupAPI {
+    // MARK: - Message
+    
     public struct Message: Codable, Equatable {
         enum CodingKeys: String, CodingKey {
             case id
@@ -35,21 +37,25 @@ extension OpenGroupAPI {
         public let base64EncodedData: String?
         public let base64EncodedSignature: String?
         
-        public struct Reaction: Codable, Equatable {
-            enum CodingKeys: String, CodingKey {
-                case count
-                case reactors
-                case you
-                case index
-            }
-            
-            public let count: Int64
-            public let reactors: [String]?
-            public let you: Bool
-            public let index: Int64
+        public let reactions: [String: Reaction]?
+    }
+}
+
+// MARK: - Reaction
+
+public extension OpenGroupAPI.Message {
+    public struct Reaction: Codable, Equatable {
+        enum CodingKeys: String, CodingKey {
+            case count
+            case reactors
+            case you
+            case index
         }
         
-        public let reactions: [String:Reaction]?
+        public let count: Int64
+        public let reactors: [String]?
+        public let you: Bool
+        public let index: Int64
     }
 }
 
@@ -130,5 +136,39 @@ extension OpenGroupAPI.Message.Reaction {
             you: (try? container.decode(Bool.self, forKey: .you)) ?? false,
             index: (try container.decode(Int64.self, forKey: .index))
         )
+    }
+}
+
+// MARK: - Convenience
+
+extension OpenGroupAPI.Message {
+    public init?(
+        id: Int64?,
+        sender: String?,
+        posted: TimeInterval?,
+        seqNo: Int64?,
+        base64EncodedData: String?
+    ) {
+        guard
+            let id: Int64 = id,
+            let sender: String = sender,
+            let posted: TimeInterval = posted,
+            let seqNo: Int64 = seqNo,
+            let base64EncodedData: String = base64EncodedData
+        else { return nil }
+        
+        self.id = id
+        self.sender = sender
+        self.posted = posted
+        self.edited = nil
+        self.deleted = nil
+        self.seqNo = seqNo
+        self.whisper = false
+        self.whisperMods = false
+        self.whisperTo = nil
+        self.reactions = nil
+        
+        self.base64EncodedData = base64EncodedData
+        self.base64EncodedSignature = nil
     }
 }

@@ -293,7 +293,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
         }
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         guard let kind = kind else {
             SNLog("Couldn't construct closed group update proto from: \(self).")
             return nil

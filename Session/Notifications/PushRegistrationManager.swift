@@ -296,14 +296,6 @@ public enum PushRegistrationError: Error {
                 )
             )
             
-            let messageInfoString: String? = {
-                if let messageInfoData: Data = try? JSONEncoder().encode(messageInfo) {
-                   return String(data: messageInfoData, encoding: .utf8)
-                } else {
-                    return "Incoming call." // TODO: We can do better here.
-                }
-            }()
-            
             let call: SessionCall = SessionCall(db, for: caller, uuid: uuid, mode: .answer)
             let thread: SessionThread = try SessionThread
                 .fetchOrCreate(db, id: caller, variant: .contact, shouldBeVisible: nil)
@@ -313,7 +305,8 @@ public enum PushRegistrationError: Error {
                 threadId: thread.id,
                 authorId: caller,
                 variant: .infoCall,
-                body: messageInfoString,
+                body: (try? messageInfo.messageInfoString())
+                    .defaulting(to: "Incoming call."), // TODO: We can do better here.
                 timestampMs: timestampMs
             ).inserted(db)
             call.callInteractionId = interaction.id

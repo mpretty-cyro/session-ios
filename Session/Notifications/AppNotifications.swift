@@ -598,13 +598,15 @@ class NotificationActionHandler {
                     )
                 )
                 
-                return try MessageSender.preparedSendData(
-                    db,
-                    interaction: interaction,
-                    threadId: threadId,
-                    threadVariant: thread.variant,
-                    using: dependencies
-                )
+                preconditionFailure("") // TODO: Need to refactor this similar to the share extension
+//                return try MessageSender.preparedSendData(
+//                    db,
+//                    interaction: interaction,
+//                    preparedAttachments: nil,
+//                    threadId: threadId,
+//                    threadVariant: thread.variant,
+//                    using: dependencies
+//                )
             }
             .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
             .handleEvents(

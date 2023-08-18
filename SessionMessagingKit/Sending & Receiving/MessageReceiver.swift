@@ -187,6 +187,7 @@ public enum MessageReceiver {
         threadId: String,
         threadVariant: SessionThread.Variant,
         message: Message,
+        preparedAttachments: [String: Attachment]? = nil,
         serverExpirationTimestamp: TimeInterval?,
         associatedWithProto proto: SNProtoContent,
         using dependencies: Dependencies = Dependencies()
@@ -277,6 +278,7 @@ public enum MessageReceiver {
                     threadId: threadId,
                     threadVariant: threadVariant,
                     message: message,
+                    preparedAttachments: preparedAttachments,
                     associatedWithProto: proto
                 )
                 

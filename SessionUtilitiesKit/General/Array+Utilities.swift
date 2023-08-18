@@ -37,6 +37,12 @@ public extension Array {
         return self.removeFirst()
     }
     
+    mutating func popFirst(where exists: (Element) -> Bool) -> Element? {
+        guard let index: Int = self.firstIndex(where: exists) else { return nil }
+        
+        return self.remove(at: index)
+    }
+    
     func inserting(_ other: Element?, at index: Int) -> [Element] {
         guard let other: Element = other else { return self }
         

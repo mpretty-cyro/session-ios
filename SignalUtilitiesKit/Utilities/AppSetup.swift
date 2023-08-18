@@ -11,6 +11,7 @@ public enum AppSetup {
     private static let hasRun: Atomic<Bool> = Atomic(false)
     
     public static func setupEnvironment(
+        readOnlyDatabase: Bool,
         appSpecificBlock: @escaping () -> (),
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
         migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> ()
@@ -36,6 +37,9 @@ public enum AppSetup {
                 fileProtectionType: .completeUntilFirstUserAuthentication
             )
             assert(success)
+            
+            // Initialise the database in the desired readability mode
+            Storage.setupReadOnly(readOnly: readOnlyDatabase)
 
             Environment.shared = Environment(
                 reachabilityManager: SSKReachabilityManagerImpl(),

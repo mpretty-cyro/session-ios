@@ -54,7 +54,7 @@ public final class ReadReceipt: ControlMessage {
         return ReadReceipt(timestamps: timestamps)
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         guard let timestamps = timestamps else {
             SNLog("Couldn't construct read receipt proto from: \(self).")
             return nil

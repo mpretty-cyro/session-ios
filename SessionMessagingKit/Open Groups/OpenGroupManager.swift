@@ -603,14 +603,14 @@ public final class OpenGroupManager {
                         using: dependencies
                     )
                     
-                    if let messageInfo: MessageReceiveJob.Details.MessageInfo = processedMessage?.messageInfo {
+                    if let messageInfo: MessageReceiveJob.Details.MessageInfo = processedMessage?.messageInfo, let proto: SNProtoContent = processedMessage?.proto {
                         try MessageReceiver.handle(
                             db,
                             threadId: openGroup.id,
                             threadVariant: .community,
                             message: messageInfo.message,
                             serverExpirationTimestamp: messageInfo.serverExpirationTimestamp,
-                            associatedWithProto: try SNProtoContent.parseData(messageInfo.serializedProtoData),
+                            associatedWithProto: proto,
                             using: dependencies
                         )
                         largestValidSeqNo = max(largestValidSeqNo, message.seqNo)
@@ -691,7 +691,7 @@ public final class OpenGroupManager {
         }
     }
     
-    internal static func handleDirectMessages(
+    public static func handleDirectMessages(
         _ db: Database,
         messages: [OpenGroupAPI.DirectMessage],
         fromOutbox: Bool,

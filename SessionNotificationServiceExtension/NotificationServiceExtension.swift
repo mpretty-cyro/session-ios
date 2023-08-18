@@ -80,10 +80,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                 }
             }
             
-            // HACK: It is important to use write synchronously here to avoid a race condition
+            // HACK: It is important to use read synchronously here to avoid a race condition
             // where the completeSilenty() is called before the local notification request
             // is added to notification center
-            Storage.shared.write { db in
+            Storage.shared.read { db in
                 do {
                     guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, envelope: envelope) else {
                         self.handleFailure(for: notificationContent)
@@ -100,49 +100,107 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                     
                     switch processedMessage.messageInfo.message {
                         case let visibleMessage as VisibleMessage:
-                            let interactionId: Int64 = try MessageReceiver.handleVisibleMessage(
+                            let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
+                            let isProbablyDuplicate: Bool = MessageReceiver.isDuplicateMessage(
                                 db,
                                 threadId: processedMessage.threadId,
                                 threadVariant: processedMessage.threadVariant,
-                                message: visibleMessage,
-                                associatedWithProto: processedMessage.proto
+                                message: visibleMessage
                             )
                             
-                            // Remove the notifications if there is an outgoing messages from a linked device
-                            if
-                                let interaction: Interaction = try? Interaction.fetchOne(db, id: interactionId),
-                                interaction.variant == .standardOutgoing
-                            {
-                                let semaphore = DispatchSemaphore(value: 0)
-                                let center = UNUserNotificationCenter.current()
-                                center.getDeliveredNotifications { notifications in
-                                    let matchingNotifications = notifications.filter({ $0.request.content.userInfo[NotificationServiceExtension.threadIdKey] as? String == interaction.threadId })
-                                    center.removeDeliveredNotifications(withIdentifiers: matchingNotifications.map({ $0.request.identifier }))
-                                    // Hack: removeDeliveredNotifications seems to be async,need to wait for some time before the delivered notifications can be removed.
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { semaphore.signal() }
+                            // If the message isn't a duplicate then update notification logic
+                            if !isProbablyDuplicate {
+                                let interactionVariant: Interaction.Variant = (try? MessageReceiver.getVariant(
+                                    db,
+                                    threadId: processedMessage.threadId,
+                                    threadVariant: processedMessage.threadVariant,
+                                    message: visibleMessage,
+                                    currentUserPublicKey: currentUserPublicKey
+                                )).defaulting(to: .standardOutgoing)
+                                let isAlreadyRead: Bool = Interaction.isAlreadyRead(
+                                    db,
+                                    threadId: processedMessage.threadId,
+                                    threadVariant: processedMessage.threadVariant,
+                                    variant: interactionVariant,
+                                    timestampMs: (visibleMessage.sentTimestamp.map { Int64($0) } ?? 0),
+                                    currentUserPublicKey: currentUserPublicKey
+                                )
+                                
+                                // Notify the user if needed
+                                if interactionVariant == .standardIncoming && !isAlreadyRead {
+                                    let interaction: Interaction = try MessageReceiver.createInteraction(
+                                        db,
+                                        threadId: processedMessage.threadId,
+                                        threadVariant: processedMessage.threadVariant,
+                                        message: visibleMessage,
+                                        customBody: nil,
+                                        interactionVariant: interactionVariant,
+                                        associatedWithProto: processedMessage.proto,
+                                        currentUserPublicKey: currentUserPublicKey
+                                    )
+                                    let thread: SessionThread = try SessionThread
+                                        .fetchOrCreate(
+                                            db,
+                                            id: processedMessage.threadId,
+                                            variant: processedMessage.threadVariant,
+                                            shouldBeVisible: nil
+                                        )
+                                    
+                                    Environment.shared?.notificationsManager.wrappedValue?
+                                        .notifyUser(
+                                            db,
+                                            for: interaction,
+                                            in: thread,
+                                            applicationState: .background
+                                        )
                                 }
-                                semaphore.wait()
+                                
+                                // Remove the notifications if there is an outgoing messages from a linked device
+                                if interactionVariant == .standardOutgoing {
+                                    let semaphore = DispatchSemaphore(value: 0)
+                                    let center = UNUserNotificationCenter.current()
+                                    center.getDeliveredNotifications { notifications in
+                                        let matchingNotifications = notifications.filter({ $0.request.content.userInfo[NotificationServiceExtension.threadIdKey] as? String == processedMessage.threadId })
+                                        center.removeDeliveredNotifications(withIdentifiers: matchingNotifications.map({ $0.request.identifier }))
+                                        // Hack: removeDeliveredNotifications seems to be async,need to wait for some time before the delivered notifications can be removed.
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { semaphore.signal() }
+                                    }
+                                    semaphore.wait()
+                                }
                             }
-                        
-                        case let unsendRequest as UnsendRequest:
-                            try MessageReceiver.handleUnsendRequest(
-                                db,
-                                threadId: processedMessage.threadId,
-                                threadVariant: processedMessage.threadVariant,
-                                message: unsendRequest
-                            )
                             
-                        case let closedGroupControlMessage as ClosedGroupControlMessage:
-                            try MessageReceiver.handleClosedGroupControlMessage(
-                                db,
-                                threadId: processedMessage.threadId,
-                                threadVariant: processedMessage.threadVariant,
-                                message: closedGroupControlMessage
-                            )
+                            // Persist the message content to be processed on next app launch
+                            try DeadlockWorkAround.createRecord(with: envelope)
+                            
+                        case let unsendRequest as UnsendRequest:
+                            let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
+                            
+                            guard
+                                let author: String = unsendRequest.author,
+                                let timestampMs: UInt64 = unsendRequest.timestamp,
+                                (
+                                    unsendRequest.sender == author ||
+                                    unsendRequest.sender == currentUserPublicKey
+                                ),
+                                let interaction: Interaction = try? Interaction
+                                    .filter(Interaction.Columns.timestampMs == Int64(timestampMs))
+                                    .filter(Interaction.Columns.authorId == author)
+                                    .fetchOne(db),
+                                interaction.variant == .standardIncoming
+                            else { break }
+                            
+                            UNUserNotificationCenter.current()
+                                .removeDeliveredNotifications(withIdentifiers: interaction.notificationIdentifiers)
+                            UNUserNotificationCenter.current()
+                                .removePendingNotificationRequests(withIdentifiers: interaction.notificationIdentifiers)
+                            
+                            // Persist the message content to be processed on next app launch
+                            try DeadlockWorkAround.createRecord(with: envelope)
                             
                         case let callMessage as CallMessage:
                             try MessageReceiver.handleCallMessage(
                                 db,
+                                readOnly: true,
                                 threadId: processedMessage.threadId,
                                 threadVariant: processedMessage.threadVariant,
                                 message: callMessage
@@ -150,25 +208,83 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                             
                             guard case .preOffer = callMessage.kind else { return self.completeSilenty() }
                             
+                            // Note: The 'SnodeAPI.currentOffsetTimestampMs()' value won't have been set
+                            // because we won't have made API calls in the notification extension
+                            let timestampMs: Int64 = (
+                                callMessage.sentTimestamp.map { Int64($0) } ??
+                                Int64(Date().timeIntervalSince1970 * 1000)
+                            )
+                            let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
+                            let callWithinOneMinute: Bool = TimestampUtils.isWithinOneMinute(timestamp: UInt64(timestampMs))
+                            
+                            // Determine the state of the call, whether the user should be notified and perform
+                            // any needed actions
+                            let targetState: CallMessage.MessageInfo.State
+                            let shouldNotify: Bool
+                            
                             if !db[.areCallsEnabled] {
-                                if
-                                    let sender: String = callMessage.sender,
-                                    let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(
+                                targetState = .permissionDenied
+                                shouldNotify = true
+                            }
+                            else if isCallOngoing {
+                                try MessageReceiver.handleIncomingCallOfferInBusyState(
+                                    db,
+                                    readOnly: true,
+                                    message: callMessage
+                                )
+                                
+                                targetState = .missed
+                                shouldNotify = false
+                            }
+                            else if !callWithinOneMinute {
+                                targetState = .missed
+                                shouldNotify = false
+                            }
+                            else {
+                                self.handleSuccessForIncomingCall(db, for: callMessage)
+                                
+                                targetState = (callMessage.sender == currentUserPublicKey ? .outgoing : .incoming)
+                                shouldNotify = false
+                            }
+                            
+                            // Ensure there isn't already an interaction for the call
+                            let hasNoExistingInteraction: Bool = (try? Interaction
+                                .filter(Interaction.Columns.variant == Interaction.Variant.infoCall)
+                                .filter(Interaction.Columns.messageUuid == callMessage.uuid)
+                                .isEmpty(db))
+                                .defaulting(to: false)
+                            
+                            if hasNoExistingInteraction, let sender: String = callMessage.sender {
+                                let thread: SessionThread = try SessionThread
+                                    .fetchOrCreate(
                                         db,
-                                        for: callMessage,
-                                        state: .permissionDenied
+                                        id: sender,
+                                        variant: .contact,
+                                        shouldBeVisible: nil
                                     )
-                                {
-                                    let thread: SessionThread = try SessionThread
-                                        .fetchOrCreate(
-                                            db,
-                                            id: sender,
-                                            variant: .contact,
-                                            shouldBeVisible: nil
-                                        )
 
-                                    // Notify the user if the call message wasn't already read
-                                    if !interaction.wasRead {
+                                if !thread.isMessageRequest(db, includeNonVisible: true) {
+                                    // Create a record for the info message so it's created on next launch
+                                    try DeadlockWorkAround.createRecord(
+                                        with: processedMessage,
+                                        callMessage: callMessage,
+                                        state: targetState
+                                    )
+                                    
+                                    let interaction: Interaction = try MessageReceiver.createInteraction(
+                                        db,
+                                        threadId: processedMessage.threadId,
+                                        threadVariant: processedMessage.threadVariant,
+                                        message: callMessage,
+                                        customBody: try CallMessage.MessageInfo(state: .permissionDenied)
+                                            .messageInfoString(),
+                                        interactionVariant: .infoCall,
+                                        associatedWithProto: processedMessage.proto,
+                                        currentUserPublicKey: currentUserPublicKey
+                                    )
+                                    
+                                    // Notify the user if the call message wasn't already read and we should notify
+                                    if shouldNotify && !interaction.wasRead {
                                         Environment.shared?.notificationsManager.wrappedValue?
                                             .notifyUser(
                                                 db,
@@ -178,37 +294,28 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                                             )
                                     }
                                 }
-                                break
                             }
                             
-                            if isCallOngoing {
-                                try MessageReceiver.handleIncomingCallOfferInBusyState(db, message: callMessage)
-                                break
-                            }
-                            
-                            self.handleSuccessForIncomingCall(db, for: callMessage)
-                            
-                        case let sharedConfigMessage as SharedConfigMessage:
-                            try SessionUtil.handleConfigMessages(
-                                db,
-                                messages: [sharedConfigMessage],
-                                publicKey: processedMessage.threadId
-                            )
-                            
-                        default: break
+                        default: try DeadlockWorkAround.createRecord(with: envelope)
                     }
-                    
-                    // Perform any required post-handling logic
-                    try MessageReceiver.postHandleMessage(
-                        db,
-                        threadId: processedMessage.threadId,
-                        message: processedMessage.messageInfo.message
-                    )
                 }
                 catch {
                     if let error = error as? MessageReceiverError, error.isRetryable {
                         switch error {
-                            case .invalidGroupPublicKey, .noGroupKeyPair, .outdatedMessage: self.completeSilenty()
+                            case .invalidGroupPublicKey, .outdatedMessage: self.completeSilenty()
+                            case .noGroupKeyPair, .decryptionFailed:
+                                switch envelope.type {
+                                    case .sessionMessage: self.completeSilenty()
+                                    case .closedGroupMessage:
+                                        guard
+                                            let hexEncodedGroupPublicKey = envelope.source,
+                                            let closedGroup: ClosedGroup = try? ClosedGroup.fetchOne(db, id: hexEncodedGroupPublicKey)
+                                        else { return self.completeSilenty() }
+                                        
+                                        // If we have a group then use custom copy for the fallback notification
+                                        self.handleFailure(for: notificationContent, name: closedGroup.name)
+                                }
+                                
                             default: self.handleFailure(for: notificationContent)
                         }
                     }
@@ -235,6 +342,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         Cryptography.seedRandom()
 
         AppSetup.setupEnvironment(
+            readOnlyDatabase: true,
             appSpecificBlock: {
                 Environment.shared?.notificationsManager.mutate {
                     $0 = NSENotificationPresenter()
@@ -274,9 +382,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
         // If we need a config sync then trigger it now
         if needsConfigSync {
-            Storage.shared.write { db in
-                ConfigurationSyncJob.enqueue(db, publicKey: getUserHexEncodedPublicKey(db))
-            }
+            DeadlockWorkAround.createConfigSyncRecord(publicKey: getUserHexEncodedPublicKey())
         }
 
         checkIsAppReady(migrationsCompleted: true)
@@ -289,7 +395,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         guard !AppReadiness.isAppReady() else { return }
 
         // App isn't ready until storage is ready AND all version migrations are complete.
-        guard Storage.shared.isValid && migrationsCompleted else {
+        guard Storage.unsafeIsValid && migrationsCompleted else {
             NSLog("[NotificationServiceExtension] Storage invalid")
             self.completeSilenty()
             return
@@ -374,12 +480,14 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         SNLog("Add remote notification request")
     }
 
-    private func handleFailure(for content: UNMutableNotificationContent) {
+    private func handleFailure(
+        for content: UNMutableNotificationContent,
+        name: String? = nil
+    ) {
         Storage.suspendDatabaseAccess()
-        
-        content.body = "You've got a new message"
+        content.body = (name.map { "You've got a new message from \($0)" } ?? "You've got a new message")
         content.title = "Session"
-        let userInfo: [String:Any] = [ NotificationServiceExtension.isFromRemoteKey : true ]
+        let userInfo: [String: Any] = [ NotificationServiceExtension.isFromRemoteKey: true ]
         content.userInfo = userInfo
         contentHandler!(content)
     }

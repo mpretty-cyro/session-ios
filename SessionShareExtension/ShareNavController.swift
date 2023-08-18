@@ -36,10 +36,6 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
             SetCurrentAppContext(appContext)
         }
         
-        // Need to manually trigger these since we don't have a "mainWindow" here and the current theme
-        // might have been changed since the share extension was last opened
-        ThemeManager.applySavedTheme()
-
         Logger.info("")
 
         _ = AppVersion.sharedInstance()
@@ -56,6 +52,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         }
 
         AppSetup.setupEnvironment(
+            readOnlyDatabase: true,
             appSpecificBlock: {
                 Environment.shared?.notificationsManager.mutate {
                     $0 = NoopNotificationsManager()
@@ -66,6 +63,11 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                     case .failure: SNLog("[SessionShareExtension] Failed to complete migrations")
                     case .success:
                         DispatchQueue.main.async {
+                            // Need to manually trigger these since we don't have a "mainWindow" here
+                            // and the current theme might have been changed since the share extension
+                            // was last opened
+                            ThemeManager.applySavedTheme()
+                            
                             // performUpdateCheck must be invoked after Environment has been initialized because
                             // upgrade process may depend on Environment.
                             self?.versionMigrationsDidComplete(needsConfigSync: needsConfigSync)
@@ -104,9 +106,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         // If we need a config sync then trigger it now
         if needsConfigSync {
-            Storage.shared.write { db in
-                ConfigurationSyncJob.enqueue(db, publicKey: getUserHexEncodedPublicKey(db))
-            }
+            DeadlockWorkAround.createConfigSyncRecord(publicKey: getUserHexEncodedPublicKey())
         }
 
         versionMigrationsComplete.mutate { $0 = true }
@@ -118,7 +118,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         // App isn't ready until storage is ready AND all version migrations are complete.
         guard migrationsCompleted else { return }
-        guard Storage.shared.isValid else {
+        guard Storage.unsafeIsValid else {
             // If the database is invalid then the UI will handle it
             showLockScreenOrMainContent()
             return

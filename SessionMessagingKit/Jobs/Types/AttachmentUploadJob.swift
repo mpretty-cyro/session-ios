@@ -71,10 +71,17 @@ public enum AttachmentUploadJob: JobExecutor {
         // Note: In the AttachmentUploadJob we intentionally don't provide our own db instance to prevent
         // reentrancy issues when the success/failure closures get called before the upload as the JobRunner
         // will attempt to update the state of the job immediately
-        attachment
-            .upload(to: (openGroup.map { .openGroup($0) } ?? .fileServer), using: dependencies)
+        dependencies.storage
+            .readPublisher(using: dependencies) { db in
+                try Attachment.PreparedUpload(
+                    db,
+                    attachment: attachment,
+                    destination: (openGroup.map { .community($0) } ?? .fileServer)
+                )
+            }
             .subscribe(on: queue)
             .receive(on: queue)
+            .flatMap { Attachment.upload(readOnly: false, preparedData: [$0], using: dependencies) }
             .sinkUntilComplete(
                 receiveCompletion: { result in
                     switch result {

@@ -462,7 +462,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         id: UUID,
         messageViewModel: MessageViewModel,
         interaction: Interaction,
-        attachmentData: Attachment.PreparedData?,
+        attachments: [Attachment]?,
         linkPreviewDraft: LinkPreviewDraft?,
         linkPreviewAttachment: Attachment?,
         quoteModel: QuotedReplyModel?
@@ -503,8 +503,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 },
             linkPreviewUrl: linkPreviewDraft?.urlString
         )
-        let optimisticAttachments: Attachment.PreparedData? = attachments
-            .map { Attachment.prepare(attachments: $0) }
+        let optimisticAttachments: [Attachment]? = attachments.map { Attachment.prepare(attachments: $0) }
         let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
             try? LinkPreview.generateAttachmentIfPossible(
                 imageData: draft.jpegImageData,
@@ -553,7 +552,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 )
             },
             linkPreviewAttachment: linkPreviewAttachment,
-            attachments: optimisticAttachments?.attachments
+            attachments: optimisticAttachments
         )
         let optimisticData: OptimisticMessageData = (
             optimisticMessageId,
@@ -581,7 +580,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         mostRecentFailureText: "FAILED_TO_STORE_OUTGOING_MESSAGE".localized()
                     ),
                     $0.interaction,
-                    $0.attachmentData,
+                    $0.attachments,
                     $0.linkPreviewDraft,
                     $0.linkPreviewAttachment,
                     $0.quoteModel

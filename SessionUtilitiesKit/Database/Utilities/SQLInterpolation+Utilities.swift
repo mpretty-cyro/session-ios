@@ -13,7 +13,10 @@ public extension SQLInterpolation {
     mutating func appendInterpolation<T>(_ typedTableAlias: TypedTableAlias<T>) {
         let name: String = typedTableAlias.name
         
-        guard let tableName: String = typedTableAlias.tableName else { return appendLiteral(name.quotedDatabaseIdentifier) }
+        guard let tableName: String = typedTableAlias.tableName else {
+            return appendLiteral(name.quotedDatabaseIdentifier)
+        }
+
         guard name != tableName else { return appendLiteral(tableName.quotedDatabaseIdentifier) }
         
         appendLiteral("\(tableName.quotedDatabaseIdentifier) AS \(name.quotedDatabaseIdentifier)")

@@ -28,9 +28,8 @@ public enum MessageSendJob: JobExecutor {
             return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
-        // We need to include 'fileIds' when sending messages with attachments to Open Groups
-        // so extract them from any associated attachments
-        var messageFileIds: [String] = []
+        /// We need to provide the `PreparedUpload` instances when sending messages so extract them when relevant
+        var preparedAttachments: [Attachment.PreparedUpload] = []
         
         /// Ensure any associated attachments have already been uploaded before sending the message
         ///
@@ -50,31 +49,29 @@ public enum MessageSendJob: JobExecutor {
             }
             
             // Retrieve the current attachment state
-            typealias AttachmentState = (error: Error?, pendingUploadAttachmentIds: [String], preparedFileIds: [String])
+            typealias AttachmentState = (
+                error: Error?,
+                pendingUploadAttachmentIds: [String],
+                preparedAttachments: [Attachment.PreparedUpload]
+            )
 
             let attachmentState: AttachmentState = dependencies.storage
-                .read { db in
+                .read { db -> (Error?, [String], [Attachment.PreparedUpload]) in
                     // If the original interaction no longer exists then don't bother sending the message (ie. the
                     // message was deleted before it even got sent)
                     guard try Interaction.exists(db, id: interactionId) else {
                         SNLog("[MessageSendJob] Failing due to missing interaction")
                         return (StorageError.objectNotFound, [], [])
                     }
-
-                    // Get the current state of the attachments
-                    let allAttachmentStateInfo: [Attachment.StateInfo] = try Attachment
-                        .stateInfo(interactionId: interactionId)
-                        .fetchAll(db)
-                    let maybeFileIds: [String?] = allAttachmentStateInfo
-                        .sorted { lhs, rhs in lhs.albumIndex < rhs.albumIndex }
-                        .map { Attachment.fileId(for: $0.downloadUrl) }
-                    let fileIds: [String] = maybeFileIds.compactMap { $0 }
-
+                    
+                    // Get all attachments
+                    let allAttachments: [Attachment] = try Attachment.fetchAll(db, interactionId: interactionId)
+                    
                     // If there were failed attachments then this job should fail (can't send a
                     // message which has associated attachments if the attachments fail to upload)
-                    guard !allAttachmentStateInfo.contains(where: { $0.state == .failedDownload }) else {
+                    guard !allAttachments.contains(where: { $0.state == .failedDownload }) else {
                         SNLog("[MessageSendJob] Failing due to failed attachment upload")
-                        return (AttachmentError.notUploaded, [], fileIds)
+                        return (AttachmentError.notUploaded, [], [])
                     }
 
                     /// Find all attachmentIds for attachments which need to be uploaded
@@ -82,7 +79,7 @@ public enum MessageSendJob: JobExecutor {
                     /// **Note:** If there are any 'downloaded' attachments then they also need to be uploaded (as a
                     /// 'downloaded' attachment will be on the current users device but not on the message recipients
                     /// device - both `LinkPreview` and `Quote` can have this case)
-                    let pendingUploadAttachmentIds: [String] = allAttachmentStateInfo
+                    let pendingUploadAttachmentIds: [String] = allAttachments
                         .filter { attachment -> Bool in
                             // Non-media quotes won't have thumbnails so so don't try to upload them
                             guard attachment.downloadUrl != Attachment.nonMediaQuoteFileId else { return false }
@@ -98,9 +95,39 @@ public enum MessageSendJob: JobExecutor {
                                 default: return false
                             }
                         }
-                        .map { $0.attachmentId }
+                        .map { $0.id }
                     
-                    return (nil, pendingUploadAttachmentIds, fileIds)
+                    /// Check if there are any remaining attachments before continuing (can early out if not)
+                    let remainingAttachments: [Attachment] = allAttachments
+                        .filter { !pendingUploadAttachmentIds.contains($0.id) }
+                    
+                    guard !remainingAttachments.isEmpty else { return (nil, pendingUploadAttachmentIds, []) }
+                    
+                    /// Get the proper upload destination (in case we change the logic in the future to upload as part of this job)
+                    let maybeUploadDestination: Attachment.PreparedUpload.Destination? = {
+                        switch details.destination {
+                            case .openGroup(let roomToken, let server, _, _, _):
+                                let openGroupId: String = OpenGroup.idFor(roomToken: roomToken, server: server)
+                                
+                                return (try? OpenGroup.fetchOne(db, id: openGroupId))
+                                    .map { .community($0) }
+                                
+                            default: return .fileServer
+                        }
+                    }()
+                    
+                    guard let uploadDestination: Attachment.PreparedUpload.Destination = maybeUploadDestination else {
+                        SNLog("[MessageSendJob] Failing due to invalid attachment upload destination")
+                        return (AttachmentError.invalidDestination, [], [])
+                    }
+                    
+                    /// Generate `Attachment.PreparedUpload` instances for the attachments which have already been
+                    /// uploaded (this means we can use a consistent type in the codebase but will skip the encryption step
+                    /// since they are already encrypted)
+                    let preparedAttachments: [Attachment.PreparedUpload] = try remainingAttachments
+                        .map { try Attachment.PreparedUpload(db, attachment: $0, destination: uploadDestination) }
+                    
+                    return (nil, pendingUploadAttachmentIds, preparedAttachments)
                 }
                 .defaulting(to: (MessageSenderError.invalidMessage, [], []))
 
@@ -157,7 +184,7 @@ public enum MessageSendJob: JobExecutor {
             }
 
             // Store the fileIds so they can be sent with the open group message content
-            messageFileIds = attachmentState.preparedFileIds
+            preparedAttachments = attachmentState.preparedAttachments
         }
         
         // Store the sentTimestamp from the message in case it fails due to a clockOutOfSync error
@@ -172,6 +199,7 @@ public enum MessageSendJob: JobExecutor {
                 try MessageSender.preparedSendData(
                     db,
                     message: details.message,
+                    preparedAttachments: preparedAttachments,
                     to: details.destination,
                     namespace: details.destination.defaultNamespace,
                     interactionId: job.interactionId,
@@ -179,7 +207,6 @@ public enum MessageSendJob: JobExecutor {
                     using: dependencies
                 )
             }
-            .map { sendData in sendData.with(fileIds: messageFileIds) }
             .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
             .subscribe(on: queue, using: dependencies)
             .receive(on: queue, using: dependencies)

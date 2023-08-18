@@ -68,7 +68,7 @@ public final class ExpirationTimerUpdate: ControlMessage {
         )
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
         guard let duration = duration else {
             SNLog("Couldn't construct expiration timer update proto from: \(self).")
             return nil

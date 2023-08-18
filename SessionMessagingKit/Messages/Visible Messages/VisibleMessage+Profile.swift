@@ -44,7 +44,7 @@ public extension VisibleMessage {
             )
         }
 
-        public func toProto() -> SNProtoDataMessage? {
+        public func toProto() throws -> SNProtoDataMessage? {
             guard let displayName = displayName else {
                 SNLog("Couldn't construct profile proto from: \(self).")
                 return nil

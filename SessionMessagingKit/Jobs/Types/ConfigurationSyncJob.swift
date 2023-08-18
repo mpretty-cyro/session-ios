@@ -85,6 +85,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                     try MessageSender.preparedSendData(
                         db,
                         message: change.message,
+                        preparedAttachments: nil,
                         to: destination,
                         namespace: change.namespace,
                         interactionId: nil

@@ -211,11 +211,10 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
     
     public func startSessionCall(_ db: Database) {
         let sessionId: String = self.sessionId
-        let messageInfo: CallMessage.MessageInfo = CallMessage.MessageInfo(state: .outgoing)
         
         guard
             case .offer = mode,
-            let messageInfoData: Data = try? JSONEncoder().encode(messageInfo),
+            let body: String = try? CallMessage.MessageInfo(state: .outgoing).messageInfoString(),
             let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId)
         else { return }
         
@@ -232,7 +231,7 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
             threadId: sessionId,
             authorId: getUserHexEncodedPublicKey(db),
             variant: .infoCall,
-            body: String(data: messageInfoData, encoding: .utf8),
+            body: body,
             timestampMs: timestampMs
         )
         .inserted(db)

@@ -9,6 +9,7 @@ import SessionSnodeKit
 extension MessageReceiver {
     public static func handleCallMessage(
         _ db: Database,
+        readOnly: Bool = false,
         threadId: String,
         threadVariant: SessionThread.Variant,
         message: CallMessage
@@ -17,7 +18,7 @@ extension MessageReceiver {
         guard threadVariant == .contact else { return }
         
         switch message.kind {
-            case .preOffer: try MessageReceiver.handleNewCallMessage(db, message: message)
+            case .preOffer: try MessageReceiver.handleNewCallMessage(db, readOnly: readOnly, message: message)
             case .offer: MessageReceiver.handleOfferCallMessage(db, message: message)
             case .answer: MessageReceiver.handleAnswerCallMessage(db, message: message)
             case .provisionalAnswer: break // TODO: Implement
@@ -43,7 +44,7 @@ extension MessageReceiver {
     
     // MARK: - Specific Handling
     
-    private static func handleNewCallMessage(_ db: Database, message: CallMessage) throws {
+    private static func handleNewCallMessage(_ db: Database, readOnly: Bool, message: CallMessage) throws {
         SNLog("[Calls] Received pre-offer message.")
         
         // Determine whether the app is active based on the prefs rather than the UIApplication state to avoid
@@ -64,7 +65,7 @@ extension MessageReceiver {
         else { return }
         guard let timestamp = message.sentTimestamp, TimestampUtils.isWithinOneMinute(timestamp: timestamp) else {
             // Add missed call message for call offer messages from more than one minute
-            if let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(db, for: message, state: .missed) {
+            if !readOnly, let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(db, for: message, state: .missed) {
                 let thread: SessionThread = try SessionThread
                     .fetchOrCreate(db, id: sender, variant: .contact, shouldBeVisible: nil)
                 
@@ -82,7 +83,7 @@ extension MessageReceiver {
         }
         
         guard db[.areCallsEnabled] else {
-            if let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(db, for: message, state: .permissionDenied) {
+            if !readOnly, let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(db, for: message, state: .permissionDenied) {
                 let thread: SessionThread = try SessionThread
                     .fetchOrCreate(db, id: sender, variant: .contact, shouldBeVisible: nil)
                 
@@ -115,11 +116,11 @@ extension MessageReceiver {
         }
         
         guard callManager.currentCall == nil else {
-            try MessageReceiver.handleIncomingCallOfferInBusyState(db, message: message)
+            try MessageReceiver.handleIncomingCallOfferInBusyState(db, readOnly: readOnly, message: message)
             return
         }
         
-        let interaction: Interaction? = try MessageReceiver.insertCallInfoMessage(db, for: message)
+        let interaction: Interaction? = (readOnly ? nil : try MessageReceiver.insertCallInfoMessage(db, for: message))
         
         // Handle UI
         callManager.showCallUIForCall(
@@ -196,41 +197,44 @@ extension MessageReceiver {
     
     public static func handleIncomingCallOfferInBusyState(
         _ db: Database,
+        readOnly: Bool,
         message: CallMessage,
         using dependencies: Dependencies = Dependencies()
     ) throws {
-        let messageInfo: CallMessage.MessageInfo = CallMessage.MessageInfo(state: .missed)
-        
         guard
             let caller: String = message.sender,
-            let messageInfoData: Data = try? JSONEncoder().encode(messageInfo),
+            let body: String = try? CallMessage.MessageInfo(state: .missed).messageInfoString(),
             let thread: SessionThread = try SessionThread.fetchOne(db, id: caller),
             !thread.isMessageRequest(db)
         else { return }
         
         SNLog("[Calls] Sending end call message because there is an ongoing call.")
         
-        let messageSentTimestamp: Int64 = (
-            message.sentTimestamp.map { Int64($0) } ??
-            SnodeAPI.currentOffsetTimestampMs()
-        )
-        _ = try Interaction(
-            serverHash: message.serverHash,
-            messageUuid: message.uuid,
-            threadId: thread.id,
-            authorId: caller,
-            variant: .infoCall,
-            body: String(data: messageInfoData, encoding: .utf8),
-            timestampMs: messageSentTimestamp,
-            wasRead: SessionUtil.timestampAlreadyRead(
-                threadId: thread.id,
-                threadVariant: thread.variant,
-                timestampMs: (messageSentTimestamp * 1000),
-                userPublicKey: getUserHexEncodedPublicKey(db),
-                openGroup: nil
+        // Can't save the interaction if in readonly mode
+        if !readOnly {
+            let messageSentTimestamp: Int64 = (
+                message.sentTimestamp.map { Int64($0) } ??
+                SnodeAPI.currentOffsetTimestampMs()
             )
-        )
-        .inserted(db)
+            _ = try Interaction(
+                serverHash: message.serverHash,
+                messageUuid: message.uuid,
+                threadId: thread.id,
+                authorId: caller,
+                variant: .infoCall,
+                body: body,
+                timestampMs: messageSentTimestamp,
+                wasRead: Interaction.isAlreadyRead(
+                    db,
+                    threadId: thread.id,
+                    threadVariant: thread.variant,
+                    variant: .infoCall,
+                    timestampMs: messageSentTimestamp,
+                    currentUserPublicKey: getUserHexEncodedPublicKey(db)
+                )
+            )
+            .inserted(db)
+        }
         
         MessageSender.sendImmediate(
             data: try MessageSender
@@ -242,6 +246,7 @@ extension MessageReceiver {
                         sdps: [],
                         sentTimestampMs: nil // Explicitly nil as it's a separate message from above
                     ),
+                    preparedAttachments: nil,
                     to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
                     namespace: try Message.Destination
                         .from(db, threadId: thread.id, threadVariant: thread.variant)
@@ -285,7 +290,7 @@ extension MessageReceiver {
             SnodeAPI.currentOffsetTimestampMs()
         )
         
-        guard let messageInfoData: Data = try? JSONEncoder().encode(messageInfo) else { return nil }
+        guard let messageInfoBody: String = try? messageInfo.messageInfoString() else { return nil }
         
         return try Interaction(
             serverHash: message.serverHash,
@@ -293,14 +298,15 @@ extension MessageReceiver {
             threadId: thread.id,
             authorId: sender,
             variant: .infoCall,
-            body: String(data: messageInfoData, encoding: .utf8),
+            body: messageInfoBody,
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: Interaction.isAlreadyRead(
+                db,
                 threadId: thread.id,
                 threadVariant: thread.variant,
-                timestampMs: (timestampMs * 1000),
-                userPublicKey: currentUserPublicKey,
-                openGroup: nil
+                variant: .infoCall,
+                timestampMs: timestampMs,
+                currentUserPublicKey: currentUserPublicKey
             )
         ).inserted(db)
     }

@@ -804,6 +804,34 @@ public extension Interaction {
         )
     }
     
+    static func isAlreadyRead(
+        _ db: Database,
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        variant: Variant,
+        timestampMs: Int64,
+        currentUserPublicKey: String,
+        openGroup: OpenGroup? = nil
+    ) -> Bool {
+        let maybeOpenGroup: OpenGroup? = {
+            guard threadVariant == .community else { return nil }
+            
+            return (openGroup ?? (try? OpenGroup.fetchOne(db, id: threadId)))
+        }()
+        
+        return (
+            // Auto-mark sent messages or messages older than the 'lastReadTimestampMs' as read
+            variant == .standardOutgoing ||
+            SessionUtil.timestampAlreadyRead(
+                threadId: threadId,
+                threadVariant: threadVariant,
+                timestampMs: timestampMs,
+                userPublicKey: currentUserPublicKey,
+                openGroup: maybeOpenGroup
+            )
+        )
+    }
+    
     static func isUserMentioned(
         _ db: Database,
         threadId: String,

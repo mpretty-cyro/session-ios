@@ -850,8 +850,7 @@ enum _003_YDBToGRDBMigration: Migration {
                                             )
                                             
                                             guard
-                                                let messageInfoData: Data = try? JSONEncoder().encode(messageInfo),
-                                                let messageInfoDataString: String = String(data: messageInfoData, encoding: .utf8)
+                                                let messageInfoDataString: String = try? messageInfo.messageInfoString()
                                             else { break }
                                             
                                             return messageInfoDataString
@@ -1256,25 +1255,25 @@ enum _003_YDBToGRDBMigration: Migration {
                 if legacyJob.openGroupID != nil && legacyJob.openGroupMessageServerID != nil {
                     return
                 }
-                
-                // We have changed how messageReceive jobs work - we now parse the message upon receipt and
-                // the MessageReceiveJob only does the handling - as a result we need to do the same behaviour
-                // here so we don't need to support the legacy behaviour
-                guard let processedMessage: ProcessedMessage = try? Message.processRawReceivedMessage(db, serializedData: legacyJob.data, serverHash: legacyJob.serverHash) else {
-                    return
-                }
-                
-                _ = try Job(
-                    failureCount: legacyJob.failureCount,
-                    variant: .messageReceive,
-                    behaviour: .runOnce,
-                    nextRunTimestamp: 0,
-                    threadId: processedMessage.threadId,
-                    details: MessageReceiveJob.Details(
-                        messages: [processedMessage.messageInfo],
-                        calledFromBackgroundPoller: legacyJob.isBackgroundPoll
-                    )
-                )?.migrationSafeInserted(db)
+                // TODO: Decide whether we want this to go out before we drop YapDatabase support
+//                // We have changed how messageReceive jobs work - we now parse the message upon receipt and
+//                // the MessageReceiveJob only does the handling - as a result we need to do the same behaviour
+//                // here so we don't need to support the legacy behaviour
+//                guard let processedMessage: ProcessedMessage = try? Message.processRawReceivedMessage(db, serializedData: legacyJob.data, serverHash: legacyJob.serverHash) else {
+//                    return
+//                }
+//                
+//                _ = try Job(
+//                    failureCount: legacyJob.failureCount,
+//                    variant: .messageReceive,
+//                    behaviour: .runOnce,
+//                    nextRunTimestamp: 0,
+//                    threadId: processedMessage.threadId,
+//                    details: MessageReceiveJob.Details(
+//                        messages: [processedMessage.messageInfo],
+//                        calledFromBackgroundPoller: legacyJob.isBackgroundPoll
+//                    )
+//                )?.migrationSafeInserted(db)
             }
         }
         

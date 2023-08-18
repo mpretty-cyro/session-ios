@@ -179,7 +179,7 @@ public extension Profile {
         )
     }
 
-    func toProto() -> SNProtoDataMessage? {
+    func toProto(attachments: [Attachment]?) -> SNProtoDataMessage? {
         let dataMessageProto = SNProtoDataMessage.builder()
         let profileProto = SNProtoLokiProfile.builder()
         profileProto.setDisplayName(name)

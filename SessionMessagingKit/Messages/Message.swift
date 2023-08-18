@@ -13,6 +13,9 @@ public class Message: Codable {
     public var recipient: String?
     public var sender: String?
     public var openGroupServerMessageId: UInt64?
+    public var openGroupMessageSeqNo: Int64?
+    public var openGroupMessagePosted: TimeInterval?
+    public var openGroupMessageExpires: TimeInterval?
     public var serverHash: String?
 
     public var ttl: UInt64 { 14 * 24 * 60 * 60 * 1000 }
@@ -38,6 +41,9 @@ public class Message: Codable {
         sender: String? = nil,
         groupPublicKey: String? = nil,
         openGroupServerMessageId: UInt64? = nil,
+        openGroupMessageSeqNo: Int64? = nil,
+        openGroupMessagePosted: TimeInterval? = nil,
+        openGroupMessageExpires: TimeInterval? = nil,
         serverHash: String? = nil
     ) {
         self.id = id
@@ -46,6 +52,9 @@ public class Message: Codable {
         self.recipient = recipient
         self.sender = sender
         self.openGroupServerMessageId = openGroupServerMessageId
+        self.openGroupMessageSeqNo = openGroupMessageSeqNo
+        self.openGroupMessagePosted = openGroupMessagePosted
+        self.openGroupMessageExpires = openGroupMessageExpires
         self.serverHash = serverHash
     }
 
@@ -55,8 +64,8 @@ public class Message: Codable {
         preconditionFailure("fromProto(_:sender:) is abstract and must be overridden.")
     }
 
-    public func toProto(_ db: Database) -> SNProtoContent? {
-        preconditionFailure("toProto(_:) is abstract and must be overridden.")
+    public func toProto(attachments: [Attachment]?) throws -> SNProtoContent? {
+        preconditionFailure("toProto(attachments:) is abstract and must be overridden.")
     }
 }
 
@@ -290,14 +299,10 @@ public extension Message {
     
     static func processRawReceivedMessage(
         _ db: Database,
-        serializedData: Data,
+        envelope: SNProtoEnvelope,
         serverHash: String?,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
-        guard let envelope = try? SNProtoEnvelope.parseData(serializedData) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         return try processRawReceivedMessage(
             db,
             envelope: envelope,

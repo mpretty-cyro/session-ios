@@ -49,6 +49,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         self.loadingViewController = LoadingViewController()
         
         AppSetup.setupEnvironment(
+            readOnlyDatabase: false,
             appSpecificBlock: {
                 // Create AppEnvironment
                 AppEnvironment.shared.setup()
@@ -535,7 +536,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         // Always call the completion block and indicate whether we successfully created the UI
         guard
-            Storage.shared.isValid &&
+            Storage.unsafeIsValid &&
             (
                 AppReadiness.isAppReady() ||
                 lifecycleMethod == .finishLaunching ||

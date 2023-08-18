@@ -488,6 +488,42 @@ extension Attachment {
 // MARK: - GRDB Interactions
 
 extension Attachment {
+    public static func fetchAll(_ db: Database, interactionId: Int64) throws -> [Attachment] {
+        let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
+        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
+        let quote: TypedTableAlias<Quote> = TypedTableAlias()
+        let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
+        let linkPreview: TypedTableAlias<LinkPreview> = TypedTableAlias()
+        
+        // Note: In GRDB all joins need to run via their "association" system which doesn't support the type
+        // of query we have below (a required join based on one of 3 optional joins) so we have to construct
+        // the query manually
+        let request: SQLRequest<Attachment> = """
+            SELECT \(AllColumns())
+            FROM \(Attachment.self)
+            
+            JOIN \(Interaction.self) ON
+                \(SQL("\(interaction[.id]) = \(interactionId)")) AND (
+                    \(interaction[.id]) = \(quote[.interactionId]) OR
+                    \(interaction[.id]) = \(interactionAttachment[.interactionId]) OR
+                    (
+                        \(interaction[.linkPreviewUrl]) = \(linkPreview[.url]) AND
+                        \(Interaction.linkPreviewFilterLiteral())
+                    )
+                )
+            
+            LEFT JOIN \(Quote.self) ON \(quote[.attachmentId]) = \(attachment[.id])
+            LEFT JOIN \(InteractionAttachment.self) ON \(interactionAttachment[.attachmentId]) = \(attachment[.id])
+            LEFT JOIN \(LinkPreview.self) ON
+                \(linkPreview[.attachmentId]) = \(attachment[.id]) AND
+                \(SQL("\(linkPreview[.variant]) = \(LinkPreview.Variant.standard)"))
+        
+            ORDER BY \(interactionAttachment[.albumIndex])
+        """
+        
+        return try request.fetchAll(db)
+    }
+    
     public struct StateInfo: FetchableRecord, Decodable {
         public let attachmentId: String
         public let interactionId: Int64
@@ -539,50 +575,6 @@ extension Attachment {
                 )
         
             ORDER BY interactionId DESC
-        """
-    }
-
-    public static func stateInfo(interactionId: Int64, state: State? = nil) -> SQLRequest<Attachment.StateInfo> {
-        let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
-        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-        let quote: TypedTableAlias<Quote> = TypedTableAlias()
-        let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
-        let linkPreview: TypedTableAlias<LinkPreview> = TypedTableAlias()
-        
-        // Note: In GRDB all joins need to run via their "association" system which doesn't support the type
-        // of query we have below (a required join based on one of 3 optional joins) so we have to construct
-        // the query manually
-        return """
-            SELECT DISTINCT
-                \(attachment[.id]) AS attachmentId,
-                \(interaction[.id]) AS interactionId,
-                \(attachment[.state]) AS state,
-                \(attachment[.downloadUrl]) AS downloadUrl,
-                IFNULL(\(interactionAttachment[.albumIndex]), 0) AS albumIndex
-        
-            FROM \(Attachment.self)
-            
-            JOIN \(Interaction.self) ON
-                \(SQL("\(interaction[.id]) = \(interactionId)")) AND (
-                    \(interaction[.id]) = \(quote[.interactionId]) OR
-                    \(interaction[.id]) = \(interactionAttachment[.interactionId]) OR
-                    (
-                        \(interaction[.linkPreviewUrl]) = \(linkPreview[.url]) AND
-                        \(Interaction.linkPreviewFilterLiteral())
-                    )
-                )
-            
-            LEFT JOIN \(Quote.self) ON \(quote[.attachmentId]) = \(attachment[.id])
-            LEFT JOIN \(InteractionAttachment.self) ON \(interactionAttachment[.attachmentId]) = \(attachment[.id])
-            LEFT JOIN \(LinkPreview.self) ON
-                \(linkPreview[.attachmentId]) = \(attachment[.id]) AND
-                \(SQL("\(linkPreview[.variant]) = \(LinkPreview.Variant.standard)"))
-        
-            WHERE
-                (
-                    \(SQL("\(state) IS NULL")) OR
-                    \(SQL("\(attachment[.state]) = \(state)"))
-                )
         """
     }
 }
@@ -979,53 +971,170 @@ extension Attachment {
     }
 }
 
-// MARK: - Upload
+// MARK: - PreparedUpload
 
 extension Attachment {
-    public enum Destination {
-        case fileServer
-        case openGroup(OpenGroup)
-        
-        var shouldEncrypt: Bool {
-            switch self {
-                case .fileServer: return true
-                case .openGroup: return false
+    public struct PreparedUpload {
+        public enum Destination {
+            case fileServer
+            case community(OpenGroup)
+            
+            var shouldEncrypt: Bool {
+                switch self {
+                    case .fileServer: return true
+                    case .community: return false
+                }
             }
         }
-    }
-    
-    public struct PreparedData {
-        public let attachments: [Attachment]
-    }
-    
-    public static func prepare(attachments: [SignalAttachment]) -> PreparedData {
-        return PreparedData(
-            attachments: attachments.compactMap { signalAttachment in
-                Attachment(
-                    variant: (signalAttachment.isVoiceMessage ?
-                        .voiceMessage :
-                        .standard
-                    ),
-                    contentType: signalAttachment.mimeType,
-                    dataSource: signalAttachment.dataSource,
-                    sourceFilename: signalAttachment.sourceFilename,
-                    caption: signalAttachment.captionText
-                )
+        
+        fileprivate enum RequestInfo {
+            case alreadyUploaded(String)
+            case fileServer(Data)
+            case community(OpenGroupAPI.PreparedSendData<FileUploadResponse>)
+        }
+        
+        public let attachment: Attachment
+        public let encryptionKey: Data?
+        public let digest: Data?
+        fileprivate let requestInfo: RequestInfo
+        
+        private init(
+            attachment: Attachment,
+            encryptionKey: Data?,
+            digest: Data?,
+            requestInfo: RequestInfo
+        ) {
+            self.attachment = attachment
+            self.encryptionKey = encryptionKey
+            self.digest = digest
+            self.requestInfo = requestInfo
+        }
+        
+        init(
+            _ db: Database,
+            attachment: Attachment,
+            destination: Destination
+        ) throws {
+            self.attachment = attachment
+            
+            // This can occur if an AttachmentUploadJob was explicitly created for a message
+            // dependant on the attachment being uploaded (in this case the attachment has
+            // already been uploaded so just succeed)
+            if attachment.state == .uploaded, let fileId: String = Attachment.fileId(for: attachment.downloadUrl) {
+                self.encryptionKey = attachment.encryptionKey
+                self.digest = attachment.digest
+                self.requestInfo = .alreadyUploaded(fileId)
+                return
             }
-        )
+            
+            // If the attachment is a downloaded attachment, check if it came from
+            // the server and if so just succeed immediately (no use re-uploading
+            // an attachment that is already present on the server) - or if we want
+            // it to be encrypted and it's not then encrypt it
+            //
+            // Note: The most common cases for this will be for LinkPreviews or Quotes
+            if
+                attachment.state == .downloaded,
+                attachment.serverId != nil,
+                let fileId: String = Attachment.fileId(for: attachment.downloadUrl),
+                (
+                    !destination.shouldEncrypt || (
+                        attachment.encryptionKey != nil &&
+                        attachment.digest != nil
+                    )
+                )
+            {
+                self.encryptionKey = attachment.encryptionKey
+                self.digest = attachment.digest
+                self.requestInfo = .alreadyUploaded(fileId)
+                return
+            }
+            
+            // Get the raw attachment data
+            guard let rawData = try? attachment.readDataFromFile() else {
+                SNLog("Couldn't read attachment from disk.")
+                throw AttachmentError.noAttachment
+            }
+            
+            // Perform encryption if needed
+            let data: Data
+            
+            switch destination.shouldEncrypt {
+                case false:
+                    self.encryptionKey = nil
+                    self.digest = nil
+                    data = rawData
+                    
+                case true:
+                    var encryptionKey: NSData = NSData()
+                    var digest: NSData = NSData()
+                    
+                    guard let ciphertext = Cryptography.encryptAttachmentData(rawData, shouldPad: true, outKey: &encryptionKey, outDigest: &digest) else {
+                        SNLog("Couldn't encrypt attachment.")
+                        throw AttachmentError.encryptionFailed
+                    }
+                    
+                    self.encryptionKey = encryptionKey as Data
+                    self.digest = digest as Data
+                    data = ciphertext
+            }
+            
+            // Ensure the file size is smaller than our upload limit
+            SNLog("File size: \(data.count) bytes.")
+            guard data.count <= FileServerAPI.maxFileSize else { throw HTTPError.maxFileSizeExceeded }
+            
+            // Generate the request
+            self.requestInfo = try {
+                switch destination {
+                    case .fileServer: return .fileServer(data)
+                    case .community(let openGroup):
+                        return .community(
+                            try OpenGroupAPI.preparedUploadFile(
+                                db,
+                                bytes: rawData.bytes,
+                                to: openGroup.roomToken,
+                                on: openGroup.server
+                            )
+                        )
+                }
+            }()
+        }
+        
+        public func with(_ fileId: String) -> PreparedUpload {
+            return PreparedUpload(
+                attachment: attachment.with(
+                    serverId: fileId,
+                    state: .uploaded,
+                    creationTimestamp: (
+                        attachment.creationTimestamp ??
+                        (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
+                    ),
+                    downloadUrl: "\(FileServerAPI.server)/file/\(fileId)",
+                    encryptionKey: encryptionKey,
+                    digest: digest
+                ),
+                encryptionKey: encryptionKey,
+                digest: digest,
+                requestInfo: requestInfo
+            )
+        }
     }
-    
-    public static func process(
+}
+
+// MARK: - Processing and Uploading
+
+public extension Attachment {
+    static func process(
         _ db: Database,
-        data: PreparedData?,
+        attachments: [Attachment]?,
         for interactionId: Int64?
     ) throws {
         guard
-            let data: PreparedData = data,
+            let attachments: [Attachment] = attachments,
             let interactionId: Int64 = interactionId
         else { return }
-                
-        try data.attachments
+
+        try attachments
             .enumerated()
             .forEach { index, attachment in
                 let interactionAttachment: InteractionAttachment = InteractionAttachment(
@@ -1039,139 +1148,119 @@ extension Attachment {
             }
     }
     
-    internal func upload(
-        to destination: Attachment.Destination,
-        using dependencies: Dependencies
-    ) -> AnyPublisher<String?, Error> {
-        // This can occur if an AttachmnetUploadJob was explicitly created for a message
-        // dependant on the attachment being uploaded (in this case the attachment has
-        // already been uploaded so just succeed)
-        guard state != .uploaded else {
-            return Just(Attachment.fileId(for: self.downloadUrl))
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
-        }
-        
-        // Get the attachment
-        guard var data = try? readDataFromFile() else {
-            SNLog("Couldn't read attachment from disk.")
-            return Fail(error: AttachmentError.noAttachment)
-                .eraseToAnyPublisher()
-        }
-        
-        let attachmentId: String = self.id
-        
-        return Storage.shared
-            .writePublisher { db -> (OpenGroupAPI.PreparedSendData<FileUploadResponse>?, String?, Data?, Data?) in
-                // If the attachment is a downloaded attachment, check if it came from
-                // the server and if so just succeed immediately (no use re-uploading
-                // an attachment that is already present on the server) - or if we want
-                // it to be encrypted and it's not then encrypt it
-                //
-                // Note: The most common cases for this will be for LinkPreviews or Quotes
-                guard
-                    state != .downloaded ||
-                    serverId == nil ||
-                    downloadUrl == nil ||
-                    !destination.shouldEncrypt ||
-                    encryptionKey == nil ||
-                    digest == nil
-                else {
-                    // Save the final upload info
-                    _ = try? Attachment
-                        .filter(id: attachmentId)
-                        .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploaded))
-                    
-                    return (nil, Attachment.fileId(for: self.downloadUrl), nil, nil)
-                }
-                
-                var encryptionKey: NSData = NSData()
-                var digest: NSData = NSData()
-                
-                // Encrypt the attachment if needed
-                if destination.shouldEncrypt {
-                    guard let ciphertext = Cryptography.encryptAttachmentData(data, shouldPad: true, outKey: &encryptionKey, outDigest: &digest) else {
-                        SNLog("Couldn't encrypt attachment.")
-                        throw AttachmentError.encryptionFailed
-                    }
-                    
-                    data = ciphertext
-                }
-                
-                // Check the file size
-                SNLog("File size: \(data.count) bytes.")
-                if data.count > FileServerAPI.maxFileSize { throw HTTPError.maxFileSizeExceeded }
-                
-                // Update the attachment to the 'uploading' state
-                _ = try? Attachment
-                    .filter(id: attachmentId)
-                    .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
-                
-                // We need database access for OpenGroup uploads so generate prepared data
-                let preparedSendData: OpenGroupAPI.PreparedSendData<FileUploadResponse>? = try {
-                    switch destination {
-                        case .openGroup(let openGroup):
-                            return try OpenGroupAPI
-                                .preparedUploadFile(
-                                    db,
-                                    bytes: data.bytes,
-                                    to: openGroup.roomToken,
-                                    on: openGroup.server
-                                )
-                        
-                        default: return nil
-                    }
-                }()
-                
-                return (
-                    preparedSendData,
-                    nil,
-                    (destination.shouldEncrypt ? encryptionKey as Data : nil),
-                    (destination.shouldEncrypt ? digest as Data : nil)
+    static func prepare(
+        preProcessedAttachments: [Attachment?] = [],
+        attachments: [SignalAttachment]
+    ) -> [Attachment] {
+        return (
+            preProcessedAttachments.compactMap { $0 } +
+            attachments.compactMap { signalAttachment in
+                Attachment(
+                    variant: (signalAttachment.isVoiceMessage ?
+                        .voiceMessage :
+                        .standard
+                    ),
+                    contentType: signalAttachment.mimeType,
+                    dataSource: signalAttachment.dataSource,
+                    sourceFilename: signalAttachment.sourceFilename,
+                    caption: signalAttachment.captionText
                 )
             }
-            .flatMap { preparedSendData, existingFileId, encryptionKey, digest -> AnyPublisher<(String?, Data?, Data?), Error> in
-                // No need to upload if the file was already uploaded
-                if let fileId: String = existingFileId {
-                    return Just((fileId, encryptionKey, digest))
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
-                }
-                
-                switch destination {
-                    case .openGroup:
-                        return OpenGroupAPI.send(data: preparedSendData)
-                            .map { _, response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
-                            .eraseToAnyPublisher()
-                        
-                    case .fileServer:
-                        return FileServerAPI.upload(data)
-                            .map { response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
-                            .eraseToAnyPublisher()
-                }
-            }
-            .flatMap { fileId, encryptionKey, digest -> AnyPublisher<String?, Error> in
-                /// Save the final upload info
-                ///
-                /// **Note:** We **MUST** use the `.with` function here to ensure the `isValid` flag is
-                /// updated correctly
-                Storage.shared
-                    .writePublisher { db in
-                        try self
-                            .with(
-                                serverId: fileId,
-                                state: .uploaded,
-                                creationTimestamp: (
-                                    self.creationTimestamp ??
-                                    (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
-                                ),
-                                downloadUrl: fileId.map { "\(FileServerAPI.server)/file/\($0)" },
-                                encryptionKey: encryptionKey,
-                                digest: digest
-                            )
-                            .saved(db)
+        )
+    }
+
+    static func prepare(
+        _ db: Database,
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        preProcessedAttachments: [Attachment?] = [],
+        attachments: [SignalAttachment]
+    ) throws -> [PreparedUpload] {
+        let destination: Attachment.PreparedUpload.Destination = try {
+            switch threadVariant {
+                case .community:
+                    guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
+                        throw StorageError.objectNotFound
                     }
-                    .map { _ in fileId }
+
+                    return .community(openGroup)
+
+                default: return .fileServer
+            }
+        }()
+
+        return try Attachment
+            .prepare(
+                preProcessedAttachments: preProcessedAttachments,
+                attachments: attachments
+            )
+            .map { attachment -> PreparedUpload in
+                try PreparedUpload(
+                    db,
+                    attachment: attachment,
+                    destination: destination
+                )
+            }
+    }
+    
+    static func upload(
+        readOnly: Bool,
+        preparedData: [PreparedUpload],
+        using dependencies: Dependencies
+    ) -> AnyPublisher<[PreparedUpload], Error> {
+        // Create a local function to perform the actual uploading
+        func performUpload(data: [PreparedUpload]) -> AnyPublisher<[PreparedUpload], Error> {
+            guard !data.isEmpty else { return Just([]).setFailureType(to: Error.self).eraseToAnyPublisher() }
+            
+            return Publishers
+                .MergeMany(
+                    data.map { prepared -> AnyPublisher<PreparedUpload, Error> in
+                        switch prepared.requestInfo {
+                            case .alreadyUploaded(let fileId):
+                                return Just(prepared.with(fileId))
+                                    .setFailureType(to: Error.self)
+                                    .eraseToAnyPublisher()
+                                
+                            case .fileServer(let data):
+                                return FileServerAPI.upload(data)
+                                    .map { response -> PreparedUpload in prepared.with(response.id) }
+                                    .eraseToAnyPublisher()
+                                
+                            case .community(let preparedSendData):
+                                return OpenGroupAPI.send(data: preparedSendData, using: dependencies)
+                                    .map { _, response -> PreparedUpload in prepared.with(response.id) }
+                                    .eraseToAnyPublisher()
+                        }
+                    }
+                )
+                .collect()
+                .eraseToAnyPublisher()
+        }
+        
+        // When the database is in readOnly mode we can't update the attachment state in the database
+        // so just perform the uploads and handle the results in the calling function
+        guard !readOnly else { return performUpload(data: preparedData) }
+        
+        // Get a list of attachment ids which aren't already uploaded
+        let nonUploadedAttachmentIds: [String] = preparedData
+            .filter { $0.attachment.state != .uploaded }
+            .map { $0.attachment.id }
+        
+        return dependencies.storage
+            .writePublisher { db -> [PreparedUpload] in
+                // Update pending upload attachments to the 'uploading' state
+                _ = try? Attachment
+                    .filter(ids: nonUploadedAttachmentIds)
+                    .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
+                
+                return preparedData
+            }
+            .flatMap { preparedData -> AnyPublisher<[PreparedUpload], Error> in performUpload(data: preparedData) }
+            .flatMap { results -> AnyPublisher<[PreparedUpload], Error> in
+                // Persist the updated attachment data to the database
+                dependencies.storage
+                    .writePublisher { db in try results.forEach { data in _ = try data.attachment.saved(db) } }
+                    .map { _ in results }
                     .eraseToAnyPublisher()
             }
             .handleEvents(
@@ -1179,9 +1268,9 @@ extension Attachment {
                     switch result {
                         case .finished: break
                         case .failure:
-                            Storage.shared.write { db in
+                            dependencies.storage.write { db in
                                 try Attachment
-                                    .filter(id: attachmentId)
+                                    .filter(ids: nonUploadedAttachmentIds)
                                     .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedUpload))
                             }
                     }

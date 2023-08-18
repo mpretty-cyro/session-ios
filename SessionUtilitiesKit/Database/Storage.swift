@@ -31,8 +31,13 @@ open class Storage {
     private static let internalHasCreatedValidInstance: Atomic<Bool> = Atomic(false)
     internal let internalCurrentlyRunningMigration: Atomic<(identifier: TargetMigrations.Identifier, migration: Migration.Type)?> = Atomic(nil)
     
-    public static let shared: Storage = Storage()
+    public static var _shared: Storage!
+    public static var shared: Storage { _shared }
     public private(set) var isValid: Bool = false
+    
+    /// It's possible for some cases to be able to try to access the `isValid` property before the `shared` instance has properly
+    /// been created, this property is a way to access the value before it's been setup without triggering the setup
+    public static var unsafeIsValid: Bool { (_shared != nil ? _shared.isValid : false) }
     
     /// This property gets set when triggering the suspend/resume notifications for the database but `GRDB` will attempt to
     /// resume the suspention when it attempts to perform a write so it's possible for this to return a **false-positive** so
@@ -54,14 +59,20 @@ open class Storage {
     
     // MARK: - Initialization
     
+    public static func setupReadOnly(readOnly: Bool) {
+        _shared = Storage(readOnly: readOnly)
+    }
+    
     public init(
+        readOnly: Bool = false,
         customWriter: DatabaseWriter? = nil,
         customMigrationTargets: [MigratableTarget.Type]? = nil
     ) {
-        configureDatabase(customWriter: customWriter, customMigrationTargets: customMigrationTargets)
+        configureDatabase(readOnly: readOnly, customWriter: customWriter, customMigrationTargets: customMigrationTargets)
     }
     
     private func configureDatabase(
+        readOnly: Bool = false,
         customWriter: DatabaseWriter? = nil,
         customMigrationTargets: [MigratableTarget.Type]? = nil
     ) {
@@ -100,6 +111,7 @@ open class Storage {
         
         // Configure the database and create the DatabasePool for interacting with the database
         var config = Configuration()
+        config.readonly = readOnly
         config.label = Storage.queuePrefix
         config.maximumReaderCount = 10  // Increase the max read connection limit - Default is 5
         config.observesSuspensionNotifications = true // Minimise `0xDEAD10CC` exceptions
