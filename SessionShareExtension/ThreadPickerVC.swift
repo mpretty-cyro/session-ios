@@ -262,6 +262,17 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
             /// Disappearing Messages, as a result we need to explicitly `getNetworkTime` in order to ensure it's accurate
             Just(())
                 .setFailureType(to: Error.self)
+                .flatMap {
+                    guard !SnodeAPI.hasCachedSnodesIncludingExpired() else {
+                        return Just(())
+                            .setFailureType(to: Error.self)
+                            .eraseToAnyPublisher()
+                    }
+                    
+                    return SnodeAPI.getSnodePool()
+                        .map { _ in () }
+                        .eraseToAnyPublisher()
+                }
                 .flatMap { _ -> AnyPublisher<[Attachment.PreparedUpload], Error> in
                     guard !finalAttachments.isEmpty || linkPreviewInfo != nil else {
                         return SnodeAPI

@@ -18,6 +18,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
     public static let isFromRemoteKey = "remote"
     public static let threadIdKey = "Signal.AppNotificationsUserInfoKey.threadId"
+    public static let threadVariantRaw = "Signal.AppNotificationsUserInfoKey.threadVariantRaw"
     public static let threadNotificationCounter = "Session.AppNotificationsUserInfoKey.threadNotificationCounter"
 
     // MARK: Did receive a remote push notification request
@@ -85,7 +86,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
             // is added to notification center
             Storage.shared.read { db in
                 do {
-                    guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, envelope: envelope) else {
+                    guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, readOnly: true, envelope: envelope) else {
                         self.handleFailure(for: notificationContent)
                         return
                     }

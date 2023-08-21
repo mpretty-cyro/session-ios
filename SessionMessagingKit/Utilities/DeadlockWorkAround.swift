@@ -202,34 +202,40 @@ public enum DeadlockWorkAround {
             }
         
         // Process the messages which were successful
+        var completedFilenames: [String] = []
+        
         dependencies.storage.write { db in
-            try deadlockMessages.forEach { deadlockMessage, _ in
-                switch deadlockMessage.variant {
-                    case .incomingMessage(let envelopeData):
-                        try processIncomingMessage(db, envelopeData: envelopeData, using: dependencies)
-                        
-                    case .incomingCall(let threadId, let threadVariant, let sentTimestamp, let state):
-                        try processIncomingCallMessage(
-                            db,
-                            threadId: threadId,
-                            threadVariant: threadVariant,
-                            sentTimestamp: sentTimestamp,
-                            state: state,
-                            using: dependencies
-                        )
-                        
-                    case .outgoingMessage, .outgoingOpenGroupMessage, .outgoingOpenGroupInboxMessage:
-                        try processOutgoingMessage(db, message: deadlockMessage, using: dependencies)
-                        
-                    case .configSync(let publicKey):
-                        processConfigSyncMessage(db, publicKey: publicKey, using: dependencies)
+            completedFilenames = deadlockMessages.compactMap { deadlockMessage, filename in
+                do {
+                    switch deadlockMessage.variant {
+                        case .incomingMessage(let envelopeData):
+                            try processIncomingMessage(db, envelopeData: envelopeData, using: dependencies)
+                            
+                        case .incomingCall(let threadId, let threadVariant, let sentTimestamp, let state):
+                            try processIncomingCallMessage(
+                                db,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                sentTimestamp: sentTimestamp,
+                                state: state,
+                                using: dependencies
+                            )
+                            
+                        case .outgoingMessage, .outgoingOpenGroupMessage, .outgoingOpenGroupInboxMessage:
+                            try processOutgoingMessage(db, message: deadlockMessage, using: dependencies)
+                            
+                        case .configSync(let publicKey):
+                            processConfigSyncMessage(db, publicKey: publicKey, using: dependencies)
+                    }
+                    
+                    return filename
                 }
+                catch { return nil }
             }
         }
         
         // Remove the files which were parsed successfully - only want to process them once
         // even if they failed
-        let completedFilenames: [String] = deadlockMessages.map { $0.filename }
         completedFilenames.forEach { filename in
             try? FileManager.default.removeItem(atPath: "\(DeadlockWorkAround.sharedDeadlockDirectoryPath)/\(filename)")
         }
@@ -258,17 +264,20 @@ public enum DeadlockWorkAround {
                 )
             }
         let numToRemove: Int = filesToUpdate.filter { $0.shouldDelete }.count
-        SNLog("[DeadlockWorkAround] Completed processing \(deadlockMessages.count) message\(deadlockMessages.count == 1 ? "" : "s") (ignoring \(numToRemove) message\(numToRemove == 1 ? "" : "s"))")
+        SNLog("[DeadlockWorkAround] Completed processing \(deadlockMessages.count) message\(deadlockMessages.count == 1 ? "" : "s") (\(filesToUpdate.count) failed, ignoring \(numToRemove) message\(numToRemove == 1 ? "" : "s"))")
     
         // Remove/Rename remaining files
         filesToUpdate
             .forEach { old, new, shouldRemove in
                 guard !shouldRemove else {
-                    try? FileManager.default.removeItem(atPath: old)
+                    try? FileManager.default.removeItem(atPath: "\(DeadlockWorkAround.sharedDeadlockDirectoryPath)/\(old)")
                     return
                 }
                 
-                try? FileManager.default.moveItem(atPath: old, toPath: new)
+                try? FileManager.default.moveItem(
+                    atPath: "\(DeadlockWorkAround.sharedDeadlockDirectoryPath)/\(old)",
+                    toPath: "\(DeadlockWorkAround.sharedDeadlockDirectoryPath)/\(new)"
+                )
             }
     }
     
@@ -279,7 +288,7 @@ public enum DeadlockWorkAround {
     ) throws {
         guard
             let envelope: SNProtoEnvelope = try? SNProtoEnvelope.parseData(envelopeData),
-            let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, envelope: envelope)
+            let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, readOnly: false, envelope: envelope)
         else { return }
         
         try MessageReceiver.handle(
@@ -288,7 +297,8 @@ public enum DeadlockWorkAround {
             threadVariant: processedMessage.threadVariant,
             message: processedMessage.messageInfo.message,
             serverExpirationTimestamp: processedMessage.messageInfo.serverExpirationTimestamp,
-            associatedWithProto: processedMessage.proto
+            associatedWithProto: processedMessage.proto,
+            canShowNotification: false
         )
     }
     
@@ -338,7 +348,8 @@ public enum DeadlockWorkAround {
                     preparedAttachments: message.attachments?
                         .reduce(into: [:]) { result, next in result[next.serverId ?? ""] = next },
                     serverExpirationTimestamp: processedMessage.messageInfo.serverExpirationTimestamp,
-                    associatedWithProto: processedMessage.proto
+                    associatedWithProto: processedMessage.proto,
+                    canShowNotification: false
                 )
                 
             case .outgoingOpenGroupMessage(
@@ -381,6 +392,7 @@ public enum DeadlockWorkAround {
                         .reduce(into: [:]) { result, next in result[next.serverId ?? ""] = next },
                     serverExpirationTimestamp: processedMessage.messageInfo.serverExpirationTimestamp,
                     associatedWithProto: processedMessage.proto,
+                    canShowNotification: false,
                     using: dependencies
                 )
                 
@@ -412,6 +424,7 @@ public enum DeadlockWorkAround {
                             base64EncodedMessage: base64EncodedMessage
                         )
                     ],
+                    ignoreMessageId: true,
                     fromOutbox: true,
                     on: server,
                     using: dependencies

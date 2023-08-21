@@ -249,6 +249,7 @@ public extension Message {
         do {
             let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
                 db,
+                readOnly: false,
                 envelope: envelope,
                 serverExpirationTimestamp: (TimeInterval(rawMessage.info.expirationDateMs) / 1000),
                 serverHash: rawMessage.info.hash,
@@ -305,6 +306,7 @@ public extension Message {
     ) throws -> ProcessedMessage? {
         return try processRawReceivedMessage(
             db,
+            readOnly: false,
             envelope: envelope,
             serverExpirationTimestamp: (
                 (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
@@ -321,11 +323,13 @@ public extension Message {
     /// closed group key update messages (the `NotificationServiceExtension` does this itself)
     static func processRawReceivedMessageAsNotification(
         _ db: Database,
+        readOnly: Bool,
         envelope: SNProtoEnvelope,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
         let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
             db,
+            readOnly: readOnly,
             envelope: envelope,
             serverExpirationTimestamp: (
                 (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
@@ -361,6 +365,7 @@ public extension Message {
         
         return try processRawReceivedMessage(
             db,
+            readOnly: false,
             envelope: envelope,
             serverExpirationTimestamp: nil,
             serverHash: nil,
@@ -392,6 +397,7 @@ public extension Message {
         
         return try processRawReceivedMessage(
             db,
+            readOnly: false,
             envelope: envelope,
             serverExpirationTimestamp: nil,
             serverHash: nil,
@@ -540,6 +546,7 @@ public extension Message {
     
     private static func processRawReceivedMessage(
         _ db: Database,
+        readOnly: Bool,
         envelope: SNProtoEnvelope,
         serverExpirationTimestamp: TimeInterval?,
         serverHash: String?,
@@ -594,20 +601,22 @@ public extension Message {
         }
         
         // Prevent ControlMessages from being handled multiple times if not supported
-        do {
-            try ControlMessageProcessRecord(
-                threadId: threadId,
-                message: message,
-                serverExpirationTimestamp: serverExpirationTimestamp
-            )?.insert(db)
-        }
-        catch {
-            // We want to custom handle this 
-            if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
-                throw MessageReceiverError.duplicateControlMessage
+        if !readOnly {
+            do {
+                try ControlMessageProcessRecord(
+                    threadId: threadId,
+                    message: message,
+                    serverExpirationTimestamp: serverExpirationTimestamp
+                )?.insert(db)
             }
-            
-            throw error
+            catch {
+                // We want to custom handle this
+                if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
+                    throw MessageReceiverError.duplicateControlMessage
+                }
+                
+                throw error
+            }
         }
         
         return (

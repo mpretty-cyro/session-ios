@@ -1149,7 +1149,7 @@ public final class MessageSender {
         return nil
     }
     
-    public static func scheduleSyncMessageIfNeeded(
+    @discardableResult public static func scheduleSyncMessageIfNeeded(
         _ db: Database,
         message: Message,
         destination: Message.Destination,
@@ -1157,7 +1157,7 @@ public final class MessageSender {
         interactionId: Int64?,
         isAlreadySyncMessage: Bool,
         using dependencies: Dependencies
-    ) {
+    ) -> Job? {
         // Sync the message if it's not a sync message, wasn't already sent to the current user and
         // it's a message type which should be synced
         let currentUserPublicKey = getUserHexEncodedPublicKey(db, using: dependencies)
@@ -1171,7 +1171,7 @@ public final class MessageSender {
             if let message = message as? VisibleMessage { message.syncTarget = publicKey }
             if let message = message as? ExpirationTimerUpdate { message.syncTarget = publicKey }
             
-            dependencies.jobRunner.add(
+            return dependencies.jobRunner.add(
                 db,
                 job: Job(
                     variant: .messageSend,
@@ -1187,5 +1187,7 @@ public final class MessageSender {
                 using: dependencies
             )
         }
+        
+        return nil
     }
 }

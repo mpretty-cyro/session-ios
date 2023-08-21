@@ -654,6 +654,7 @@ private final class EnterPublicKeyVC: UIViewController {
     
     @objc private func sharePublicKey() {
         let shareVC = UIActivityViewController(activityItems: [ getUserHexEncodedPublicKey() ], applicationActivities: nil)
+        shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
         
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []

@@ -638,6 +638,8 @@
 		FD5931A32A89FBBB0040147D /* DeadlockWorkAround.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931A22A89FBBB0040147D /* DeadlockWorkAround.swift */; };
 		FD5931A72A8DA5DA0040147D /* SQLInterpolation+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931A62A8DA5DA0040147D /* SQLInterpolation+Utilities.swift */; };
 		FD5931AB2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931AA2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift */; };
+		FD5931AD2A92D7820040147D /* ProcessDeadlockWorkAroundJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931AC2A92D7820040147D /* ProcessDeadlockWorkAroundJob.swift */; };
+		FD5931AF2A92D9320040147D /* _016_AddDeadlockWorkAroundJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5931AE2A92D9320040147D /* _016_AddDeadlockWorkAroundJob.swift */; };
 		FD5C72F7284F0E560029977D /* MessageReceiver+ReadReceipts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5C72F6284F0E560029977D /* MessageReceiver+ReadReceipts.swift */; };
 		FD5C72F9284F0E880029977D /* MessageReceiver+TypingIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5C72F8284F0E880029977D /* MessageReceiver+TypingIndicators.swift */; };
 		FD5C72FB284F0EA10029977D /* MessageReceiver+DataExtractionNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5C72FA284F0EA10029977D /* MessageReceiver+DataExtractionNotification.swift */; };
@@ -1761,6 +1763,8 @@
 		FD5931A22A89FBBB0040147D /* DeadlockWorkAround.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlockWorkAround.swift; sourceTree = "<group>"; };
 		FD5931A62A8DA5DA0040147D /* SQLInterpolation+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SQLInterpolation+Utilities.swift"; sourceTree = "<group>"; };
 		FD5931AA2A8DCB0A0040147D /* ScopeAdapter+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScopeAdapter+Utilities.swift"; sourceTree = "<group>"; };
+		FD5931AC2A92D7820040147D /* ProcessDeadlockWorkAroundJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessDeadlockWorkAroundJob.swift; sourceTree = "<group>"; };
+		FD5931AE2A92D9320040147D /* _016_AddDeadlockWorkAroundJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _016_AddDeadlockWorkAroundJob.swift; sourceTree = "<group>"; };
 		FD5C72F6284F0E560029977D /* MessageReceiver+ReadReceipts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MessageReceiver+ReadReceipts.swift"; sourceTree = "<group>"; };
 		FD5C72F8284F0E880029977D /* MessageReceiver+TypingIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MessageReceiver+TypingIndicators.swift"; sourceTree = "<group>"; };
 		FD5C72FA284F0EA10029977D /* MessageReceiver+DataExtractionNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MessageReceiver+DataExtractionNotification.swift"; sourceTree = "<group>"; };
@@ -3615,6 +3619,7 @@
 				FD8ECF7C2934293A00C0D1BB /* _013_SessionUtilChanges.swift */,
 				FD778B6329B189FF001BAC6B /* _014_GenerateInitialUserConfigDumps.swift */,
 				FD1D732D2A86114600E3F410 /* _015_BlockCommunityMessageRequests.swift */,
+				FD5931AE2A92D9320040147D /* _016_AddDeadlockWorkAroundJob.swift */,
 			);
 			path = Migrations;
 			sourceTree = "<group>";
@@ -4339,6 +4344,7 @@
 				C352A35A2557824E00338F3E /* AttachmentUploadJob.swift */,
 				7B521E0929BFF84400C3C36A /* GroupLeavingJob.swift */,
 				FD2B4AFE2946C93200AB4848 /* ConfigurationSyncJob.swift */,
+				FD5931AC2A92D7820040147D /* ProcessDeadlockWorkAroundJob.swift */,
 			);
 			path = Types;
 			sourceTree = "<group>";
@@ -5899,6 +5905,7 @@
 				C32C5A88256DBCF9003C73A2 /* MessageReceiver+ClosedGroups.swift in Sources */,
 				B8D0A25925E367AC00C1835E /* Notification+MessageReceiver.swift in Sources */,
 				FD245C53285065DB00B966DD /* ProximityMonitoringManager.swift in Sources */,
+				FD5931AD2A92D7820040147D /* ProcessDeadlockWorkAroundJob.swift in Sources */,
 				FD245C55285065E500B966DD /* OpenGroupManager.swift in Sources */,
 				FDC4387227B5BB3B00C60D73 /* FileUploadResponse.swift in Sources */,
 				C32C599E256DB02B003C73A2 /* TypingIndicators.swift in Sources */,
@@ -5922,6 +5929,7 @@
 				FD8ECF7F2934298100C0D1BB /* ConfigDump.swift in Sources */,
 				FDA1E83B29A5F2D500C5C3BD /* SessionUtil+Shared.swift in Sources */,
 				C352A2FF25574B6300338F3E /* MessageSendJob.swift in Sources */,
+				FD5931AF2A92D9320040147D /* _016_AddDeadlockWorkAroundJob.swift in Sources */,
 				FD16AB612A1DD9B60083D849 /* ProfilePictureView+Convenience.swift in Sources */,
 				FD23CE242A675C440000B97C /* Crypto+SessionMessagingKit.swift in Sources */,
 				B8856D11256F112A001CE70E /* OWSAudioSession.swift in Sources */,

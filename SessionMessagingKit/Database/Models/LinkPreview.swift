@@ -77,7 +77,13 @@ public struct LinkPreview: Codable, Equatable, Hashable, FetchableRecord, Persis
 // MARK: - Protobuf
 
 public extension LinkPreview {
-    init?(_ db: Database, proto: SNProtoDataMessage, body: String?, sentTimestampMs: TimeInterval) throws {
+    init?(
+        _ db: Database,
+        proto: SNProtoDataMessage,
+        body: String?,
+        sentTimestampMs: TimeInterval,
+        preparedAttachments: [String: Attachment]?
+    ) throws {
         guard let previewProto = proto.preview.first else { throw LinkPreviewError.noPreview }
         guard URL(string: previewProto.url) != nil else { throw LinkPreviewError.invalidInput }
         guard LinkPreview.isValidLinkUrl(previewProto.url) else { throw LinkPreviewError.invalidInput }
@@ -102,8 +108,8 @@ public extension LinkPreview {
         self.title = LinkPreview.normalizeTitle(title: previewProto.title)
         
         if let imageProto = previewProto.image {
-            let attachment: Attachment = Attachment(proto: imageProto)
-            try attachment.insert(db)
+            let attachment: Attachment = (preparedAttachments?["\(imageProto.id)"] ?? Attachment(proto: imageProto))
+            try attachment.save(db)
             
             self.attachmentId = attachment.id
         }

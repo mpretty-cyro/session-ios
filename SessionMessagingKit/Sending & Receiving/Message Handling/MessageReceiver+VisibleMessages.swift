@@ -14,6 +14,7 @@ extension MessageReceiver {
         message: VisibleMessage,
         preparedAttachments: [String: Attachment]?,
         associatedWithProto proto: SNProtoContent,
+        canShowNotification: Bool,
         using dependencies: Dependencies = Dependencies()
     ) throws -> Int64 {
         guard let sender: String = message.sender, let dataMessage = proto.dataMessage else {
@@ -199,7 +200,8 @@ extension MessageReceiver {
             db,
             proto: dataMessage,
             interactionId: interactionId,
-            thread: thread
+            thread: thread,
+            preparedAttachments: preparedAttachments
         )?.inserted(db)
         
         // Parse link preview if needed
@@ -207,7 +209,8 @@ extension MessageReceiver {
             db,
             proto: dataMessage,
             body: message.text,
-            sentTimestampMs: (messageSentTimestamp * 1000)
+            sentTimestampMs: (messageSentTimestamp * 1000),
+            preparedAttachments: preparedAttachments
         )?.saved(db)
         
         // Open group invitations are stored as LinkPreview values so create one if needed
@@ -269,7 +272,11 @@ extension MessageReceiver {
         }
         
         // Notify the user if needed
-        guard interactionVariant == .standardIncoming && !interaction.wasRead else { return interactionId }
+        guard
+            canShowNotification &&
+            interactionVariant == .standardIncoming &&
+            !interaction.wasRead
+        else { return interactionId }
         
         // Use the same identifier for notifications when in backgroud polling to prevent spam
         Environment.shared?.notificationsManager.wrappedValue?

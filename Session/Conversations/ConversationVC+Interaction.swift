@@ -980,6 +980,7 @@ extension ConversationVC:
                 
                 // Otherwise share the file
                 let shareVC = UIActivityViewController(activityItems: [ fileUrl ], applicationActivities: nil)
+                shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
                 
                 if UIDevice.current.isIPad {
                     shareVC.excludedActivityTypes = []

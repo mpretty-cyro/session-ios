@@ -568,8 +568,10 @@ class NotificationActionHandler {
                 .eraseToAnyPublisher()
         }
         
-        return Storage.shared
-            .writePublisher { db in
+        // Note: This will actually be executed within the main app (rather than an extension) so can just
+        // follow the standard sending process
+        return dependencies.storage
+            .writePublisher { db -> Job? in
                 let interaction: Interaction = try Interaction(
                     threadId: threadId,
                     authorId: getUserHexEncodedPublicKey(db),
@@ -598,23 +600,38 @@ class NotificationActionHandler {
                     )
                 )
                 
-                preconditionFailure("") // TODO: Need to refactor this similar to the share extension
-//                return try MessageSender.preparedSendData(
-//                    db,
-//                    interaction: interaction,
-//                    preparedAttachments: nil,
-//                    threadId: threadId,
-//                    threadVariant: thread.variant,
-//                    using: dependencies
-//                )
+                return try MessageSender.send(
+                    db,
+                    interaction: interaction,
+                    threadId: thread.id,
+                    threadVariant: thread.variant,
+                    using: dependencies
+                )
             }
-            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+            .flatMap { job in
+                Deferred {
+                    Future { resolution in
+                        guard let job: Job = job else {
+                            return resolution(Result.failure(JobRunnerError.missingRequiredDetails))
+                        }
+                        
+                        MessageSendJob.run(
+                            job,
+                            queue: DispatchQueue.global(qos: .background),
+                            success: { _, _, _ in resolution(Result.success(())) },
+                            failure: { _, error, _, _ in resolution(Result.failure(error ?? HTTPError.generic)) },
+                            deferred: { _, _ in resolution(Result.success(())) },
+                            using: dependencies
+                        )
+                    }
+                }
+            }
             .handleEvents(
                 receiveCompletion: { result in
                     switch result {
                         case .finished: break
                         case .failure:
-                            Storage.shared.read { [weak self] db in
+                            dependencies.storage.read { [weak self] db in
                                 self?.notificationPresenter.notifyForFailedSend(
                                     db,
                                     in: thread,

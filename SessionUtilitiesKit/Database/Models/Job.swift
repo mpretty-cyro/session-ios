@@ -88,6 +88,10 @@ public struct Job: Codable, Equatable, Hashable, Identifiable, FetchableRecord, 
         /// (if read receipts are enabled) to notify other members in a conversation that their message was read
         case sendReadReceipts
         
+        /// This is a job that runs when returning from the background in or to process any messages sent/received
+        /// by the app extensions (since they run in a read-only mode)
+        case processDeadlockWorkAround
+        
         /// This is a job that runs once whenever a message is received to attempt to decode and properly
         /// process the message
         case messageReceive = 3000

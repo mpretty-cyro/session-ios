@@ -190,6 +190,7 @@ public enum MessageReceiver {
         preparedAttachments: [String: Attachment]? = nil,
         serverExpirationTimestamp: TimeInterval?,
         associatedWithProto proto: SNProtoContent,
+        canShowNotification: Bool,
         using dependencies: Dependencies = Dependencies()
     ) throws {
         // Check if the message requires an existing conversation (if it does and the conversation isn't in
@@ -279,7 +280,8 @@ public enum MessageReceiver {
                     threadVariant: threadVariant,
                     message: message,
                     preparedAttachments: preparedAttachments,
-                    associatedWithProto: proto
+                    associatedWithProto: proto,
+                    canShowNotification: canShowNotification
                 )
                 
             // SharedConfigMessages should be handled by the 'SharedUtil' instead of this

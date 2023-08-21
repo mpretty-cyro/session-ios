@@ -99,7 +99,13 @@ public extension Quote {
 // MARK: - Protobuf
 
 public extension Quote {
-    init?(_ db: Database, proto: SNProtoDataMessage, interactionId: Int64, thread: SessionThread) throws {
+    init?(
+        _ db: Database,
+        proto: SNProtoDataMessage,
+        interactionId: Int64,
+        thread: SessionThread,
+        preparedAttachments: [String: Attachment]?
+    ) throws {
         guard
             let quoteProto = proto.quote,
             quoteProto.id != 0,
@@ -111,5 +117,12 @@ public extension Quote {
         self.authorId = quoteProto.author
         self.body = nil
         self.attachmentId = nil
+        
+        // It shouldn't be possible to have a prepared attachment for a quote (as sending a quote
+        // from an extension isn't possible) but just in case we will save any which exist
+        try quoteProto.attachments
+            .compactMap { $0.thumbnail }
+            .compactMap { preparedAttachments?["\($0.id)"] }
+            .forEach { try $0.save(db) }
     }
 }

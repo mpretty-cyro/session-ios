@@ -274,6 +274,8 @@ private final class ViewMyQRCodeVC : UIViewController {
     @objc private func shareQRCode() {
         let qrCode = QRCode.generate(for: getUserHexEncodedPublicKey(), hasBackground: true)
         let shareVC = UIActivityViewController(activityItems: [ qrCode ], applicationActivities: nil)
+        shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
+        
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []
             shareVC.popoverPresentationController?.permittedArrowDirections = []

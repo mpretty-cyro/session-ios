@@ -583,6 +583,7 @@ extension OpenGroupAPI {
                             OpenGroupManager.handleDirectMessages(
                                 db,
                                 messages: messages,
+                                ignoreMessageId: false,
                                 fromOutbox: fromOutbox,
                                 on: server,
                                 using: dependencies

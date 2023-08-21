@@ -684,6 +684,7 @@ class SettingsViewModel: SessionTableViewModel<SettingsViewModel.NavButton, Sett
             activityItems: [ sessionId ],
             applicationActivities: nil
         )
+        shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
         
         self.transitionToScreen(shareVC, transitionType: .present)
     }

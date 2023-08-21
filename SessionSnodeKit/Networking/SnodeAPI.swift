@@ -141,7 +141,7 @@ public final class SnodeAPI {
 
     // MARK: - Public API
     
-    public static func hasCachedSnodesInclusingExpired() -> Bool {
+    public static func hasCachedSnodesIncludingExpired() -> Bool {
         loadSnodePoolIfNeeded()
         
         return !hasInsufficientSnodes

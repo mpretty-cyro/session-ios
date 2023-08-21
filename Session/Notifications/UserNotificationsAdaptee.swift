@@ -265,7 +265,6 @@ public class UserNotificationActionHandler: NSObject {
                         case .finished: break
                         case .failure(let error):
                             completionHandler()
-                            owsFailDebug("error: \(error)")
                             Logger.error("error: \(error)")
                     }
                 },

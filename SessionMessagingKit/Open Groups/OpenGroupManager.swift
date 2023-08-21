@@ -611,6 +611,7 @@ public final class OpenGroupManager {
                             message: messageInfo.message,
                             serverExpirationTimestamp: messageInfo.serverExpirationTimestamp,
                             associatedWithProto: proto,
+                            canShowNotification: true,
                             using: dependencies
                         )
                         largestValidSeqNo = max(largestValidSeqNo, message.seqNo)
@@ -694,6 +695,7 @@ public final class OpenGroupManager {
     public static func handleDirectMessages(
         _ db: Database,
         messages: [OpenGroupAPI.DirectMessage],
+        ignoreMessageId: Bool,
         fromOutbox: Bool,
         on server: String,
         using dependencies: Dependencies
@@ -712,16 +714,18 @@ public final class OpenGroupManager {
         let latestMessageId: Int64 = sortedMessages[sortedMessages.count - 1].id
         var lookupCache: [String: BlindedIdLookup] = [:]  // Only want this cache to exist for the current loop
         
-        // Update the 'latestMessageId' value
-        if fromOutbox {
-            _ = try? OpenGroup
-                .filter(OpenGroup.Columns.server == server.lowercased())
-                .updateAll(db, OpenGroup.Columns.outboxLatestMessageId.set(to: latestMessageId))
-        }
-        else {
-            _ = try? OpenGroup
-                .filter(OpenGroup.Columns.server == server.lowercased())
-                .updateAll(db, OpenGroup.Columns.inboxLatestMessageId.set(to: latestMessageId))
+        // Update the 'latestMessageId' value if we aren't ignoring it
+        if !ignoreMessageId {
+            if fromOutbox {
+                _ = try? OpenGroup
+                    .filter(OpenGroup.Columns.server == server.lowercased())
+                    .updateAll(db, OpenGroup.Columns.outboxLatestMessageId.set(to: latestMessageId))
+            }
+            else {
+                _ = try? OpenGroup
+                    .filter(OpenGroup.Columns.server == server.lowercased())
+                    .updateAll(db, OpenGroup.Columns.inboxLatestMessageId.set(to: latestMessageId))
+            }
         }
 
         // Process the messages
@@ -794,6 +798,7 @@ public final class OpenGroupManager {
                         message: messageInfo.message,
                         serverExpirationTimestamp: messageInfo.serverExpirationTimestamp,
                         associatedWithProto: try SNProtoContent.parseData(messageInfo.serializedProtoData),
+                        canShowNotification: true,
                         using: dependencies
                     )
                 }

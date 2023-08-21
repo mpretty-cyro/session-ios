@@ -519,6 +519,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
         
         let shareVC = UIActivityViewController(activityItems: [ URL(fileURLWithPath: originalFilePath) ], applicationActivities: nil)
+        shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
         
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []

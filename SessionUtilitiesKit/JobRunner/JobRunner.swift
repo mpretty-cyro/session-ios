@@ -270,6 +270,9 @@ public final class JobRunner: JobRunnerType {
         self.blockingQueue.mutate {
             $0?.canStart = { [weak self] queue -> Bool in (self?.canStart(queue: queue) == true) }
             $0?.onQueueDrained = { [weak self] in
+                // Only consider the blocking queue drained once the app has become active
+                guard self?.appHasBecomeActive.wrappedValue == true else { return }
+                
                 // Once all blocking jobs have been completed we want to start running
                 // the remaining job queues
                 self?.startNonBlockingQueues(using: dependencies)
@@ -463,37 +466,43 @@ public final class JobRunner: JobRunnerType {
         
         // Retrieve any jobs which should run when becoming active
         let hasCompletedInitialBecomeActive: Bool = self.hasCompletedInitialBecomeActive.wrappedValue
-        let jobsToRun: [Job] = dependencies.storage
+        let jobsToRun: (blocking: [Job], nonBlocking: [Job]) = dependencies.storage
             .read { db in
-                return try Job
+                let blockingJobs: [Job] = try Job
                     .filter(Job.Columns.behaviour == Job.Behaviour.recurringOnActive)
+                    .filter(Job.Columns.shouldBlock == true)
                     .order(
                         Job.Columns.priority.desc,
                         Job.Columns.id
                     )
                     .fetchAll(db)
+                    .filter { hasCompletedInitialBecomeActive || !$0.shouldSkipLaunchBecomeActive }
+                let nonblockingJobs: [Job] = try Job
+                    .filter(Job.Columns.behaviour == Job.Behaviour.recurringOnActive)
+                    .filter(Job.Columns.shouldBlock == false)
+                    .order(
+                        Job.Columns.priority.desc,
+                        Job.Columns.id
+                    )
+                    .fetchAll(db)
+                    .filter { hasCompletedInitialBecomeActive || !$0.shouldSkipLaunchBecomeActive }
+                
+                return (blockingJobs, nonblockingJobs)
             }
-            .defaulting(to: [])
-            .filter { hasCompletedInitialBecomeActive || !$0.shouldSkipLaunchBecomeActive }
+            .defaulting(to: ([], []))
         
-        // Store the current queue state locally to avoid multiple atomic retrievals
+        // Add and start any blocking jobs
+        blockingQueue.wrappedValue?.appDidBecomeActive(
+            with: jobsToRun.blocking,
+            canStart: true,
+            using: dependencies
+        )
+        
+        // Add any non-blocking jobs (we don't start these incase there are blocking "on active"
+        // jobs as well)
+        let jobsByVariant: [Job.Variant: [Job]] = jobsToRun.nonBlocking.grouped(by: \.variant)
         let jobQueues: [Job.Variant: JobQueue] = queues.wrappedValue
-        let blockingQueueIsRunning: Bool = (blockingQueue.wrappedValue?.isRunning.wrappedValue == true)
-        
-        guard !jobsToRun.isEmpty else {
-            if !blockingQueueIsRunning {
-                jobQueues.map { _, queue in queue }.asSet().forEach { $0.start(using: dependencies) }
-            }
-            return
-        }
-        
-        // Add and start any non-blocking jobs (if there are no blocking jobs)
-        //
-        // We only want to trigger the queue to start once so we need to consolidate the
-        // queues to list of jobs (as queues can handle multiple job variants), this means
-        // that 'onActive' jobs will be queued before any standard jobs
-        let jobsByVariant: [Job.Variant: [Job]] = jobsToRun.grouped(by: \.variant)
-        
+
         jobQueues
             .reduce(into: [:]) { result, variantAndQueue in
                 result[variantAndQueue.value] = (result[variantAndQueue.value] ?? [])
@@ -502,10 +511,19 @@ public final class JobRunner: JobRunnerType {
             .forEach { queue, jobs in
                 queue.appDidBecomeActive(
                     with: jobs,
-                    canStart: !blockingQueueIsRunning,
+                    canStart: false,
                     using: dependencies
                 )
             }
+        
+        // If the blocking queue is not running and has no pending  (should already be running if it has jobs), otherwise
+        // we should trigger the blockingQueue 'onQueueDrained' logic which will start the other queues
+        // and call any registered callbacks
+        
+        // Just in case the logic changes in the future, start the blocking queue if needed which will result
+        // in the blockingQueue 'onQueueDrained' logic being triggered if it's actually empty (starting the
+        // other queues and calling any registered callbacks)
+        blockingQueue.wrappedValue?.start(using: dependencies)
         
         self.hasCompletedInitialBecomeActive.mutate { $0 = true }
     }

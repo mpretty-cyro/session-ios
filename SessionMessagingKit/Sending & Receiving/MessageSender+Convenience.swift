@@ -9,19 +9,19 @@ extension MessageSender {
     
     // MARK: - Durable
     
-    public static func send(
+    @discardableResult public static func send(
         _ db: Database,
         interaction: Interaction,
         threadId: String,
         threadVariant: SessionThread.Variant,
         isSyncMessage: Bool = false,
         using dependencies: Dependencies
-    ) throws {
+    ) throws -> Job? {
         // Only 'VisibleMessage' types can be sent via this method
         guard interaction.variant == .standardOutgoing else { throw MessageSenderError.invalidMessage }
         guard let interactionId: Int64 = interaction.id else { throw StorageError.objectNotSaved }
         
-        send(
+        return send(
             db,
             message: VisibleMessage.from(db, interaction: interaction),
             threadId: threadId,
@@ -52,7 +52,7 @@ extension MessageSender {
         )
     }
     
-    public static func send(
+    @discardableResult public static func send(
         _ db: Database,
         message: Message,
         threadId: String?,
@@ -60,11 +60,11 @@ extension MessageSender {
         to destination: Message.Destination,
         isSyncMessage: Bool = false,
         using dependencies: Dependencies
-    ) {
+    ) -> Job? {
         // If it's a sync message then we need to make some slight tweaks before sending so use the proper
         // sync message sending process instead of the standard process
         guard !isSyncMessage else {
-            scheduleSyncMessageIfNeeded(
+            return scheduleSyncMessageIfNeeded(
                 db,
                 message: message,
                 destination: destination,
@@ -73,10 +73,9 @@ extension MessageSender {
                 isAlreadySyncMessage: false,
                 using: dependencies
             )
-            return
         }
         
-        dependencies.jobRunner.add(
+        return dependencies.jobRunner.add(
             db,
             job: Job(
                 variant: .messageSend,

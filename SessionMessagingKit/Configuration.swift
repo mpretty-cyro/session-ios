@@ -32,7 +32,8 @@ public enum SNMessagingKit: MigratableTarget { // Just to make the external API 
                     _012_AddFTSIfNeeded.self,
                     _013_SessionUtilChanges.self,
                     _014_GenerateInitialUserConfigDumps.self,
-                    _015_BlockCommunityMessageRequests.self
+                    _015_BlockCommunityMessageRequests.self,
+                    _016_AddDeadlockWorkAroundJob.self
                 ]
             ]
         )
@@ -55,5 +56,6 @@ public enum SNMessagingKit: MigratableTarget { // Just to make the external API 
         JobRunner.setExecutor(AttachmentDownloadJob.self, for: .attachmentDownload)
         JobRunner.setExecutor(ConfigurationSyncJob.self, for: .configurationSync)
         JobRunner.setExecutor(ConfigMessageReceiveJob.self, for: .configMessageReceive)
+        JobRunner.setExecutor(ProcessDeadlockWorkAroundJob.self, for: .processDeadlockWorkAround)
     }
 }

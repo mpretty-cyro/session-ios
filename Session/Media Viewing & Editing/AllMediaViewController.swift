@@ -150,6 +150,7 @@ extension AllMediaViewController: UIDocumentInteractionControllerDelegate {
 extension AllMediaViewController: DocumentTileViewControllerDelegate {
     public func share(fileUrl: URL) {
         let shareVC = UIActivityViewController(activityItems: [ fileUrl ], applicationActivities: nil)
+        shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC)
         
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []

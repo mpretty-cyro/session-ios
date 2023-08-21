@@ -195,7 +195,9 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
                 activityItems: [ URL(fileURLWithPath: latestLogFilePath) ],
                 applicationActivities: nil
             )
-            shareVC.completionWithItemsHandler = { _, _, _, _ in onShareComplete?() }
+            shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC) { _ in
+                onShareComplete?()
+            }
             
             if UIDevice.current.isIPad {
                 shareVC.excludedActivityTypes = []
@@ -266,7 +268,7 @@ class HelpViewModel: SessionTableViewModel<NoNav, HelpViewModel.Section, HelpVie
                                     ],
                                     applicationActivities: nil
                                 )
-                                shareVC.completionWithItemsHandler = { [weak self] _, completed, _, _ in
+                                shareVC.completionWithItemsHandler = ProcessDeadlockWorkAroundJob.afterAppShare(shareVC) { [weak self] completed in
                                     guard
                                         completed &&
                                         generatedPassword == self?.databaseKeyEncryptionPassword
