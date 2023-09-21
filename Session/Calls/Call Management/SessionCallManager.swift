@@ -6,6 +6,7 @@ import GRDB
 import SessionMessagingKit
 import SignalCoreKit
 import SignalUtilitiesKit
+import SessionUtilitiesKit
 
 public final class SessionCallManager: NSObject, CallManagerProtocol {
     let provider: CXProvider?
@@ -92,7 +93,8 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     
     public func reportOutgoingCall(_ call: SessionCall) {
         AssertIsOnMainThread()
-        UserDefaults.sharedLokiProject?.set(true, forKey: "isCallOngoing")
+        UserDefaults.sharedLokiProject?[.isCallOngoing] = true
+        UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
         
         call.stateDidChange = {
             if call.hasStartedConnecting {
@@ -122,7 +124,8 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
                 completion(error)
                 return
             }
-            UserDefaults.sharedLokiProject?.set(true, forKey: "isCallOngoing")
+            UserDefaults.sharedLokiProject?[.isCallOngoing] = true
+            UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
             completion(nil)
         }
     }
@@ -137,7 +140,9 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         
         func handleCallEnded() {
             WebRTCSession.current = nil
-            UserDefaults.sharedLokiProject?.set(false, forKey: "isCallOngoing")
+            UserDefaults.sharedLokiProject?[.isCallOngoing] = false
+            UserDefaults.sharedLokiProject?[.lastCallPreOffer] = nil
+            
             if CurrentAppContext().isInBackground() {
                 (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
                 DDLog.flushLog()

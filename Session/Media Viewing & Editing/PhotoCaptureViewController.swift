@@ -6,6 +6,7 @@ import AVFoundation
 import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
+import SessionUtilitiesKit
 
 protocol PhotoCaptureViewControllerDelegate: AnyObject {
     func photoCaptureViewController(_ photoCaptureViewController: PhotoCaptureViewController, didFinishProcessingAttachment attachment: SignalAttachment)
@@ -274,14 +275,11 @@ class PhotoCaptureViewController: OWSViewController {
 
         let transformFromOrientation: CGAffineTransform
         switch captureOrientation {
-        case .portrait:
-            transformFromOrientation = .identity
-        case .portraitUpsideDown:
-            transformFromOrientation = CGAffineTransform(rotationAngle: .pi)
-        case .landscapeLeft:
-            transformFromOrientation = CGAffineTransform(rotationAngle: .halfPi)
-        case .landscapeRight:
-            transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .halfPi)
+            case .portrait: transformFromOrientation = .identity
+            case .portraitUpsideDown: transformFromOrientation = CGAffineTransform(rotationAngle: .pi)
+            case .landscapeLeft: transformFromOrientation = CGAffineTransform(rotationAngle: .halfPi)
+            case .landscapeRight: transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .halfPi)
+            @unknown default: transformFromOrientation = .identity
         }
 
         // Don't "unrotate" the switch camera icon if the front facing camera had been selected.

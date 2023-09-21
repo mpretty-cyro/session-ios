@@ -105,7 +105,6 @@ final class QuoteView: UIView {
             availableWidth -= cancelButtonSize
         }
         
-        let availableSpace = CGSize(width: availableWidth, height: .greatestFiniteMagnitude)
         var body: String? = quotedText
         
         // Main stack view
@@ -119,8 +118,7 @@ final class QuoteView: UIView {
         // Content view
         let contentView = UIView()
         addSubview(contentView)
-        contentView.pin([ UIView.HorizontalEdge.left, UIView.VerticalEdge.top, UIView.VerticalEdge.bottom ], to: self)
-        contentView.rightAnchor.constraint(lessThanOrEqualTo: self.rightAnchor).isActive = true
+        contentView.pin(to: self)
         
         if let attachment: Attachment = attachment {
             let isAudio: Bool = MIMETypeUtil.isAudio(attachment.contentType)
@@ -156,7 +154,7 @@ final class QuoteView: UIView {
             if attachment.isVisualMedia {
                 attachment.thumbnail(
                     size: .small,
-                    success: { image, _ in
+                    success: { [imageView] image, _ in
                         guard Thread.isMainThread else {
                             DispatchQueue.main.async {
                                 imageView.image = image
@@ -234,8 +232,6 @@ final class QuoteView: UIView {
         }
         
         // Label stack view
-        let bodyLabelSize = bodyLabel.systemLayoutSizeFitting(availableSpace)
-        
         let isCurrentUser: Bool = [
             currentUserPublicKey,
             currentUserBlinded15PublicKey,
@@ -288,9 +284,8 @@ final class QuoteView: UIView {
             cancelButton.set(.height, to: cancelButtonSize)
             cancelButton.addTarget(self, action: #selector(cancel), for: UIControl.Event.touchUpInside)
             
-            addSubview(cancelButton)
+            mainStackView.addArrangedSubview(cancelButton)
             cancelButton.center(.vertical, in: self)
-            cancelButton.pin(.right, to: .right, of: self)
         }
     }
 

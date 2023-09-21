@@ -125,7 +125,8 @@ public enum LokinetRequestAPI {
                         )
                     else { return nil }
                     
-                    /// Note: The service nodes require requests to run over HTTPS
+                    /// Note: The service nodes require requests to run over HTTPS even though it's technically not needed
+                    /// due to how Lokinet works
                     return "https://\(targetAddress)/\(endpoint)"
             }
         }()

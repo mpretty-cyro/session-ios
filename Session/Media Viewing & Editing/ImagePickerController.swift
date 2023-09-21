@@ -6,6 +6,7 @@ import Photos
 import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
+import SessionUtilitiesKit
 
 protocol ImagePickerGridControllerDelegate: AnyObject {
     func imagePickerDidCompleteSelection(_ imagePicker: ImagePickerGridController)
@@ -155,6 +156,8 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
             case .cancelled, .ended, .failed:
                 collectionView.isUserInteractionEnabled = true
                 collectionView.isScrollEnabled = true
+            
+            @unknown default: break
         }
     }
 
@@ -380,6 +383,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
 
     func photoLibraryDidChange(_ photoLibrary: PhotoLibrary) {
         photoCollectionContents = photoCollection.contents()
+        collectionView?.reloadData()
     }
 
     // MARK: - PhotoCollectionPicker Presentation

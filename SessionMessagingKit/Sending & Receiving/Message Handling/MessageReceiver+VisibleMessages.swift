@@ -31,6 +31,7 @@ extension MessageReceiver {
                 db,
                 publicKey: sender,
                 name: profile.displayName,
+                blocksCommunityMessageRequests: profile.blocksCommunityMessageRequests,
                 avatarUpdate: {
                     guard
                         let profilePictureUrl: String = profile.profilePictureUrl,
@@ -73,7 +74,7 @@ extension MessageReceiver {
             
             return try? OpenGroup.fetchOne(db, id: threadId)
         }()
-        let variant: Interaction.Variant = {
+        let variant: Interaction.Variant = try {
             guard
                 let senderSessionId: SessionId = SessionId(from: sender),
                 let openGroup: OpenGroup = maybeOpenGroup
@@ -87,11 +88,9 @@ extension MessageReceiver {
             // Need to check if the blinded id matches for open groups
             switch senderSessionId.prefix {
                 case .blinded15, .blinded25:
-                    let sodium: Sodium = Sodium()
-                    
                     guard
                         let userEdKeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                        let blindedKeyPair: KeyPair = try? dependencies.crypto.generate(
+                        let blindedKeyPair: KeyPair = dependencies.crypto.generate(
                             .blindedKeyPair(
                                 serverPublicKey: openGroup.publicKey,
                                 edKeyPair: userEdKeyPair,
@@ -115,6 +114,10 @@ extension MessageReceiver {
                         .standardOutgoing :
                         .standardIncoming
                     )
+                    
+                case .group:
+                    SNLog("Ignoring message with invalid sender.")
+                    throw HTTPError.parsingFailed
             }
         }()
         

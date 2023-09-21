@@ -5,6 +5,7 @@ import Reachability
 import SessionUIKit
 import SessionSnodeKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class PathStatusView: UIView {
     enum Size {
