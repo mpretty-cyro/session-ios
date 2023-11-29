@@ -239,6 +239,11 @@ public extension SessionUtil {
                         .unsafeCopy()
                     var mergeSize: [Int] = messages.map { $0.data.count }
                     var mergedHashesPtr: UnsafeMutablePointer<config_string_list>?
+                    defer {
+                        mergeHashes.forEach { $0?.deallocate() }
+                        mergeData.forEach { $0?.deallocate() }
+                    }
+                    
                     try CExceptionHelper.performSafely {
                         mergedHashesPtr = config_merge(
                             conf,
@@ -248,8 +253,6 @@ public extension SessionUtil {
                             messages.count
                         )
                     }
-                    mergeHashes.forEach { $0?.deallocate() }
-                    mergeData.forEach { $0?.deallocate() }
                     
                     // Get the list of hashes from the config (to determine which were successful)
                     let mergedHashes: [String] = mergedHashesPtr

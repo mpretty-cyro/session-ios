@@ -394,7 +394,7 @@ public final class OpenGroupManager {
         
         // Then insert the new capabilities (both present and missing)
         capabilities.capabilities.forEach { capability in
-            try? Capability(
+            _ = try? Capability(
                 openGroupServer: server.lowercased(),
                 variant: capability,
                 isMissing: false
@@ -402,7 +402,7 @@ public final class OpenGroupManager {
             .upserted(db)
         }
         capabilities.missing?.forEach { capability in
-            try? Capability(
+            _ = try? Capability(
                 openGroupServer: server.lowercased(),
                 variant: capability,
                 isMissing: true

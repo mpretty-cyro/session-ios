@@ -129,7 +129,7 @@ public extension Crypto.Generator {
             let H_rh: Bytes = Bytes(SHA512.hash(data: secretKey).suffix(32))
             
             /// r = salt.crypto_core_ed25519_scalar_reduce(sha512_multipart(H_rh, kA, message_parts))
-            let combinedHashBytes: Bytes = SHA512.hash(data: H_rh + kA + message).bytes
+            let combinedHashBytes: [UInt8] = Array(SHA512.hash(data: H_rh + kA + message).makeIterator())
             let rPtr: UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: Crypto.scalarLength)
             
             _ = combinedHashBytes.withUnsafeBytes { (combinedHashPtr: UnsafeRawBufferPointer) -> Int32 in
@@ -148,8 +148,8 @@ public extension Crypto.Generator {
             }
             
             /// HRAM = salt.crypto_core_ed25519_scalar_reduce(sha512_multipart(sig_R, kA, message_parts))
-            let sig_RBytes: Bytes = Data(bytes: sig_RPtr, count: Crypto.noClampLength).bytes
-            let HRAMHashBytes: Bytes = SHA512.hash(data: sig_RBytes + kA + message).bytes
+            let sig_RBytes: [UInt8] = Array(Data(bytes: sig_RPtr, count: Crypto.noClampLength))
+            let HRAMHashBytes: [UInt8] = Array(SHA512.hash(data: sig_RBytes + kA + message).makeIterator())
             let HRAMPtr: UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: Crypto.scalarLength)
             
             _ = HRAMHashBytes.withUnsafeBytes { (HRAMHashPtr: UnsafeRawBufferPointer) -> Int32 in

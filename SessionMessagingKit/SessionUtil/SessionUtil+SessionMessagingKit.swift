@@ -8,26 +8,22 @@ import SessionUtilitiesKit
 
 // MARK: - SessionUtil
 
-public enum SessionUtil {
-    internal static let logLevel: config_log_level = LOG_LEVEL_INFO
-    
+public extension SessionUtil {
     // MARK: - Variables
     
     internal static func syncDedupeId(_ sessionIdHexString: String) -> String {
         return "EnqueueConfigurationSyncJob-\(sessionIdHexString)"   // stringlint:disable
-    }
-    
-    public static var libSessionVersion: String { String(cString: LIBSESSION_UTIL_VERSION_STR) }
+    }    
     
     // MARK: - Loading
     
-    public static func clearMemoryState(using dependencies: Dependencies) {
+    static func clearMemoryState(using dependencies: Dependencies) {
         dependencies.mutate(cache: .sessionUtil) { cache in
             cache.removeAll()
         }
     }
     
-    public static func loadState(_ db: Database, using dependencies: Dependencies) {
+    static func loadState(_ db: Database, using dependencies: Dependencies) {
         // Ensure we have the ed25519 key and that we haven't already loaded the state before
         // we continue
         guard
@@ -266,7 +262,7 @@ public enum SessionUtil {
     
     // MARK: - Pushes
     
-    public static func pendingChanges(
+    static func pendingChanges(
         _ db: Database,
         sessionIdHexString: String,
         using dependencies: Dependencies
@@ -311,7 +307,7 @@ public enum SessionUtil {
             }
     }
     
-    public static func markingAsPushed(
+    static func markingAsPushed(
         seqNo: Int64,
         serverHash: String,
         sentTimestamp: Int64,
@@ -342,7 +338,7 @@ public enum SessionUtil {
             }
     }
     
-    public static func configHashes(
+    static func configHashes(
         for sessionIdHexString: String,
         using dependencies: Dependencies
     ) -> [String] {
@@ -370,7 +366,7 @@ public enum SessionUtil {
     
     // MARK: - Receiving
     
-    public static func handleConfigMessages(
+    static func handleConfigMessages(
         _ db: Database,
         sessionIdHexString: String,
         messages: [ConfigMessageReceiveJob.Details.MessageInfo],
