@@ -7,7 +7,7 @@ import SessionUtilitiesKit
 
 // MARK: - Size Restrictions
 
-public extension SessionUtil {
+public extension LibSession {
     static var sizeMaxNameBytes: Int { CONTACT_MAX_NAME_LENGTH }
     static var sizeMaxNicknameBytes: Int { CONTACT_MAX_NAME_LENGTH }
     static var sizeMaxProfileUrlBytes: Int { PROFILE_PIC_MAX_URL_LENGTH }
@@ -15,7 +15,7 @@ public extension SessionUtil {
 
 // MARK: - Contacts Handling
 
-internal extension SessionUtil {
+internal extension LibSession {
     static let columnsRelatedToContacts: [ColumnExpression] = [
         Contact.Columns.isApproved,
         Contact.Columns.isBlocked,
@@ -38,7 +38,7 @@ internal extension SessionUtil {
         using dependencies: Dependencies
     ) throws {
         guard config.needsDump(using: dependencies) else { return }
-        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // The current users contact data is handled separately so exclude it if it's present (as that's
         // actually a bug)
@@ -139,11 +139,11 @@ internal extension SessionUtil {
                     .asRequest(of: PriorityVisibilityInfo.self)
                     .fetchOne(db)
                 let threadExists: Bool = (threadInfo != nil)
-                let updatedShouldBeVisible: Bool = SessionUtil.shouldBeVisible(priority: data.priority)
+                let updatedShouldBeVisible: Bool = LibSession.shouldBeVisible(priority: data.priority)
 
                 /// If we are hiding the conversation then kick the user from it if it's currently open
                 if !updatedShouldBeVisible {
-                    SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: [sessionId])
+                    LibSession.kickFromConversationUIIfNeeded(removedThreadIds: [sessionId])
                 }
                 
                 /// Create the thread if it doesn't exist, otherwise just update it's state
@@ -240,7 +240,7 @@ internal extension SessionUtil {
             .filter { !draftConversationIds.contains($0) }
         
         if !combinedIds.isEmpty {
-            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: combinedIds)
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: combinedIds)
             
             try Contact
                 .filter(ids: combinedIds)
@@ -265,7 +265,7 @@ internal extension SessionUtil {
                     using: dependencies
                 )
             
-            try SessionUtil.remove(db, volatileContactIds: combinedIds, using: dependencies)
+            try LibSession.remove(db, volatileContactIds: combinedIds, using: dependencies)
         }
     }
     
@@ -275,7 +275,7 @@ internal extension SessionUtil {
         contactData: [SyncedContactInfo],
         in config: Config?
     ) throws {
-        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // The current users contact data doesn't need to sync so exclude it, we also don't want to sync
         // blinded message requests so exclude those as well
@@ -297,8 +297,8 @@ internal extension SessionUtil {
                 guard contacts_get_or_construct(conf, &contact, &sessionId) else {
                     /// It looks like there are some situations where this object might not get created correctly (and
                     /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                    SNLog("Unable to upsert contact to SessionUtil: \(config.lastError)")
-                    throw SessionUtilError.getOrConstructFailedUnexpectedly
+                    SNLog("Unable to upsert contact to LibSession: \(config.lastError)")
+                    throw LibSessionError.getOrConstructFailedUnexpectedly
                 }
                 
                 // Assign all properties to match the updated contact (if there is one)
@@ -362,7 +362,7 @@ internal extension SessionUtil {
 
 // MARK: - Outgoing Changes
 
-internal extension SessionUtil {
+internal extension LibSession {
     static func updatingContacts<T>(
         _ db: Database,
         _ updated: [T],
@@ -382,13 +382,13 @@ internal extension SessionUtil {
         // If we only updated the current user contact then no need to continue
         guard !targetContacts.isEmpty else { return updated }
         
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .contacts,
             sessionId: userSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             // When inserting new contacts (or contacts with invalid profile data) we want
             // to add any valid profile information we have so identify if any of the updated
@@ -410,7 +410,7 @@ internal extension SessionUtil {
                 .reduce(into: [:]) { result, next in result[next.id] = next }
             
             // Upsert the updated contact data
-            try SessionUtil
+            try LibSession
                 .upsert(
                     contactData: targetContacts
                         .map { contact in
@@ -459,26 +459,26 @@ internal extension SessionUtil {
         
         // Update the user profile first (if needed)
         if let updatedUserProfile: Profile = updatedProfiles.first(where: { $0.id == userSessionId.hexString }) {
-            try SessionUtil.performAndPushChange(
+            try LibSession.performAndPushChange(
                 db,
                 for: .userProfile,
                 sessionId: userSessionId,
                 using: dependencies
             ) { config in
-                try SessionUtil.update(
+                try LibSession.update(
                     profile: updatedUserProfile,
                     in: config
                 )
             }
         }
         
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .contacts,
             sessionId: userSessionId,
             using: dependencies
         ) { config in
-            try SessionUtil
+            try LibSession
                 .upsert(
                     contactData: targetProfiles
                         .map { SyncedContactInfo(id: $0.id, profile: $0) },
@@ -525,26 +525,26 @@ internal extension SessionUtil {
         
         // Update the note to self disappearing messages config first (if needed)
         if let updatedUserDisappearingConfig: DisappearingMessagesConfiguration = targetUpdatedConfigs.first(where: { $0.id == userSessionId.hexString }) {
-            try SessionUtil.performAndPushChange(
+            try LibSession.performAndPushChange(
                 db,
                 for: .userProfile,
                 sessionId: userSessionId,
                 using: dependencies
             ) { config in
-                try SessionUtil.updateNoteToSelf(
+                try LibSession.updateNoteToSelf(
                     disappearingMessagesConfig: updatedUserDisappearingConfig,
                     in: config
                 )
             }
         }
         
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .contacts,
             sessionId: userSessionId,
             using: dependencies
         ) { config in
-            try SessionUtil
+            try LibSession
                 .upsert(
                     contactData: targetDisappearingConfigs
                         .map { SyncedContactInfo(id: $0.id, disappearingMessagesConfig: $0) },
@@ -558,25 +558,25 @@ internal extension SessionUtil {
 
 // MARK: - External Outgoing Changes
 
-public extension SessionUtil {
+public extension LibSession {
     static func hide(
         _ db: Database,
         contactIds: [String],
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .contacts,
             sessionId: getUserSessionId(db, using: dependencies),
             using: dependencies
         ) { config in
             // Mark the contacts as hidden
-            try SessionUtil.upsert(
+            try LibSession.upsert(
                 contactData: contactIds
                     .map {
                         SyncedContactInfo(
                             id: $0,
-                            priority: SessionUtil.hiddenPriority
+                            priority: LibSession.hiddenPriority
                         )
                     },
                 in: config
@@ -591,13 +591,13 @@ public extension SessionUtil {
     ) throws {
         guard !contactIds.isEmpty else { return }
         
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .contacts,
             sessionId: getUserSessionId(db, using: dependencies),
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             contactIds.forEach { sessionId in
                 var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
@@ -618,26 +618,26 @@ public extension SessionUtil {
         
         switch sessionId {
             case userSessionId.hexString:
-                try SessionUtil.performAndPushChange(
+                try LibSession.performAndPushChange(
                     db,
                     for: .userProfile,
                     sessionId: userSessionId,
                     using: dependencies
                 ) { config in
-                    try SessionUtil.updateNoteToSelf(
+                    try LibSession.updateNoteToSelf(
                         disappearingMessagesConfig: disappearingMessagesConfig,
                         in: config
                     )
                 }
                 
             default:
-                try SessionUtil.performAndPushChange(
+                try LibSession.performAndPushChange(
                     db,
                     for: .contacts,
                     sessionId: userSessionId,
                     using: dependencies
                 ) { config in
-                    try SessionUtil
+                    try LibSession
                         .upsert(
                             contactData: [
                                 SyncedContactInfo(
@@ -654,7 +654,7 @@ public extension SessionUtil {
 
 // MARK: - SyncedContactInfo
 
-extension SessionUtil {
+extension LibSession {
     struct SyncedContactInfo {
         let id: String
         let contact: Contact?
@@ -700,7 +700,7 @@ private struct ThreadCount: Codable, FetchableRecord {
 
 // MARK: - Convenience
 
-private extension SessionUtil {
+private extension LibSession {
     static func extractContacts(
         from conf: UnsafeMutablePointer<config_object>?,
         serverTimestampMs: Int64
@@ -711,7 +711,7 @@ private extension SessionUtil {
         let contactIterator: UnsafeMutablePointer<contacts_iterator> = contacts_iterator_new(conf)
         
         while !contacts_iterator_done(contactIterator, &contact) {
-            try SessionUtil.checkLoopLimitReached(&infiniteLoopGuard, for: .contacts)
+            try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .contacts)
             
             let contactId: String = String(cString: withUnsafeBytes(of: contact.session_id) { [UInt8]($0) }
                 .map { CChar($0) }
@@ -742,7 +742,7 @@ private extension SessionUtil {
                 threadId: contactId,
                 isEnabled: contact.exp_seconds > 0,
                 durationSeconds: TimeInterval(contact.exp_seconds),
-                type: DisappearingMessagesConfiguration.DisappearingMessageType(sessionUtilType: contact.exp_mode),
+                type: DisappearingMessagesConfiguration.DisappearingMessageType(libSessionType: contact.exp_mode),
                 lastChangeTimestampMs: serverTimestampMs
             )
             

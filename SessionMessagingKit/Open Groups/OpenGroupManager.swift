@@ -270,7 +270,7 @@ public final class OpenGroupManager {
                     dependencies[singleton: .storage].write { db in
                         // Add the new open group to libSession
                         if !calledFromConfigHandling {
-                            try SessionUtil.add(
+                            try LibSession.add(
                                 db,
                                 server: server,
                                 rootToken: roomToken,
@@ -375,7 +375,7 @@ public final class OpenGroupManager {
         }
         
         if !calledFromConfigHandling, let server: String = server, let roomToken: String = roomToken {
-            try? SessionUtil.remove(db, server: server, roomToken: roomToken, using: dependencies)
+            try? LibSession.remove(db, server: server, roomToken: roomToken, using: dependencies)
         }
     }
     

@@ -60,7 +60,7 @@ public extension Authentication {
         // MARK: - SignatureGenerator
         
         public func generateSignature(with verificationBytes: [UInt8], using dependencies: Dependencies) throws -> Authentication.Signature {
-            return try SessionUtil.generateSubaccountSignature(
+            return try LibSession.generateSubaccountSignature(
                 groupSessionId: groupSessionId,
                 verificationBytes: verificationBytes,
                 memberAuthData: authData,

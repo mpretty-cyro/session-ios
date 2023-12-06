@@ -8,7 +8,7 @@ import SessionUtilitiesKit
 
 public extension Profile {
     static func isTooLong(profileName: String) -> Bool {
-        return (profileName.utf8CString.count > SessionUtil.sizeMaxNameBytes)
+        return (profileName.utf8CString.count > LibSession.sizeMaxNameBytes)
     }
     
     static func updateLocal(

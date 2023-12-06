@@ -9,7 +9,7 @@ import SessionSnodeKit
 extension MessageSender {
     private typealias PreparedGroupData = (
         groupSessionId: SessionId,
-        groupState: [ConfigDump.Variant: SessionUtil.Config],
+        groupState: [ConfigDump.Variant: LibSession.Config],
         thread: SessionThread,
         group: ClosedGroup,
         members: [GroupMember],
@@ -49,7 +49,7 @@ extension MessageSender {
             .flatMap { displayPictureInfo -> AnyPublisher<PreparedGroupData, Error> in
                 dependencies[singleton: .storage].writePublisher(using: dependencies) { db -> PreparedGroupData in
                     // Create and cache the libSession entries
-                    let createdInfo: SessionUtil.CreatedGroupInfo = try SessionUtil.createGroup(
+                    let createdInfo: LibSession.CreatedGroupInfo = try LibSession.createGroup(
                         db,
                         name: name,
                         description: description,
@@ -102,7 +102,7 @@ extension MessageSender {
                     .flatMap { _ in
                         dependencies[singleton: .storage].writePublisher(using: dependencies) { db in
                             // Save the successfully created group and add to the user config
-                            try SessionUtil.saveCreatedGroup(
+                            try LibSession.saveCreatedGroup(
                                 db,
                                 group: preparedGroupData.group,
                                 groupState: preparedGroupData.groupState,
@@ -119,7 +119,7 @@ extension MessageSender {
                                 case .failure:
                                     // Remove the config and database states
                                     dependencies[singleton: .storage].writeAsync(using: dependencies) { db in
-                                        SessionUtil.removeGroupStateIfNeeded(
+                                        LibSession.removeGroupStateIfNeeded(
                                             db,
                                             groupSessionId: preparedGroupData.groupSessionId,
                                             using: dependencies
@@ -154,7 +154,7 @@ extension MessageSender {
                             .compactMap { member -> (GroupMember, GroupInviteMemberJob.Details)? in
                                 // Generate authData for the removed member
                                 guard
-                                    let memberAuthInfo: Authentication.Info = try? SessionUtil.generateAuthData(
+                                    let memberAuthInfo: Authentication.Info = try? LibSession.generateAuthData(
                                         groupSessionId: SessionId(.group, hex: thread.id),
                                         memberId: member.profileId,
                                         using: dependencies
@@ -372,7 +372,7 @@ extension MessageSender {
             let changeTimestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs(using: dependencies)
             
             /// Add the members to the `GROUP_MEMBERS` config
-            try SessionUtil.addMembers(
+            try LibSession.addMembers(
                 db,
                 groupSessionId: sessionId,
                 members: members,
@@ -390,7 +390,7 @@ extension MessageSender {
                 /// Since our state doesn't care about the `GROUP_KEYS` needed for other members triggering a `keySupplement`
                 /// change won't result in the `GROUP_KEYS` config changing or the `ConfigurationSyncJob` getting triggered
                 /// we need to push the change directly
-                let supplementData: Data = try SessionUtil.keySupplement(
+                let supplementData: Data = try LibSession.keySupplement(
                     db,
                     groupSessionId: sessionId,
                     memberIds: members.map { $0.id }.asSet(),
@@ -417,7 +417,7 @@ extension MessageSender {
                     .sinkUntilComplete()
             }
             else {
-                try SessionUtil.rekey(
+                try LibSession.rekey(
                     db,
                     groupSessionId: sessionId,
                     using: dependencies
@@ -428,12 +428,12 @@ extension MessageSender {
             let memberJobData: [(id: String, profile: Profile?, jobDetails: GroupInviteMemberJob.Details, subaccountToken: [UInt8])] = try members
                 .map { id, profile in
                     // Generate authData for the newly added member
-                    let subaccountToken: [UInt8] = try SessionUtil.generateSubaccountToken(
+                    let subaccountToken: [UInt8] = try LibSession.generateSubaccountToken(
                         groupSessionId: sessionId,
                         memberId: id,
                         using: dependencies
                     )
-                    let memberAuthInfo: Authentication.Info = try SessionUtil.generateAuthData(
+                    let memberAuthInfo: Authentication.Info = try LibSession.generateAuthData(
                         groupSessionId: sessionId,
                         memberId: id,
                         using: dependencies
@@ -539,14 +539,14 @@ extension MessageSender {
                     .fetchOne(db)
             else { throw MessageSenderError.invalidClosedGroupUpdate }
             
-            let subaccountToken: [UInt8] = try SessionUtil.generateSubaccountToken(
+            let subaccountToken: [UInt8] = try LibSession.generateSubaccountToken(
                 groupSessionId: sessionId,
                 memberId: memberId,
                 using: dependencies
             )
             let inviteDetails: GroupInviteMemberJob.Details = try GroupInviteMemberJob.Details(
                 memberSessionIdHexString: memberId,
-                authInfo: try SessionUtil.generateAuthData(
+                authInfo: try LibSession.generateAuthData(
                     groupSessionId: sessionId,
                     memberId: memberId,
                     using: dependencies
@@ -568,7 +568,7 @@ extension MessageSender {
                 .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
                 .sinkUntilComplete()
             
-            try SessionUtil.updateMemberStatus(
+            try LibSession.updateMemberStatus(
                 db,
                 groupSessionId: SessionId(.group, hex: groupSessionId),
                 memberId: memberId,
@@ -639,7 +639,7 @@ extension MessageSender {
                 else { throw MessageSenderError.invalidClosedGroupUpdate }
                 
                 /// Flag the members for removal
-                try SessionUtil.flagMembersForRemoval(
+                try LibSession.flagMembersForRemoval(
                     db,
                     groupSessionId: sessionId,
                     memberIds: memberIds,
@@ -729,7 +729,7 @@ extension MessageSender {
             // Update the libSession status for each member and schedule a job to send
             // the promotion message
             try members.forEach { memberId, _ in
-                try SessionUtil.updateMemberStatus(
+                try LibSession.updateMemberStatus(
                     db,
                     groupSessionId: groupSessionId,
                     memberId: memberId,

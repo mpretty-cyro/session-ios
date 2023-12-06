@@ -9,13 +9,13 @@ import SessionUtilitiesKit
 
 // MARK: - Group Domains
 
-public extension SessionUtil.Crypto.Domain {
-    static var kickedMessage: SessionUtil.Crypto.Domain = "SessionGroupKickedMessage"   // stringlint:disable
+public extension LibSession.Crypto.Domain {
+    static var kickedMessage: LibSession.Crypto.Domain = "SessionGroupKickedMessage"   // stringlint:disable
 }
 
 // MARK: - Convenience
 
-internal extension SessionUtil {
+internal extension LibSession {
     typealias CreatedGroupInfo = (
         groupSessionId: SessionId,
         identityKeyPair: KeyPair,
@@ -60,8 +60,8 @@ internal extension SessionUtil {
         
         // Extract the conf objects from the state to load in the initial data
         guard case .groupKeys(_, let groupInfoConf, _) = groupState[.groupKeys] else {
-            SNLog("[SessionUtil Error] Group config objects were null")
-            throw SessionUtilError.unableToCreateConfigObject
+            SNLog("[LibSession Error] Group config objects were null")
+            throw LibSessionError.unableToCreateConfigObject
         }
         
         // Set the initial values in the confs
@@ -85,7 +85,7 @@ internal extension SessionUtil {
         }
         
         // Now that everything has been populated correctly we can load the state into memory
-        dependencies.mutate(cache: .sessionUtil) { cache in
+        dependencies.mutate(cache: .libSession) { cache in
             groupState.forEach { variant, config in
                 cache.setConfig(for: variant, sessionId: groupSessionId, to: config)
             }
@@ -135,7 +135,7 @@ internal extension SessionUtil {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) {
-        dependencies.mutate(cache: .sessionUtil) { cache in
+        dependencies.mutate(cache: .libSession) { cache in
             cache.setConfig(for: .groupKeys, sessionId: groupSessionId, to: nil)
             cache.setConfig(for: .groupInfo, sessionId: groupSessionId, to: nil)
             cache.setConfig(for: .groupMembers, sessionId: groupSessionId, to: nil)
@@ -154,7 +154,7 @@ internal extension SessionUtil {
     ) throws {
         // Create and save dumps for the configs
         try groupState.forEach { variant, config in
-            try SessionUtil.createDump(
+            try LibSession.createDump(
                 config: config,
                 for: variant,
                 sessionId: SessionId(.group, hex: group.id),
@@ -164,7 +164,7 @@ internal extension SessionUtil {
         }
         
         // Add the new group to the USER_GROUPS config message
-        try SessionUtil.add(
+        try LibSession.add(
             db,
             groupSessionId: group.id,
             groupIdentityPrivateKey: group.groupIdentityPrivateKey,
@@ -345,8 +345,8 @@ internal extension SessionUtil {
             let infoConf: UnsafeMutablePointer<config_object> = groupInfoConf,
             let membersConf: UnsafeMutablePointer<config_object> = groupMembersConf
         else {
-            SNLog("[SessionUtil Error] Group config objects were null")
-            throw SessionUtilError.unableToCreateConfigObject
+            SNLog("[LibSession Error] Group config objects were null")
+            throw LibSessionError.unableToCreateConfigObject
         }
         
         // Define the config state map and load it into memory
@@ -360,7 +360,7 @@ internal extension SessionUtil {
         // load the state after populating the different configs incase invalid data
         // was provided)
         if shouldLoadState {
-            dependencies.mutate(cache: .sessionUtil) { cache in
+            dependencies.mutate(cache: .libSession) { cache in
                 groupState.forEach { variant, config in
                     cache.setConfig(for: variant, sessionId: groupSessionId, to: config)
                 }
@@ -374,11 +374,11 @@ internal extension SessionUtil {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) -> Bool {
-        return (try? dependencies[cache: .sessionUtil]
+        return (try? dependencies[cache: .libSession]
             .config(for: .groupKeys, sessionId: groupSessionId)
             .wrappedValue
             .map { config in
-                guard case .groupKeys(let conf, _, _) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
                 
                 return groups_keys_is_admin(conf)
             })
@@ -390,11 +390,11 @@ internal extension SessionUtil {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> Data {
-        return try dependencies[cache: .sessionUtil]
+        return try dependencies[cache: .libSession]
             .config(for: .groupKeys, sessionId: groupSessionId)
             .wrappedValue
             .map { config in
-                guard case .groupKeys(let conf, _, _) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
                 
                 var maybeCiphertext: UnsafeMutablePointer<UInt8>? = nil
                 var ciphertextLen: Int = 0
@@ -421,11 +421,11 @@ internal extension SessionUtil {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> (plaintext: Data, sender: String) {
-        return try dependencies[cache: .sessionUtil]
+        return try dependencies[cache: .libSession]
             .config(for: .groupKeys, sessionId: groupSessionId)
             .wrappedValue
             .map { config -> (Data, String) in
-                guard case .groupKeys(let conf, _, _) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
                 
                 var ciphertext: [UInt8] = Array(ciphertext)
                 var cSessionId: [CChar] = [CChar](repeating: 0, count: 67)
@@ -461,7 +461,7 @@ private extension Int32 {
     func orThrow(error: [CChar]) throws {
         guard self != 0 else { return }
         
-        SNLog("[SessionUtil Error] Unable to create group config objects: \(String(cString: error))")
-        throw SessionUtilError.unableToCreateConfigObject
+        SNLog("[LibSession Error] Unable to create group config objects: \(String(cString: error))")
+        throw LibSessionError.unableToCreateConfigObject
     }
 }

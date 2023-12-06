@@ -9,8 +9,8 @@ extension Message.Destination: Mocked {
     static var mock: Message.Destination = .contact(publicKey: "")
 }
 
-extension SessionMessagingKit.SessionUtil.Config: Mocked {
-    static var mock: SessionMessagingKit.SessionUtil.Config = .invalid
+extension LibSession.Config: Mocked {
+    static var mock: LibSession.Config = .invalid
 }
 
 extension ConfigDump.Variant: Mocked {

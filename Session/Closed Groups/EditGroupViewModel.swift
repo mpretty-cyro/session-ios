@@ -629,7 +629,7 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
                         let maybeErrorString: String? = {
                             guard !finalName.isEmpty else { return "EDIT_GROUP_NAME_ERROR_MISSING".localized() }
                             guard !Profile.isTooLong(profileName: finalName) else { return "EDIT_GROUP_NAME_ERROR_LONG".localized() }
-                            guard !SessionUtil.isTooLong(groupDescription: (finalDescription ?? "")) else {
+                            guard !LibSession.isTooLong(groupDescription: (finalDescription ?? "")) else {
                                 return "EDIT_GROUP_DESCRIPTION_ERROR_LONG".localized()
                             }
                             
@@ -726,7 +726,7 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
                                     let updatedMemberIds: Set<String> = currentMemberIds
                                         .inserting(contentsOf: selectedMemberInfo.map { $0.profileId }.asSet())
                                     
-                                    guard updatedMemberIds.count <= SessionUtil.sizeMaxGroupMemberCount else {
+                                    guard updatedMemberIds.count <= LibSession.sizeMaxGroupMemberCount else {
                                         throw UserListError.error(
                                             "vc_create_closed_group_too_many_group_members_error".localized()
                                         )
@@ -752,7 +752,7 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
                                     let updatedMemberIds: Set<String> = currentMemberIds
                                         .inserting(contentsOf: selectedMemberInfo.map { $0.profileId }.asSet())
                                     
-                                    guard updatedMemberIds.count <= SessionUtil.sizeMaxGroupMemberCount else {
+                                    guard updatedMemberIds.count <= LibSession.sizeMaxGroupMemberCount else {
                                         return Fail(error: .error("vc_create_closed_group_too_many_group_members_error".localized()))
                                             .eraseToAnyPublisher()
                                     }

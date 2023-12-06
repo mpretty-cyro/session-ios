@@ -187,7 +187,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
                         return "COMMUNITY_MESSAGE_REQUEST_DISABLED_EMPTY_STATE".localized()
                     
                     case (.group, _, false, _):
-                        guard SessionUtil.wasKickedFromGroup(groupSessionId: SessionId(.group, hex: threadId)) else {
+                        guard LibSession.wasKickedFromGroup(groupSessionId: SessionId(.group, hex: threadId)) else {
                             return "CONVERSATION_EMPTY_STATE_READ_ONLY".localized()
                         }
                         

@@ -111,7 +111,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                     switch processedMessage {
                         /// Custom handle config messages (as they don't get handled by the normal `MessageReceiver.handle` call
                         case .config(let publicKey, let namespace, let serverHash, let serverTimestampMs, let data):
-                            try SessionUtil.handleConfigMessages(
+                            try LibSession.handleConfigMessages(
                                 db,
                                 sessionIdHexString: publicKey,
                                 messages: [

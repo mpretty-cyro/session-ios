@@ -203,7 +203,7 @@ public class Poller: PollerType {
         }
         
         let pollerName: String = pollerName(for: publicKey)
-        let configHashes: [String] = SessionUtil.configHashes(for: publicKey, using: dependencies)
+        let configHashes: [String] = LibSession.configHashes(for: publicKey, using: dependencies)
         
         /// Fetch the messages
         ///
@@ -315,7 +315,7 @@ public class Poller: PollerType {
                             if namespace.isConfigNamespace {
                                 do {
                                     /// Process config messages all at once in case they are multi-part messages
-                                    try SessionUtil.handleConfigMessages(
+                                    try LibSession.handleConfigMessages(
                                         db,
                                         sessionIdHexString: publicKey,
                                         messages: ConfigMessageReceiveJob

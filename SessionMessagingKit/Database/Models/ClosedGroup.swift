@@ -205,7 +205,7 @@ public extension ClosedGroup {
         }
         
         /// Create the libSession state for the group
-        try SessionUtil.createGroupState(
+        try LibSession.createGroupState(
             groupSessionId: SessionId(.group, hex: group.id),
             userED25519KeyPair: userED25519KeyPair,
             groupIdentityPrivateKey: group.groupIdentityPrivateKey,
@@ -215,7 +215,7 @@ public extension ClosedGroup {
         
         /// Update the `USER_GROUPS` config
         if !calledFromConfigHandling {
-            try? SessionUtil.update(
+            try? LibSession.update(
                 db,
                 groupSessionId: group.id,
                 invited: false,
@@ -314,7 +314,7 @@ public extension ClosedGroup {
                     threadVariants
                         .filter { $0.variant == .group }
                         .forEach { threadIdVariant in
-                            SessionUtil.removeGroupStateIfNeeded(
+                            LibSession.removeGroupStateIfNeeded(
                                 db,
                                 groupSessionId: SessionId(.group, hex: threadIdVariant.id),
                                 using: dependencies
@@ -343,7 +343,7 @@ public extension ClosedGroup {
                     ClosedGroup.Columns.authData.set(to: nil)
                 )
             
-            try SessionUtil.markAsKicked(
+            try LibSession.markAsKicked(
                 db,
                 groupSessionIds: threadIds,
                 using: dependencies
@@ -409,7 +409,7 @@ public extension ClosedGroup {
         
         // Ignore if called from the config handling
         if dataToRemove.contains(.userGroup) && !calledFromConfigHandling {
-            try SessionUtil.remove(
+            try LibSession.remove(
                 db,
                 legacyGroupIds: threadVariants
                     .filter { $0.variant == .legacyGroup }
@@ -417,7 +417,7 @@ public extension ClosedGroup {
                 using: dependencies
             )
             
-            try SessionUtil.remove(
+            try LibSession.remove(
                 db,
                 groupSessionIds: threadVariants
                     .filter { $0.variant == .group }

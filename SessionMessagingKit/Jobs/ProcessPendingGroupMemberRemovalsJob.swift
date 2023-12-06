@@ -64,7 +64,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
         
         /// If there are no pending removals then we can just complete
         guard
-            let pendingRemovals: [String: Bool] = try? SessionUtil.getPendingMemberRemovals(
+            let pendingRemovals: [String: Bool] = try? LibSession.getPendingMemberRemovals(
                 groupSessionId: groupSessionId,
                 using: dependencies
             ),
@@ -90,7 +90,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                 /// this request, we don't want it to be blocking)
                 let preparedRevokeSubaccounts: HTTP.PreparedRequest<Void> = try SnodeAPI.preparedRevokeSubaccounts(
                     subaccountsToRevoke: try Array(pendingRemovals.keys).map { memberId in
-                        try SessionUtil.generateSubaccountToken(
+                        try LibSession.generateSubaccountToken(
                             groupSessionId: groupSessionId,
                             memberId: memberId,
                             using: dependencies
@@ -104,7 +104,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                 )
                 
                 /// Prepare a `GroupUpdateDeleteMessage` to be sent (instruct their clients to delete the group content)
-                let currentGen: Int = try SessionUtil.currentGeneration(
+                let currentGen: Int = try LibSession.currentGeneration(
                     groupSessionId: groupSessionId,
                     using: dependencies
                 )
@@ -167,7 +167,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                                     using: dependencies,
                                     updates: { db in
                                         /// Remove the members from the `GROUP_MEMBERS` config
-                                        try SessionUtil.removeMembers(
+                                        try LibSession.removeMembers(
                                             db,
                                             groupSessionId: groupSessionId,
                                             memberIds: Set(pendingRemovals.keys),
@@ -179,7 +179,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                                         ///
                                         /// **Note:** This **MUST** be called _after_ the members have been removed, otherwise
                                         /// the removed members may still be able to access the keys
-                                        try SessionUtil.rekey(
+                                        try LibSession.rekey(
                                             db,
                                             groupSessionId: groupSessionId,
                                             using: dependencies

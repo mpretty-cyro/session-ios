@@ -93,7 +93,7 @@ public enum GroupLeavingJob: JobExecutor {
                         )
                         
                     case (.group, .delete, _), (.group, .leave, true):
-                        try SessionUtil.deleteGroupForEveryone(
+                        try LibSession.deleteGroupForEveryone(
                             db,
                             groupSessionId: SessionId(.group, hex: threadId),
                             using: dependencies

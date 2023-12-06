@@ -8,17 +8,17 @@ import SessionUtilitiesKit
 
 // MARK: - Size Restrictions
 
-public extension SessionUtil {
+public extension LibSession {
     static var sizeMaxGroupDescriptionBytes: Int { GROUP_INFO_DESCRIPTION_MAX_LENGTH }
     
     static func isTooLong(groupDescription: String) -> Bool {
-        return (groupDescription.utf8CString.count > SessionUtil.sizeMaxGroupDescriptionBytes)
+        return (groupDescription.utf8CString.count > LibSession.sizeMaxGroupDescriptionBytes)
     }
 }
 
 // MARK: - Group Info Handling
 
-internal extension SessionUtil {
+internal extension LibSession {
     static let columnsRelatedToGroupInfo: [ColumnExpression] = [
         ClosedGroup.Columns.name,
         ClosedGroup.Columns.groupDescription,
@@ -39,7 +39,7 @@ internal extension SessionUtil {
         using dependencies: Dependencies
     ) throws {
         guard config.needsDump(using: dependencies) else { return }
-        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // If the group is destroyed then remove the group date (want to keep the group itself around because
         // the UX of conversations randomly disappearing isn't great) - no other changes matter and this
@@ -186,14 +186,14 @@ internal extension SessionUtil {
                     .fetchSet(db)
                 messageHashesToDelete.insert(contentsOf: hashesToDelete)
             }
-            
+            // TODO: Make sure to delete any known hashes from the server as well when triggering
             let deletionCount: Int = try Interaction
                 .filter(Interaction.Columns.threadId == groupSessionId.hexString)
                 .filter(Interaction.Columns.timestampMs < (TimeInterval(deleteBeforeTimestamp) * 1000))
                 .deleteAll(db)
             
             if deletionCount > 0 {
-                SNLog("[SessionUtil] Deleted \(deletionCount) message\(deletionCount == 1 ? "" : "s") from \(groupSessionId.hexString) due to 'delete_before' value.")
+                SNLog("[LibSession] Deleted \(deletionCount) message\(deletionCount == 1 ? "" : "s") from \(groupSessionId.hexString) due to 'delete_before' value.")
             }
         }
         
@@ -213,7 +213,7 @@ internal extension SessionUtil {
                     .fetchSet(db)
                 messageHashesToDelete.insert(contentsOf: hashesToDelete)
             }
-            
+            // TODO: Make sure to delete any known hashes from the server as well when triggering
             let deletionCount: Int = try Interaction
                 .filter(Interaction.Columns.threadId == groupSessionId.hexString)
                 .filter(Interaction.Columns.timestampMs < (TimeInterval(attachDeleteBeforeTimestamp) * 1000))
@@ -221,7 +221,7 @@ internal extension SessionUtil {
                 .deleteAll(db)
             
             if deletionCount > 0 {
-                SNLog("[SessionUtil] Deleted \(deletionCount) message\(deletionCount == 1 ? "" : "s") with attachments from \(groupSessionId.hexString) due to 'attach_delete_before' value.")
+                SNLog("[LibSession] Deleted \(deletionCount) message\(deletionCount == 1 ? "" : "s") with attachments from \(groupSessionId.hexString) due to 'attach_delete_before' value.")
                 
                 // Schedule a grabage collection job to clean up any now-orphaned attachment files
                 dependencies[singleton: .jobRunner].add(
@@ -263,7 +263,7 @@ internal extension SessionUtil {
 
 // MARK: - Outgoing Changes
 
-internal extension SessionUtil {
+internal extension LibSession {
     static func updatingGroupInfo<T>(
         _ db: Database,
         _ updated: [T],
@@ -271,7 +271,7 @@ internal extension SessionUtil {
     ) throws -> [T] {
         guard let updatedGroups: [ClosedGroup] = updated as? [ClosedGroup] else { throw StorageError.generic }
         
-        // Exclude legacy groups as they aren't managed via SessionUtil
+        // Exclude legacy groups as they aren't managed via LibSession
         let targetGroups: [ClosedGroup] = updatedGroups
             .filter { (try? SessionId(from: $0.id))?.prefix == .group }
         
@@ -280,13 +280,13 @@ internal extension SessionUtil {
         
         // Loop through each of the groups and update their settings
         try targetGroups.forEach { group in
-            try SessionUtil.performAndPushChange(
+            try LibSession.performAndPushChange(
                 db,
                 for: .groupInfo,
                 sessionId: SessionId(.group, hex: group.threadId),
                 using: dependencies
             ) { config in
-                guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
                 /// Update the name
                 ///
@@ -338,13 +338,13 @@ internal extension SessionUtil {
         try existingGroupIds
             .compactMap { groupId in targetUpdatedConfigs.first(where: { $0.id == groupId }).map { (groupId, $0) } }
             .forEach { groupId, updatedConfig in
-                try SessionUtil.performAndPushChange(
+                try LibSession.performAndPushChange(
                     db,
                     for: .groupInfo,
                     sessionId: SessionId(.group, hex: groupId),
                     using: dependencies
                 ) { config in
-                    guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                    guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
                     
                     groups_info_set_expiry_timer(conf, Int32(updatedConfig.durationSeconds))
                 }
@@ -356,20 +356,20 @@ internal extension SessionUtil {
 
 // MARK: - External Outgoing Changes
 
-public extension SessionUtil {
+public extension LibSession {
     static func update(
         _ db: Database,
         groupSessionId: SessionId,
         disappearingConfig: DisappearingMessagesConfiguration?,
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupInfo,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             if let config: DisappearingMessagesConfiguration = disappearingConfig {
                 groups_info_set_expiry_timer(conf, Int32(config.durationSeconds))
@@ -383,13 +383,13 @@ public extension SessionUtil {
         timestamp: TimeInterval,
         using dependencies: Dependencies = Dependencies()
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupInfo,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             // Do nothing if the timestamp isn't newer than the current value
             guard Int64(timestamp) > groups_info_get_delete_before(conf) else { return }
@@ -404,13 +404,13 @@ public extension SessionUtil {
         timestamp: TimeInterval,
         using dependencies: Dependencies = Dependencies()
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupInfo,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             // Do nothing if the timestamp isn't newer than the current value
             guard Int64(timestamp) > groups_info_get_attach_delete_before(conf) else { return }
@@ -424,13 +424,13 @@ public extension SessionUtil {
         groupSessionId: SessionId,
         using dependencies: Dependencies = Dependencies()
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupInfo,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             groups_info_destroy_group(conf)
         }

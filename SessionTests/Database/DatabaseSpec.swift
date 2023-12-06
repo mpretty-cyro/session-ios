@@ -30,7 +30,7 @@ class DatabaseSpec: QuickSpec {
                 cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
             }
         )
-        @TestState(cache: .sessionUtil, in: dependencies) var sessionUtilCache: SessionUtil.Cache! = SessionUtil.Cache()
+        @TestState(cache: .libSession, in: dependencies) var libSessionCache: LibSession.Cache! = LibSession.Cache()
         @TestState var initialResult: Result<Void, Error>! = nil
         @TestState var finalResult: Result<Void, Error>! = nil
         
@@ -259,12 +259,12 @@ private class MigrationTest {
     
     static func handleRequirements(_ db: Database, requirement: MigrationRequirement, using dependencies: Dependencies) {
         switch requirement {
-            case .sessionUtilStateLoaded:
+            case .libSessionStateLoaded:
                 guard Identity.userExists(db, using: dependencies) else { return }
                 
                 // After the migrations have run but before the migration completion we load the
-                // SessionUtil state
-                SessionUtil.loadState(db, using: dependencies)
+                // LibSession state
+                LibSession.loadState(db, using: dependencies)
         }
     }
     

@@ -7,7 +7,7 @@ import SessionUtil
 import SessionSnodeKit
 import SessionUtilitiesKit
 
-public extension SessionUtil {
+public extension LibSession {
     typealias UserConfigInitialiser = (
         UnsafeMutablePointer<UnsafeMutablePointer<config_object>?>?,    // conf
         UnsafePointer<UInt8>?,                                          // ed25519_secretkey
@@ -51,7 +51,7 @@ public extension SessionUtil {
             }
         }
         
-        var lastError: SessionUtilError? {
+        var lastError: LibSessionError? {
             let maybeErrorString: String? = {
                 switch self {
                     case .invalid: return "Invalid"
@@ -69,7 +69,7 @@ public extension SessionUtil {
             
             guard let errorString: String = maybeErrorString, !errorString.isEmpty else { return nil }
             
-            return SessionUtilError.libSessionError(errorString)
+            return LibSessionError.libSessionError(errorString)
         }
         
         // MARK: - Functions
@@ -94,12 +94,12 @@ public extension SessionUtil {
                         conf,
                         { logLevel, messagePtr, _ in
                             guard
-                                logLevel.rawValue >= SessionUtil.logLevel.rawValue,
+                                logLevel.rawValue >= LibSession.logLevel.rawValue,
                                 let messagePtr = messagePtr
                             else { return }
 
                             let message: String = String(cString: messagePtr)
-                            print("[SessionUtil] \(message)")
+                            print("[LibSession] \(message)")
                         },
                         nil
                     )
@@ -110,9 +110,9 @@ public extension SessionUtil {
             return self
         }
         
-        func push(variant: ConfigDump.Variant) throws -> SessionUtil.PushData {
+        func push(variant: ConfigDump.Variant) throws -> LibSession.PushData {
             switch self {
-                case .invalid: throw SessionUtilError.invalidConfigObject
+                case .invalid: throw LibSessionError.invalidConfigObject
                 case .object(let conf):
                     var cPushData: UnsafeMutablePointer<config_push_data>!
                     
@@ -132,7 +132,7 @@ public extension SessionUtil {
                     let seqNo: Int64 = cPushData.pointee.seqno
                     cPushData.deallocate()
                     
-                    return SessionUtil.PushData(
+                    return LibSession.PushData(
                         data: pushData,
                         seqNo: seqNo,
                         variant: variant,
@@ -144,7 +144,7 @@ public extension SessionUtil {
                     var pushResultLen: Int = 0
                     
                     guard groups_keys_pending_config(conf, &pushResult, &pushResultLen) else {
-                        return SessionUtil.PushData(
+                        return LibSession.PushData(
                             data: Data(),
                             seqNo: 0,
                             variant: variant,
@@ -152,7 +152,7 @@ public extension SessionUtil {
                         )
                     }
                     
-                    return SessionUtil.PushData(
+                    return LibSession.PushData(
                         data: Data(bytes: pushResult, count: pushResultLen),
                         seqNo: 0,
                         variant: variant,
@@ -229,7 +229,7 @@ public extension SessionUtil {
         
         func merge(_ messages: [ConfigMessageReceiveJob.Details.MessageInfo]) throws -> Int64? {
             switch self {
-                case .invalid: throw SessionUtilError.invalidConfigObject
+                case .invalid: throw LibSessionError.invalidConfigObject
                 case .object(let conf):
                     var mergeHashes: [UnsafePointer<CChar>?] = messages
                         .map { message in message.serverHash.cArray.nullTerminated() }
@@ -267,7 +267,7 @@ public extension SessionUtil {
                     mergedHashesPtr?.deallocate()
                     
                     if mergedHashes.count != messages.count {
-                        SNLog("[SessionUtil] Unable to merge \(messages[0].namespace) messages (\(mergedHashes.count)/\(messages.count))")
+                        SNLog("[LibSession] Unable to merge \(messages[0].namespace) messages (\(mergedHashes.count)/\(messages.count))")
                     }
                     
                     return messages
@@ -298,7 +298,7 @@ public extension SessionUtil {
                         .sorted()
                     
                     if successfulMergeTimestamps.count != messages.count {
-                        SNLog("[SessionUtil] Unable to merge \(SnodeAPI.Namespace.configGroupKeys) messages (\(successfulMergeTimestamps.count)/\(messages.count))")
+                        SNLog("[LibSession] Unable to merge \(SnodeAPI.Namespace.configGroupKeys) messages (\(successfulMergeTimestamps.count)/\(messages.count))")
                     }
                     
                     return successfulMergeTimestamps.last
@@ -331,7 +331,7 @@ public extension SessionUtil {
 
 // MARK: - PushData
 
-public extension SessionUtil {
+public extension LibSession {
     struct PushData {
         let data: Data
         let seqNo: Int64
@@ -342,7 +342,7 @@ public extension SessionUtil {
 
 // MARK: - Optional Convenience
 
-public extension Optional where Wrapped == SessionUtil.Config {
+public extension Optional where Wrapped == LibSession.Config {
     // MARK: - Variables
     
     var needsPush: Bool {
@@ -352,10 +352,10 @@ public extension Optional where Wrapped == SessionUtil.Config {
         }
     }
     
-    var lastError: SessionUtilError? {
+    var lastError: LibSessionError? {
         switch self {
             case .some(let config): return config.lastError
-            case .none: return SessionUtilError.invalidConfigObject
+            case .none: return LibSessionError.invalidConfigObject
         }
     }
     
@@ -392,7 +392,7 @@ public extension Optional where Wrapped == SessionUtil.Config {
 
 // MARK: - Atomic Convenience
 
-public extension Atomic where Value == Optional<SessionUtil.Config> {
+public extension Atomic where Value == Optional<LibSession.Config> {
     var needsPush: Bool { return wrappedValue.needsPush }
     
     func needsDump(using dependencies: Dependencies) -> Bool { return wrappedValue.needsDump(using: dependencies) }
@@ -401,7 +401,7 @@ public extension Atomic where Value == Optional<SessionUtil.Config> {
 // MARK: - Formatting
 
 extension String.StringInterpolation {
-    mutating func appendInterpolation(_ error: SessionUtilError?) {
+    mutating func appendInterpolation(_ error: LibSessionError?) {
         appendLiteral(error.map { "\($0)" } ?? "Unknown Error") // stringlint:disable
     }
 }

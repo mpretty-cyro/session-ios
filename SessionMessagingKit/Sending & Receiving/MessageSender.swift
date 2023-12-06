@@ -167,7 +167,7 @@ public final class MessageSender {
             switch (destination, namespace) {
                 // Updated group messages should be wrapped _before_ encrypting
                 case (.closedGroup(let groupId), .groupMessages) where (try? SessionId.Prefix(from: groupId)) == .group:
-                    return try SessionUtil
+                    return try LibSession
                         .encrypt(
                             message: try Result(
                                 MessageWrapper.wrap(

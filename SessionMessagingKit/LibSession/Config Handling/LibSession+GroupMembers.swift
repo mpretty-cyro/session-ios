@@ -8,13 +8,13 @@ import SessionUtilitiesKit
 
 // MARK: - Size Restrictions
 
-public extension SessionUtil {
+public extension LibSession {
     static var sizeMaxGroupMemberCount: Int { 100 }
 }
 
 // MARK: - Group Members Handling
 
-internal extension SessionUtil {
+internal extension LibSession {
     static let columnsRelatedToGroupMembers: [ColumnExpression] = [
         GroupMember.Columns.role,
         GroupMember.Columns.roleStatus
@@ -30,7 +30,7 @@ internal extension SessionUtil {
         using dependencies: Dependencies
     ) throws {
         guard config.needsDump(using: dependencies) else { return }
-        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // Get the two member sets
         let updatedMembers: Set<GroupMember> = try extractMembers(from: conf, groupSessionId: groupSessionId)
@@ -117,39 +117,39 @@ internal extension SessionUtil {
 
 // MARK: - Outgoing Changes
 
-internal extension SessionUtil {
+internal extension LibSession {
     static func getMembers(
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> Set<GroupMember> {
-        return try dependencies[cache: .sessionUtil]
+        return try dependencies[cache: .libSession]
             .config(for: .groupMembers, sessionId: groupSessionId)
             .wrappedValue
             .map { config in
-                guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
                 return try extractMembers(
                     from: conf,
                     groupSessionId: groupSessionId
                 )
-            } ?? { throw SessionUtilError.failedToRetrieveConfigData }()
+            } ?? { throw LibSessionError.failedToRetrieveConfigData }()
     }
     
     static func getPendingMemberRemovals(
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> [String: Bool] {
-        return try dependencies[cache: .sessionUtil]
+        return try dependencies[cache: .libSession]
             .config(for: .groupMembers, sessionId: groupSessionId)
             .wrappedValue
             .map { config in
-                guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
                 return try extractPendingRemovals(
                     from: conf,
                     groupSessionId: groupSessionId
                 )
-            } ?? { throw SessionUtilError.failedToRetrieveConfigData }()
+            } ?? { throw LibSessionError.failedToRetrieveConfigData }()
     }
     
     static func addMembers(
@@ -159,13 +159,13 @@ internal extension SessionUtil {
         allowAccessToHistoricMessages: Bool,
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupMembers,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             try members.forEach { memberId, profile in
                 var profilePic: user_profile_pic = user_profile_pic()
@@ -180,7 +180,7 @@ internal extension SessionUtil {
                     profilePic.key = picKey.toLibSession()
                 }
 
-                var error: SessionUtilError?
+                var error: LibSessionError?
                 try CExceptionHelper.performSafely {
                     var cMemberId: [CChar] = memberId.cArray
                     var member: config_group_member = config_group_member()
@@ -200,8 +200,8 @@ internal extension SessionUtil {
                     groups_members_set(conf, &member)
                 }
                 
-                if let error: SessionUtilError = error {
-                    SNLog("[SessionUtil] Failed to add member to group: \(groupSessionId)")
+                if let error: LibSessionError = error {
+                    SNLog("[LibSession] Failed to add member to group: \(groupSessionId)")
                     throw error
                 }
             }
@@ -216,13 +216,13 @@ internal extension SessionUtil {
         status: GroupMember.RoleStatus,
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupMembers,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             // Only update members if they already exist in the group
             var cMemberId: [CChar] = memberId.cArray
@@ -259,13 +259,13 @@ internal extension SessionUtil {
         removeMessages: Bool,
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupMembers,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             memberIds.forEach { memberId in
                 // Only update members if they already exist in the group
@@ -286,13 +286,13 @@ internal extension SessionUtil {
         memberIds: Set<String>,
         using dependencies: Dependencies
     ) throws {
-        try SessionUtil.performAndPushChange(
+        try LibSession.performAndPushChange(
             db,
             for: .groupMembers,
             sessionId: groupSessionId,
             using: dependencies
         ) { config in
-            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
             memberIds.forEach { memberId in
                 var cMemberId: [CChar] = memberId.cArray
@@ -308,7 +308,7 @@ internal extension SessionUtil {
     ) throws -> [T] {
         guard let updatedMembers: [GroupMember] = updated as? [GroupMember] else { throw StorageError.generic }
         
-        // Exclude legacy groups as they aren't managed via SessionUtil
+        // Exclude legacy groups as they aren't managed via LibSession
         let targetMembers: [GroupMember] = updatedMembers
             .filter { (try? SessionId(from: $0.groupId))?.prefix == .group }
         
@@ -321,13 +321,13 @@ internal extension SessionUtil {
         
         // Loop through each of the groups and update their settings
         try targetMembers.forEach { member in
-            try SessionUtil.performAndPushChange(
+            try LibSession.performAndPushChange(
                 db,
                 for: .groupMembers,
                 sessionId: groupId,
                 using: dependencies
             ) { config in
-                guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
                 // Only update members if they already exist in the group
                 var cMemberId: [CChar] = member.profileId.cArray
@@ -370,7 +370,7 @@ private struct MemberData {
 
 // MARK: - Convenience
 
-internal extension SessionUtil {
+internal extension LibSession {
     static func extractMembers(
         from conf: UnsafeMutablePointer<config_object>?,
         groupSessionId: SessionId
@@ -381,7 +381,7 @@ internal extension SessionUtil {
         let membersIterator: UnsafeMutablePointer<groups_members_iterator> = groups_members_iterator_new(conf)
         
         while !groups_members_iterator_done(membersIterator, &member) {
-            try SessionUtil.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
+            try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
             
             // Ignore members pending removal
             guard member.removed == 0 else { continue }
@@ -424,7 +424,7 @@ internal extension SessionUtil {
         let membersIterator: UnsafeMutablePointer<groups_members_iterator> = groups_members_iterator_new(conf)
         
         while !groups_members_iterator_done(membersIterator, &member) {
-            try SessionUtil.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
+            try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
             
             guard member.removed > 0 else {
                 groups_members_iterator_advance(membersIterator)
@@ -455,7 +455,7 @@ internal extension SessionUtil {
         let membersIterator: UnsafeMutablePointer<groups_members_iterator> = groups_members_iterator_new(conf)
         
         while !groups_members_iterator_done(membersIterator, &member) {
-            try SessionUtil.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
+            try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)
             
             // Ignore members pending removal
             guard member.removed == 0 else { continue }

@@ -6,9 +6,9 @@ import SessionSnodeKit
 import SessionUtil
 import SessionUtilitiesKit
 
-// MARK: - SessionUtil
+// MARK: - LibSession
 
-public extension SessionUtil {
+public extension LibSession {
     // MARK: - Variables
     
     internal static func syncDedupeId(_ sessionIdHexString: String) -> String {
@@ -18,7 +18,7 @@ public extension SessionUtil {
     // MARK: - Loading
     
     static func clearMemoryState(using dependencies: Dependencies) {
-        dependencies.mutate(cache: .sessionUtil) { cache in
+        dependencies.mutate(cache: .libSession) { cache in
             cache.removeAll()
         }
     }
@@ -28,8 +28,8 @@ public extension SessionUtil {
         // we continue
         guard
             let ed25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies),
-            dependencies[cache: .sessionUtil].isEmpty
-        else { return SNLog("[SessionUtil] Ignoring loadState due to existing state") }
+            dependencies[cache: .libSession].isEmpty
+        else { return SNLog("[LibSession] Ignoring loadState due to existing state") }
         
         // Retrieve the existing dumps from the database
         let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
@@ -50,12 +50,12 @@ public extension SessionUtil {
             .filter { group in !existingDumps.contains(where: { $0.sessionId.hexString == group.id }) }
         
         // Create the config records for each dump
-        dependencies.mutate(cache: .sessionUtil) { cache in
+        dependencies.mutate(cache: .libSession) { cache in
             existingDumps.forEach { dump in
                 cache.setConfig(
                     for: dump.variant,
                     sessionId: dump.sessionId,
-                    to: try? SessionUtil
+                    to: try? LibSession
                         .loadState(
                             for: dump.variant,
                             sessionId: dump.sessionId,
@@ -76,7 +76,7 @@ public extension SessionUtil {
                 cache.setConfig(
                     for: variant,
                     sessionId: userSessionId,
-                    to: try? SessionUtil
+                    to: try? LibSession
                         .loadState(
                             for: variant,
                             sessionId: userSessionId,
@@ -96,7 +96,7 @@ public extension SessionUtil {
         groupsWithNoDumps
             .filter { $0.invited != true }
             .forEach { group in
-                _ = try? SessionUtil.createGroupState(
+                _ = try? LibSession.createGroupState(
                     groupSessionId: SessionId(.group, hex: group.id),
                     userED25519KeyPair: ed25519KeyPair,
                     groupIdentityPrivateKey: group.groupIdentityPrivateKey,
@@ -105,7 +105,7 @@ public extension SessionUtil {
                 )
             }
         
-        SNLog("[SessionUtil] Completed loadState")
+        SNLog("[LibSession] Completed loadState")
     }
     
     private static func loadState(
@@ -114,7 +114,7 @@ public extension SessionUtil {
         userEd25519SecretKey: [UInt8],
         groupEd25519SecretKey: [UInt8]?,
         cachedData: Data?,
-        cache: SessionUtilCacheType
+        cache: LibSessionCacheType
     ) throws -> Config {
         // Setup initial variables (including getting the memory address for any cached data)
         var conf: UnsafeMutablePointer<config_object>? = nil
@@ -142,8 +142,8 @@ public extension SessionUtil {
         
         switch (variant, groupEd25519SecretKey) {
             case (.invalid, _):
-                SNLog("[SessionUtil Error] Unable to create \(variant.rawValue) config object")
-                throw SessionUtilError.unableToCreateConfigObject
+                SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object")
+                throw LibSessionError.unableToCreateConfigObject
                 
             case (.userProfile, _), (.contacts, _), (.convoInfoVolatile, _), (.userGroups, _):
                 return try (userConfigInitCalls[variant]?(
@@ -177,8 +177,8 @@ public extension SessionUtil {
                     case .object(let infoConf) = infoConfig,
                     case .object(let membersConf) = membersConfig
                 else {
-                    SNLog("[SessionUtil Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
-                    throw SessionUtilError.unableToCreateConfigObject
+                    SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
+                    throw LibSessionError.unableToCreateConfigObject
                 }
                 
                 return try groups_keys_init(
@@ -220,8 +220,8 @@ public extension SessionUtil {
                     case .object(let infoConf) = infoConfig,
                     case .object(let membersConf) = membersConfig
                 else {
-                    SNLog("[SessionUtil Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
-                    throw SessionUtilError.unableToCreateConfigObject
+                    SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
+                    throw LibSessionError.unableToCreateConfigObject
                 }
                 
                 return try groups_keys_init(
@@ -267,7 +267,7 @@ public extension SessionUtil {
         sessionIdHexString: String,
         using dependencies: Dependencies
     ) throws -> [PushData] {
-        guard Identity.userExists(db, using: dependencies) else { throw SessionUtilError.userDoesNotExist }
+        guard Identity.userExists(db, using: dependencies) else { throw LibSessionError.userDoesNotExist }
         
         // Get a list of the different config variants for the provided publicKey
         let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
@@ -289,7 +289,7 @@ public extension SessionUtil {
                 lhs.1.sendOrder < rhs.1.sendOrder
             }
             .compactMap { sessionId, variant -> PushData? in
-                try dependencies[cache: .sessionUtil]
+                try dependencies[cache: .libSession]
                     .config(for: variant, sessionId: sessionId)
                     .wrappedValue
                     .map { config -> PushData? in
@@ -300,7 +300,7 @@ public extension SessionUtil {
                             .onFailure { error in
                                 let configCountInfo: String = config.count(for: variant)
                                 
-                                SNLog("[SessionUtil] Failed to generate push data for \(variant) config data, size: \(configCountInfo), error: \(error)")
+                                SNLog("[LibSession] Failed to generate push data for \(variant) config data, size: \(configCountInfo), error: \(error)")
                             }
                             .successOrThrow()
                     }
@@ -317,7 +317,7 @@ public extension SessionUtil {
     ) -> ConfigDump? {
         let sessionId: SessionId = SessionId(hex: sessionIdHexString, dumpVariant: variant)
         
-        return dependencies[cache: .sessionUtil]
+        return dependencies[cache: .libSession]
             .config(for: variant, sessionId: sessionId)
             .mutate { config -> ConfigDump? in
                 guard config != nil else { return nil }
@@ -328,7 +328,7 @@ public extension SessionUtil {
                 // Update the result to indicate whether the config needs to be dumped
                 guard config.needsPush else { return nil }
                 
-                return try? SessionUtil.createDump(
+                return try? LibSession.createDump(
                     config: config,
                     for: variant,
                     sessionId: sessionId,
@@ -355,7 +355,7 @@ public extension SessionUtil {
             .defaulting(to: [])
             .map { variant -> [String] in
                 /// Extract all existing hashes for any dumps associated with the given `sessionIdHexString`
-                dependencies[cache: .sessionUtil]
+                dependencies[cache: .libSession]
                     .config(for: variant, sessionId: SessionId(hex: sessionIdHexString, dumpVariant: variant))
                     .wrappedValue
                     .map { $0.currentHashes() }
@@ -381,7 +381,7 @@ public extension SessionUtil {
             .sorted { lhs, rhs in lhs.key.namespace.processingOrder < rhs.key.namespace.processingOrder }
             .reduce(false) { prevNeedsPush, next -> Bool in
                 let sessionId: SessionId = SessionId(hex: sessionIdHexString, dumpVariant: next.key)
-                let needsPush: Bool = try dependencies[cache: .sessionUtil]
+                let needsPush: Bool = try dependencies[cache: .libSession]
                     .config(for: next.key, sessionId: sessionId)
                     .mutate { config in
                         do {
@@ -394,7 +394,7 @@ public extension SessionUtil {
                             // Apply the updated states to the database
                             switch next.key {
                                 case .userProfile:
-                                    try SessionUtil.handleUserProfileUpdate(
+                                    try LibSession.handleUserProfileUpdate(
                                         db,
                                         in: config,
                                         serverTimestampMs: latestServerTimestampMs,
@@ -402,7 +402,7 @@ public extension SessionUtil {
                                     )
                                     
                                 case .contacts:
-                                    try SessionUtil.handleContactsUpdate(
+                                    try LibSession.handleContactsUpdate(
                                         db,
                                         in: config,
                                         serverTimestampMs: latestServerTimestampMs,
@@ -410,14 +410,14 @@ public extension SessionUtil {
                                     )
                                     
                                 case .convoInfoVolatile:
-                                    try SessionUtil.handleConvoInfoVolatileUpdate(
+                                    try LibSession.handleConvoInfoVolatileUpdate(
                                         db,
                                         in: config,
                                         using: dependencies
                                     )
                                     
                                 case .userGroups:
-                                    try SessionUtil.handleUserGroupsUpdate(
+                                    try LibSession.handleUserGroupsUpdate(
                                         db,
                                         in: config,
                                         serverTimestampMs: latestServerTimestampMs,
@@ -425,7 +425,7 @@ public extension SessionUtil {
                                     )
                                     
                                 case .groupInfo:
-                                    try SessionUtil.handleGroupInfoUpdate(
+                                    try LibSession.handleGroupInfoUpdate(
                                         db,
                                         in: config,
                                         groupSessionId: sessionId,
@@ -434,7 +434,7 @@ public extension SessionUtil {
                                     )
                                     
                                 case .groupMembers:
-                                    try SessionUtil.handleGroupMembersUpdate(
+                                    try LibSession.handleGroupMembersUpdate(
                                         db,
                                         in: config,
                                         groupSessionId: sessionId,
@@ -443,7 +443,7 @@ public extension SessionUtil {
                                     )
                                     
                                 case .groupKeys:
-                                    try SessionUtil.handleGroupKeysUpdate(
+                                    try LibSession.handleGroupKeysUpdate(
                                         db,
                                         in: config,
                                         groupSessionId: sessionId,
@@ -469,7 +469,7 @@ public extension SessionUtil {
                                 return config.needsPush
                             }
                             
-                            try SessionUtil.createDump(
+                            try LibSession.createDump(
                                 config: config,
                                 for: next.key,
                                 sessionId: sessionId,
@@ -478,7 +478,7 @@ public extension SessionUtil {
                             )?.upsert(db)
                         }
                         catch {
-                            SNLog("[SessionUtil] Failed to process merge of \(next.key) config data")
+                            SNLog("[LibSession] Failed to process merge of \(next.key) config data")
                             throw error
                         }
                 
@@ -493,7 +493,7 @@ public extension SessionUtil {
         // push any pending updates and properly update the state)
         guard needsPush else { return }
         
-        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(sessionIdHexString)) { db in
+        db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(sessionIdHexString)) { db in
             ConfigurationSyncJob.enqueue(db, sessionIdHexString: sessionIdHexString)
         }
     }
@@ -501,12 +501,12 @@ public extension SessionUtil {
 
 // MARK: - Convenience
 
-public extension SessionUtil {
+public extension LibSession {
     static func parseCommunity(url: String) -> (room: String, server: String, publicKey: String)? {
         var cFullUrl: [CChar] = url.cArray.nullTerminated()
-        var cBaseUrl: [CChar] = [CChar](repeating: 0, count: SessionUtil.sizeMaxCommunityBaseUrlBytes)
-        var cRoom: [CChar] = [CChar](repeating: 0, count: SessionUtil.sizeMaxCommunityRoomBytes)
-        var cPubkey: [UInt8] = [UInt8](repeating: 0, count: SessionUtil.sizeCommunityPubkeyBytes)
+        var cBaseUrl: [CChar] = [CChar](repeating: 0, count: LibSession.sizeMaxCommunityBaseUrlBytes)
+        var cRoom: [CChar] = [CChar](repeating: 0, count: LibSession.sizeMaxCommunityRoomBytes)
+        var cPubkey: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeCommunityPubkeyBytes)
         
         guard
             community_parse_full_url(&cFullUrl, &cBaseUrl, &cRoom, &cPubkey) &&
@@ -543,10 +543,10 @@ private extension Optional where Wrapped == Int32 {
         _ maybeConf: UnsafeMutablePointer<config_object>?,
         variant: ConfigDump.Variant,
         error: [CChar]
-    ) throws -> SessionUtil.Config {
+    ) throws -> LibSession.Config {
         guard self == 0, let conf: UnsafeMutablePointer<config_object> = maybeConf else {
-            SNLog("[SessionUtil Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
-            throw SessionUtilError.unableToCreateConfigObject
+            SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
+            throw LibSessionError.unableToCreateConfigObject
         }
         
         switch variant {
@@ -554,7 +554,7 @@ private extension Optional where Wrapped == Int32 {
                 .userGroups, .groupInfo, .groupMembers:
                 return .object(conf)
             
-            case .groupKeys, .invalid: throw SessionUtilError.unableToCreateConfigObject
+            case .groupKeys, .invalid: throw LibSessionError.unableToCreateConfigObject
         }
     }
 }
@@ -566,15 +566,15 @@ private extension Int32 {
         members: UnsafeMutablePointer<config_object>,
         variant: ConfigDump.Variant,
         error: [CChar]
-    ) throws -> SessionUtil.Config {
+    ) throws -> LibSession.Config {
         guard self == 0, let conf: UnsafeMutablePointer<config_group_keys> = maybeConf else {
-            SNLog("[SessionUtil Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
-            throw SessionUtilError.unableToCreateConfigObject
+            SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
+            throw LibSessionError.unableToCreateConfigObject
         }
 
         switch variant {
             case .groupKeys: return .groupKeys(conf, info: info, members: members)
-            default: throw SessionUtilError.unableToCreateConfigObject
+            default: throw LibSessionError.unableToCreateConfigObject
         }
     }
 }
@@ -594,16 +594,16 @@ private extension SessionId {
     }
 }
 
-// MARK: - SessionUtil Cache
+// MARK: - LibSession Cache
 
-public extension SessionUtil {
-    class Cache: SessionUtilCacheType {
+public extension LibSession {
+    class Cache: LibSessionCacheType {
         public struct Key: Hashable {
             let variant: ConfigDump.Variant
             let sessionId: SessionId
         }
         
-        private var configStore: [SessionUtil.Cache.Key: Atomic<SessionUtil.Config?>] = [:]
+        private var configStore: [LibSession.Cache.Key: Atomic<LibSession.Config?>] = [:]
         
         public var isEmpty: Bool { configStore.isEmpty }
         
@@ -613,7 +613,7 @@ public extension SessionUtil {
         
         // MARK: - Functions
         
-        public func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: SessionUtil.Config?) {
+        public func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?) {
             configStore[Key(variant: variant, sessionId: sessionId)] = config.map { Atomic($0) }
         }
         
@@ -634,29 +634,29 @@ public extension SessionUtil {
 }
 
 public extension Cache {
-    static let sessionUtil: CacheConfig<SessionUtilCacheType, SessionUtilImmutableCacheType> = Dependencies.create(
-        identifier: "sessionUtil",
-        createInstance: { _ in SessionUtil.Cache() },
+    static let libSession: CacheConfig<LibSessionCacheType, LibSessionImmutableCacheType> = Dependencies.create(
+        identifier: "libSession",
+        createInstance: { _ in LibSession.Cache() },
         mutableInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
 
-// MARK: - SessionUtilCacheType
+// MARK: - LibSessionCacheType
 
 /// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
-public protocol SessionUtilImmutableCacheType: ImmutableCacheType {
+public protocol LibSessionImmutableCacheType: ImmutableCacheType {
     var isEmpty: Bool { get }
     var needsSync: Bool { get }
     
-    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<SessionUtil.Config?>
+    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?>
 }
 
-public protocol SessionUtilCacheType: SessionUtilImmutableCacheType, MutableCacheType {
+public protocol LibSessionCacheType: LibSessionImmutableCacheType, MutableCacheType {
     var isEmpty: Bool { get }
     var needsSync: Bool { get }
     
-    func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: SessionUtil.Config?)
-    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<SessionUtil.Config?>
+    func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?)
+    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?>
     func removeAll()
 }

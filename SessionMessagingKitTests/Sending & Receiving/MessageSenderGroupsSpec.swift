@@ -120,7 +120,7 @@ class MessageSenderGroupsSpec: QuickSpec {
         @TestState var secretKey: [UInt8]! = Array(Data(hex: TestConstants.edSecretKey))
         @TestState var groupEdPK: [UInt8]! = groupKeyPair.publicKey
         @TestState var groupEdSK: [UInt8]! = groupKeyPair.secretKey
-        @TestState var userGroupsConfig: SessionUtil.Config! = {
+        @TestState var userGroupsConfig: LibSession.Config! = {
             var userGroupsConf: UnsafeMutablePointer<config_object>!
             _ = user_groups_init(&userGroupsConf, &secretKey, nil, 0, nil)
             
@@ -144,12 +144,12 @@ class MessageSenderGroupsSpec: QuickSpec {
             
             return groupKeysConf
         }()
-        @TestState var groupInfoConfig: SessionUtil.Config! = .object(groupInfoConf)
-        @TestState var groupMembersConfig: SessionUtil.Config! = .object(groupMembersConf)
-        @TestState var groupKeysConfig: SessionUtil.Config! = {
+        @TestState var groupInfoConfig: LibSession.Config! = .object(groupInfoConf)
+        @TestState var groupMembersConfig: LibSession.Config! = .object(groupMembersConf)
+        @TestState var groupKeysConfig: LibSession.Config! = {
             return .groupKeys(groupKeysConf, info: groupInfoConf, members: groupMembersConf)
         }()
-        @TestState(cache: .sessionUtil, in: dependencies) var mockSessionUtilCache: MockSessionUtilCache! = MockSessionUtilCache(
+        @TestState(cache: .libSession, in: dependencies) var mockLibSessionCache: MockLibSessionCache! = MockLibSessionCache(
             initialSetup: { cache in
                 let userSessionId: SessionId = SessionId(.standard, hex: TestConstants.publicKey)
                 
@@ -226,15 +226,15 @@ class MessageSenderGroupsSpec: QuickSpec {
                         )
                         .sinkAndStore(in: &disposables)
                     
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) { cache in
                             cache.setConfig(for: .groupInfo, sessionId: groupId, to: .any)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) { cache in
                             cache.setConfig(for: .groupMembers, sessionId: groupId, to: .any)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) { cache in
                             cache.setConfig(for: .groupKeys, sessionId: groupId, to: .any)
                         })
@@ -397,7 +397,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                             ).upsert(db)
                             
                             let preparedRequest: HTTP.PreparedRequest<HTTP.BatchResponse> = try SnodeAPI.preparedSequence(
-                                requests: try SessionUtil
+                                requests: try LibSession
                                     .pendingChanges(db, sessionIdHexString: groupId.hexString, using: dependencies)
                                     .map { pushData -> ErasedPreparedRequest in
                                         try SnodeAPI
@@ -495,15 +495,15 @@ class MessageSenderGroupsSpec: QuickSpec {
                             .mapError { error.setting(to: $0) }
                             .sinkAndStore(in: &disposables)
                         
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .all) { cache in
                                 cache.setConfig(for: .groupInfo, sessionId: groupId, to: nil)
                             })
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .all) { cache in
                                 cache.setConfig(for: .groupMembers, sessionId: groupId, to: nil)
                             })
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .all) { cache in
                                 cache.setConfig(for: .groupKeys, sessionId: groupId, to: nil)
                             })
@@ -895,7 +895,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                         
                         expect(groups_members_size(groupMembersConf)).to(equal(1))
                         
-                        let members: Set<GroupMember>? = try? SessionUtil.extractMembers(
+                        let members: Set<GroupMember>? = try? LibSession.extractMembers(
                             from: groupMembersConf,
                             groupSessionId: groupId
                         )
@@ -910,7 +910,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                     context("and granting access to historic messages") {
                         // MARK: ---- performs a supplemental key rotation
                         it("performs a supplemental key rotation") {
-                            let initialKeyRotation: Int = try SessionUtil.currentGeneration(
+                            let initialKeyRotation: Int = try LibSession.currentGeneration(
                                 groupSessionId: groupId,
                                 using: dependencies
                             )
@@ -926,7 +926,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                             
                             // Can't actually detect a supplemental rotation directly but can check that the
                             // keys generation didn't increase
-                            let result: Int = try SessionUtil.currentGeneration(
+                            let result: Int = try LibSession.currentGeneration(
                                 groupSessionId: groupId,
                                 using: dependencies
                             )
@@ -995,7 +995,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                     context("and not granting access to historic messages") {
                         // MARK: ---- performs a full key rotation
                         it("performs a full key rotation") {
-                            let initialKeyRotation: Int = try SessionUtil.currentGeneration(
+                            let initialKeyRotation: Int = try LibSession.currentGeneration(
                                 groupSessionId: groupId,
                                 using: dependencies
                             )
@@ -1019,7 +1019,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                                 _ = groups_keys_load_message(groupKeysConf, &fakeHash3, pushResult, pushResultLen, 1234567890, groupInfoConf, groupMembersConf)
                             }
                             
-                            let result: Int = try SessionUtil.currentGeneration(
+                            let result: Int = try LibSession.currentGeneration(
                                 groupSessionId: groupId,
                                 using: dependencies
                             )

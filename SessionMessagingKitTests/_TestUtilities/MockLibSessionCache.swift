@@ -6,15 +6,15 @@ import SessionUtilitiesKit
 
 @testable import SessionMessagingKit
 
-class MockSessionUtilCache: Mock<SessionUtilCacheType>, SessionUtilCacheType {
+class MockLibSessionCache: Mock<LibSessionCacheType>, LibSessionCacheType {
     var isEmpty: Bool { return mock() }
     var needsSync: Bool { return mock() }
     
-    func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: SessionUtil.Config?) {
+    func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?) {
         mockNoReturn(args: [variant, sessionId, config])
     }
     
-    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<SessionUtil.Config?> {
+    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?> {
         return mock(args: [variant, sessionId])
     }
     

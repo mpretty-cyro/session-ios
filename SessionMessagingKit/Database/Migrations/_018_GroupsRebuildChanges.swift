@@ -13,7 +13,7 @@ enum _018_GroupsRebuildChanges: Migration {
     static let identifier: String = "GroupsRebuildChanges"
     static let needsConfigSync: Bool = false
     static let minExpectedRunDuration: TimeInterval = 0.1
-    static var requirements: [MigrationRequirement] = [.sessionUtilStateLoaded]
+    static var requirements: [MigrationRequirement] = [.libSessionStateLoaded]
     static var fetchedTables: [(FetchableRecord & TableRecord).Type] = [
         Identity.self, OpenGroup.self
     ]

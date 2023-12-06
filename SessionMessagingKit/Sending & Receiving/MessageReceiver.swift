@@ -99,7 +99,7 @@ public enum MessageReceiver {
                         
                     case .groupMessages:
                         let plaintextEnvelope: Data
-                        (plaintextEnvelope, sender) = try SessionUtil.decrypt(
+                        (plaintextEnvelope, sender) = try LibSession.decrypt(
                             ciphertext: data,
                             groupSessionId: SessionId(.group, hex: publicKey),
                             using: dependencies
@@ -252,7 +252,7 @@ public enum MessageReceiver {
         // the config then the message will be dropped)
         guard
             !Message.requiresExistingConversation(message: message, threadVariant: threadVariant) ||
-            SessionUtil.conversationInConfig(db, threadId: threadId, threadVariant: threadVariant, visibleOnly: false, using: dependencies)
+            LibSession.conversationInConfig(db, threadId: threadId, threadVariant: threadVariant, visibleOnly: false, using: dependencies)
         else { throw MessageReceiverError.requiredThreadNotInConfig }
         
         // Throw if the message is outdated and shouldn't be processed
@@ -455,7 +455,7 @@ public enum MessageReceiver {
             .updateAllAndConfig(
                 db,
                 SessionThread.Columns.shouldBeVisible.set(to: true),
-                SessionThread.Columns.pinnedPriority.set(to: SessionUtil.visiblePriority),
+                SessionThread.Columns.pinnedPriority.set(to: LibSession.visiblePriority),
                 using: dependencies
             )
     }
@@ -500,14 +500,14 @@ public enum MessageReceiver {
         
         // Determine the state of the conversation and the validity of the message
         let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let conversationVisibleInConfig: Bool = SessionUtil.conversationInConfig(
+        let conversationVisibleInConfig: Bool = LibSession.conversationInConfig(
             db,
             threadId: threadId,
             threadVariant: threadVariant,
             visibleOnly: true,
             using: dependencies
         )
-        let canPerformChange: Bool = SessionUtil.canPerformChange(
+        let canPerformChange: Bool = LibSession.canPerformChange(
             db,
             threadId: threadId,
             targetConfig: {

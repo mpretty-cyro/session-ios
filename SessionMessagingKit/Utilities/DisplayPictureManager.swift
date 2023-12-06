@@ -26,7 +26,7 @@ public struct DisplayPictureManager {
     private static let scheduleDownloadsTrigger: PassthroughSubject<(), Never> = PassthroughSubject()
     
     public static func isTooLong(profileUrl: String) -> Bool {
-        return (profileUrl.utf8CString.count > SessionUtil.sizeMaxProfileUrlBytes)
+        return (profileUrl.utf8CString.count > LibSession.sizeMaxProfileUrlBytes)
     }
     
     public static func sharedDataDisplayPictureDirPath(using dependencies: Dependencies) -> String {

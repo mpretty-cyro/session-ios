@@ -129,7 +129,7 @@ extension MessageReceiver {
             return ((try? Contact.fetchOne(db, id: sender))?.isApproved == true)
         }()
         let threadAlreadyExisted: Bool = ((try? SessionThread.exists(db, id: message.groupSessionId.hexString)) ?? false)
-        let wasKickedFromGroup: Bool = SessionUtil.wasKickedFromGroup(
+        let wasKickedFromGroup: Bool = LibSession.wasKickedFromGroup(
             groupSessionId: message.groupSessionId,
             using: dependencies
         )
@@ -178,7 +178,7 @@ extension MessageReceiver {
                 )
                 .infoString(using: dependencies),
             timestampMs: Int64(sentTimestampMs),
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: LibSession.timestampAlreadyRead(
                 threadId: message.groupSessionId.hexString,
                 threadVariant: .group,
                 timestampMs: Int64(sentTimestampMs),
@@ -240,7 +240,7 @@ extension MessageReceiver {
         
         if !calledFromConfigHandling {
             // Update libSession
-            try? SessionUtil.add(
+            try? LibSession.add(
                 db,
                 groupSessionId: groupSessionId,
                 groupIdentityPrivateKey: groupIdentityPrivateKey,
@@ -278,7 +278,7 @@ extension MessageReceiver {
         let groupSessionId: SessionId = SessionId(.group, publicKey: groupIdentityKeyPair.publicKey)
         
         // Load the admin key into libSession
-        try SessionUtil
+        try LibSession
             .loadAdminKey(
                 db,
                 groupIdentitySeed: message.groupIdentitySeed,
@@ -327,7 +327,7 @@ extension MessageReceiver {
                 // If there is no value in the database then just update libSession directly (this
                 // will trigger an updated `GROUP_MEMBERS` message if there are changes which will
                 // result in the database getting updated to the correct state)
-                try SessionUtil.updateMemberStatus(
+                try LibSession.updateMemberStatus(
                     db,
                     groupSessionId: groupSessionId,
                     memberId: userSessionId.hexString,
@@ -416,7 +416,7 @@ extension MessageReceiver {
                         using: dependencies
                     ),
                     timestampMs: Int64(sentTimestampMs),
-                    wasRead: SessionUtil.timestampAlreadyRead(
+                    wasRead: LibSession.timestampAlreadyRead(
                         threadId: groupSessionId.hexString,
                         threadVariant: .group,
                         timestampMs: Int64(sentTimestampMs),
@@ -663,7 +663,7 @@ extension MessageReceiver {
         /// messages from the swarm as well
         guard
             !messageHashesToDeleteFromServer.isEmpty,
-            SessionUtil.isAdmin(groupSessionId: groupSessionId, using: dependencies),
+            LibSession.isAdmin(groupSessionId: groupSessionId, using: dependencies),
             let authMethod: AuthenticationMethod = try? Authentication.with(
                 db,
                 sessionIdHexString: groupSessionId.hexString,
@@ -702,7 +702,7 @@ extension MessageReceiver {
         /// it was sent before the user joined the group or if the `adminSignature` isn't valid
         guard
             let (memberId, keysGen): (SessionId, Int) = try? LibSessionMessage.groupKicked(plaintext: plaintext),
-            let currentKeysGen: Int = try? SessionUtil.currentGeneration(
+            let currentKeysGen: Int = try? LibSession.currentGeneration(
                 groupSessionId: groupSessionId,
                 using: dependencies
             ),
@@ -764,7 +764,7 @@ extension MessageReceiver {
                 // don't change the database as we assume it's state is correct, just update `libSession`
                 // in case it didn't have the correct `invited` state (if this triggers a GROUP_MEMBERS
                 // update then the database will eventually get back to a valid state)
-                try SessionUtil.updateMemberStatus(
+                try LibSession.updateMemberStatus(
                     db,
                     groupSessionId: groupSessionId,
                     memberId: senderSessionId,

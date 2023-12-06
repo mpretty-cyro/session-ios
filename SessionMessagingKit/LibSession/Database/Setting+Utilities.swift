@@ -104,7 +104,7 @@ public extension Database {
         using dependencies: Dependencies
     ) throws {
         // Before we do anything custom make sure the setting should trigger a change
-        guard SessionUtil.syncedSettings.contains(key) else { return }
+        guard LibSession.syncedSettings.contains(key) else { return }
         
         defer {
             // If we changed a column that requires a config update then we may as well automatically
@@ -112,11 +112,11 @@ public extension Database {
             // per transaction - doing it more than once is pointless)
             let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
             
-            db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userSessionId.hexString)) { db in
+            db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(userSessionId.hexString)) { db in
                 ConfigurationSyncJob.enqueue(db, sessionIdHexString: userSessionId.hexString)
             }
         }
         
-        try SessionUtil.updatingSetting(db, updatedSetting, using: dependencies)
+        try LibSession.updatingSetting(db, updatedSetting, using: dependencies)
     }
 }

@@ -22,12 +22,12 @@ extension MessageReceiver {
             let userEd25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies)
         else { throw MessageReceiverError.decryptionFailed }
         
-        let supportedEncryptionDomains: [SessionUtil.Crypto.Domain] = [
+        let supportedEncryptionDomains: [LibSession.Crypto.Domain] = [
             .kickedMessage
         ]
         
         try supportedEncryptionDomains
-            .map { domain -> (domain: SessionUtil.Crypto.Domain, plaintext: Data) in
+            .map { domain -> (domain: LibSession.Crypto.Domain, plaintext: Data) in
                 (
                     domain,
                     try dependencies[singleton: .crypto].tryGenerate(
@@ -42,7 +42,7 @@ extension MessageReceiver {
             }
             .forEach { domain, plaintext in
                 switch domain {
-                    case SessionUtil.Crypto.Domain.kickedMessage:
+                    case LibSession.Crypto.Domain.kickedMessage:
                         try handleGroupDelete(
                             db,
                             groupSessionId: senderSessionId,

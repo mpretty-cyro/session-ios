@@ -74,7 +74,7 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
         let targetAssignments: [ColumnAssignment] = assignments.map { $0.assignment }
         
         // Before we do anything custom make sure the changes actually do need to be synced
-        guard SessionUtil.assignmentsRequireConfigUpdate(assignments) else {
+        guard LibSession.assignmentsRequireConfigUpdate(assignments) else {
             return try self.updateAll(db, targetAssignments)
         }
         
@@ -116,7 +116,7 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
         // Then check if any of the changes could affect the config
         guard
             !calledFromConfigHandling &&
-            SessionUtil.assignmentsRequireConfigUpdate(assignments)
+            LibSession.assignmentsRequireConfigUpdate(assignments)
         else { return updatedData }
         
         defer {
@@ -125,7 +125,7 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
             // per transaction - doing it more than once is pointless)
             let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
             
-            db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userSessionId.hexString)) { db in
+            db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(userSessionId.hexString)) { db in
                 ConfigurationSyncJob.enqueue(db, sessionIdHexString: userSessionId.hexString)
             }
         }
@@ -133,26 +133,26 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
         // Update the config dump state where needed
         switch self {
             case is QueryInterfaceRequest<Contact>:
-                return try SessionUtil.updatingContacts(db, updatedData, using: dependencies)
+                return try LibSession.updatingContacts(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<Profile>:
-                return try SessionUtil.updatingProfiles(db, updatedData, using: dependencies)
+                return try LibSession.updatingProfiles(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<SessionThread>:
-                return try SessionUtil.updatingThreads(db, updatedData, using: dependencies)
+                return try LibSession.updatingThreads(db, updatedData, using: dependencies)
             
             case is QueryInterfaceRequest<ClosedGroup>:
                 // Group data is stored both in the `USER_GROUPS` config and it's own `GROUP_INFO` config so we
                 // need to update both
-                try SessionUtil.updatingGroups(db, updatedData, using: dependencies)
-                return try SessionUtil.updatingGroupInfo(db, updatedData, using: dependencies)
+                try LibSession.updatingGroups(db, updatedData, using: dependencies)
+                return try LibSession.updatingGroupInfo(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<GroupMember>:
-                return try SessionUtil.updatingGroupMembers(db, updatedData, using: dependencies)
+                return try LibSession.updatingGroupMembers(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<DisappearingMessagesConfiguration>:
-                let oneToOneUpdates: [RowDecoder] = try SessionUtil.updatingDisappearingConfigsOneToOne(db, updatedData, using: dependencies)
-                let groupUpdates: [RowDecoder] = try SessionUtil.updatingDisappearingConfigsGroups(db, updatedData, using: dependencies)
+                let oneToOneUpdates: [RowDecoder] = try LibSession.updatingDisappearingConfigsOneToOne(db, updatedData, using: dependencies)
+                let groupUpdates: [RowDecoder] = try LibSession.updatingDisappearingConfigsGroups(db, updatedData, using: dependencies)
                 
                 return (oneToOneUpdates + groupUpdates)
                 

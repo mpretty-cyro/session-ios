@@ -102,18 +102,18 @@ public enum AppSetup {
             onProgressUpdate: migrationProgressChanged,
             onMigrationRequirement: { db, requirement in
                 switch requirement {
-                    case .sessionUtilStateLoaded:
+                    case .libSessionStateLoaded:
                         guard Identity.userExists(db, using: dependencies) else { return }
                         
                         // After the migrations have run but before the migration completion we load the
                         // SessionUtil state
-                        SessionUtil.loadState(db, using: dependencies)
+                        LibSession.loadState(db, using: dependencies)
                 }
             },
             onComplete: { result, needsConfigSync in
                 // The 'needsConfigSync' flag should be based on whether either a migration or the
                 // configs need to be sync'ed
-                migrationsCompletion(result, (needsConfigSync || dependencies[cache: .sessionUtil].needsSync))
+                migrationsCompletion(result, (needsConfigSync || dependencies[cache: .libSession].needsSync))
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }

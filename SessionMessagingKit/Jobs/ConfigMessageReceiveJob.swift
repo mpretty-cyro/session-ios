@@ -50,7 +50,7 @@ public enum ConfigMessageReceiveJob: JobExecutor {
         
         dependencies[singleton: .storage].write { db in
             do {
-                try SessionUtil.handleConfigMessages(
+                try LibSession.handleConfigMessages(
                     db,
                     sessionIdHexString: sessionIdHexString,
                     messages: details.messages,

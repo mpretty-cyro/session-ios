@@ -538,7 +538,7 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
         SNLog("[DevSettings] Reloading state for \(String(describing: updatedNetwork))")
         
         /// Reload the libSession state
-        SessionUtil.clearMemoryState(using: dependencies)
+        LibSession.clearMemoryState(using: dependencies)
         
         /// Update to the new `ServiceNetwork`
         dependencies.set(feature: .serviceNetwork, to: updatedNetwork)

@@ -1673,7 +1673,7 @@ extension ConversationVC:
                         return
                     }
                     
-                    guard let (room, server, publicKey) = SessionUtil.parseCommunity(url: url) else {
+                    guard let (room, server, publicKey) = LibSession.parseCommunity(url: url) else {
                         let errorModal: ConfirmationModal = ConfirmationModal(
                             info: ConfirmationModal.Info(
                                 title: "COMMUNITY_ERROR_GENERIC".localized(),

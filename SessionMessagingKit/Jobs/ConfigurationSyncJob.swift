@@ -55,9 +55,9 @@ public enum ConfigurationSyncJob: JobExecutor {
         // fresh install due to the migrations getting run)
         guard
             let sessionIdHexString: String = job.threadId,
-            let pendingConfigChanges: [SessionUtil.PushData] = dependencies[singleton: .storage]
+            let pendingConfigChanges: [LibSession.PushData] = dependencies[singleton: .storage]
                 .read(using: dependencies, { db in
-                    try SessionUtil.pendingChanges(db, sessionIdHexString: sessionIdHexString, using: dependencies)
+                    try LibSession.pendingChanges(db, sessionIdHexString: sessionIdHexString, using: dependencies)
                 })
         else {
             SNLog("[ConfigurationSyncJob] For \(job.threadId ?? "UnknownId") failed due to invalid data")
@@ -130,7 +130,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                 /// in the same order, this means we can just `zip` the two arrays as it will take the smaller of the two and
                 /// correctly align the response to the change
                 zip(response, pendingConfigChanges)
-                    .compactMap { (subResponse: Any, pushData: SessionUtil.PushData) -> ConfigDump? in
+                    .compactMap { (subResponse: Any, pushData: LibSession.PushData) -> ConfigDump? in
                         /// If the request wasn't successful then just ignore it (the next time we sync this config we will try
                         /// to send the changes again)
                         guard
@@ -142,7 +142,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                         
                         /// Since this change was successful we need to mark it as pushed and generate any config dumps
                         /// which need to be stored
-                        return SessionUtil.markingAsPushed(
+                        return LibSession.markingAsPushed(
                             seqNo: pushData.seqNo,
                             serverHash: sendMessageResponse.hash,
                             sentTimestamp: messageSendTimestamp,

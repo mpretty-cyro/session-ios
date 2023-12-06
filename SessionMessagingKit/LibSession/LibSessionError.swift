@@ -4,7 +4,7 @@
 
 import Foundation
 
-public enum SessionUtilError: Error, CustomStringConvertible {
+public enum LibSessionError: Error, CustomStringConvertible {
     case unableToCreateConfigObject
     case invalidConfigObject
     case userDoesNotExist

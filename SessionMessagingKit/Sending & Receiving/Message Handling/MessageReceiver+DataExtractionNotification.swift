@@ -34,7 +34,7 @@ extension MessageReceiver {
                 }
             }(),
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: LibSession.timestampAlreadyRead(
                 threadId: threadId,
                 threadVariant: threadVariant,
                 timestampMs: (timestampMs * 1000),

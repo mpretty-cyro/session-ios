@@ -9,13 +9,13 @@ import SessionUtilitiesKit
 
 // MARK: - Convenience
 
-public extension SessionUtil {
+public extension LibSession {
     enum Crypto {
         public typealias Domain = String
     }
 }
 
-internal extension SessionUtil {
+internal extension LibSession {
     /// This is a buffer period within which we will process messages which would result in a config change, any message which would normally
     /// result in a config change which was sent before `lastConfigMessage.timestamp - configChangeBufferPeriod` will not
     /// actually have it's changes applied (info messages would still be inserted though)
@@ -50,7 +50,7 @@ internal extension SessionUtil {
     static let hiddenPriority: Int32 = -1
     
     static func shouldBeVisible(priority: Int32) -> Bool {
-        return (priority >= SessionUtil.visiblePriority)
+        return (priority >= LibSession.visiblePriority)
     }
     
     static func pushChangesIfNeeded(
@@ -74,7 +74,7 @@ internal extension SessionUtil {
         let needsPush: Bool
         
         do {
-            needsPush = try dependencies[cache: .sessionUtil]
+            needsPush = try dependencies[cache: .libSession]
                 .config(for: variant, sessionId: sessionId)
                 .mutate { config in
                     // Peform the change
@@ -82,12 +82,12 @@ internal extension SessionUtil {
                     
                     // If an error occurred during the change then actually throw it to prevent
                     // any database change from completing
-                    if let lastError: SessionUtilError = config?.lastError { throw lastError }
+                    if let lastError: LibSessionError = config?.lastError { throw lastError }
 
                     // If we don't need to dump the data the we can finish early
                     guard config.needsDump(using: dependencies) else { return config.needsPush }
 
-                    try SessionUtil.createDump(
+                    try LibSession.createDump(
                         config: config,
                         for: variant,
                         sessionId: sessionId,
@@ -99,14 +99,14 @@ internal extension SessionUtil {
                 }
         }
         catch {
-            SNLog("[SessionUtil] Failed to update/dump updated \(variant) config data due to error: \(error)")
+            SNLog("[LibSession] Failed to update/dump updated \(variant) config data due to error: \(error)")
             throw error
         }
         
         // Make sure we need a push before scheduling one
         guard needsPush else { return }
         
-        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(sessionId.hexString)) { db in
+        db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(sessionId.hexString)) { db in
             ConfigurationSyncJob.enqueue(db, sessionIdHexString: sessionId.hexString)
         }
     }
@@ -131,7 +131,7 @@ internal extension SessionUtil {
             .reduce(into: [:]) { result, next in result[next.threadId] = next }
         
         // Update the unread state for the threads first (just in case that's what changed)
-        try SessionUtil.updateMarkedAsUnreadState(db, threads: updatedThreads, using: dependencies)
+        try LibSession.updateMarkedAsUnreadState(db, threads: updatedThreads, using: dependencies)
         
         // Then update the `hidden` and `priority` values
         try groupedThreads.forEach { variant, threads in
@@ -140,19 +140,19 @@ internal extension SessionUtil {
                     // If the 'Note to Self' conversation is pinned then we need to custom handle it
                     // first as it's part of the UserProfile config
                     if let noteToSelf: SessionThread = threads.first(where: { $0.id == userSessionId.hexString }) {
-                        try SessionUtil.performAndPushChange(
+                        try LibSession.performAndPushChange(
                             db,
                             for: .userProfile,
                             sessionId: userSessionId,
                             using: dependencies
                         ) { config in
-                            try SessionUtil.updateNoteToSelf(
+                            try LibSession.updateNoteToSelf(
                                 priority: {
-                                    guard noteToSelf.shouldBeVisible else { return SessionUtil.hiddenPriority }
+                                    guard noteToSelf.shouldBeVisible else { return LibSession.hiddenPriority }
                                     
                                     return noteToSelf.pinnedPriority
-                                        .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
-                                        .defaulting(to: SessionUtil.visiblePriority)
+                                        .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                        .defaulting(to: LibSession.visiblePriority)
                                 }(),
                                 in: config
                             )
@@ -164,23 +164,23 @@ internal extension SessionUtil {
                     
                     guard !remainingThreads.isEmpty else { return }
                     
-                    try SessionUtil.performAndPushChange(
+                    try LibSession.performAndPushChange(
                         db,
                         for: .contacts,
                         sessionId: userSessionId,
                         using: dependencies
                     ) { config in
-                        try SessionUtil.upsert(
+                        try LibSession.upsert(
                             contactData: remainingThreads
                                 .map { thread in
                                     SyncedContactInfo(
                                         id: thread.id,
                                         priority: {
-                                            guard thread.shouldBeVisible else { return SessionUtil.hiddenPriority }
+                                            guard thread.shouldBeVisible else { return LibSession.hiddenPriority }
                                             
                                             return thread.pinnedPriority
-                                                .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
-                                                .defaulting(to: SessionUtil.visiblePriority)
+                                                .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                                .defaulting(to: LibSession.visiblePriority)
                                         }()
                                     )
                                 },
@@ -189,21 +189,21 @@ internal extension SessionUtil {
                     }
                     
                 case .community:
-                    try SessionUtil.performAndPushChange(
+                    try LibSession.performAndPushChange(
                         db,
                         for: .userGroups,
                         sessionId: userSessionId,
                         using: dependencies
                     ) { config in
-                        try SessionUtil.upsert(
+                        try LibSession.upsert(
                             communities: threads
                                 .compactMap { thread -> CommunityInfo? in
                                     urlInfo[thread.id].map { urlInfo in
                                         CommunityInfo(
                                             urlInfo: urlInfo,
                                             priority: thread.pinnedPriority
-                                                .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
-                                                .defaulting(to: SessionUtil.visiblePriority)
+                                                .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                                .defaulting(to: LibSession.visiblePriority)
                                         )
                                     }
                                 },
@@ -212,20 +212,20 @@ internal extension SessionUtil {
                     }
                     
                 case .legacyGroup:
-                    try SessionUtil.performAndPushChange(
+                    try LibSession.performAndPushChange(
                         db,
                         for: .userGroups,
                         sessionId: userSessionId,
                         using: dependencies
                     ) { config in
-                        try SessionUtil.upsert(
+                        try LibSession.upsert(
                             legacyGroups: threads
                                 .map { thread in
                                     LegacyGroupInfo(
                                         id: thread.id,
                                         priority: thread.pinnedPriority
-                                            .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
-                                            .defaulting(to: SessionUtil.visiblePriority)
+                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                            .defaulting(to: LibSession.visiblePriority)
                                     )
                                 },
                             in: config
@@ -233,20 +233,20 @@ internal extension SessionUtil {
                     }
                 
                 case .group:
-                    try SessionUtil.performAndPushChange(
+                    try LibSession.performAndPushChange(
                         db,
                         for: .userGroups,
                         sessionId: userSessionId,
                         using: dependencies
                     ) { config in
-                        try SessionUtil.upsert(
+                        try LibSession.upsert(
                             groups: threads
                                 .map { thread in
                                     GroupInfo(
                                         groupSessionId: thread.id,
                                         priority: thread.pinnedPriority
-                                            .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
-                                            .defaulting(to: SessionUtil.visiblePriority)
+                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                            .defaulting(to: LibSession.visiblePriority)
                                     )
                                 },
                             in: config
@@ -268,10 +268,10 @@ internal extension SessionUtil {
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch key {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                return try dependencies[cache: .sessionUtil]
+                return try dependencies[cache: .libSession]
                     .config(for: .userProfile, sessionId: userSessionId)
                     .wrappedValue
-                    .map { config -> Bool in (try SessionUtil.rawBlindedMessageRequestValue(in: config) >= 0) }
+                    .map { config -> Bool in (try LibSession.rawBlindedMessageRequestValue(in: config) >= 0) }
                     .defaulting(to: false)
                 
             default: return false
@@ -291,13 +291,13 @@ internal extension SessionUtil {
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch updatedSetting.id {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                try SessionUtil.performAndPushChange(
+                try LibSession.performAndPushChange(
                     db,
                     for: .userProfile,
                     sessionId: userSessionId,
                     using: dependencies
                 ) { config in
-                    try SessionUtil.updateSettings(
+                    try LibSession.updateSettings(
                         checkForCommunityMessageRequests: updatedSetting.unsafeValue(as: Bool.self),
                         in: config
                     )
@@ -320,14 +320,14 @@ internal extension SessionUtil {
                 let navController: UINavigationController = topBannerController.children[0] as? UINavigationController
             else { return }
             
-            // Extract the ones which will respond to SessionUtil changes
-            let targetViewControllers: [any SessionUtilRespondingViewController] = navController
+            // Extract the ones which will respond to LibSession changes
+            let targetViewControllers: [any LibSessionRespondingViewController] = navController
                 .viewControllers
-                .compactMap { $0 as? SessionUtilRespondingViewController }
+                .compactMap { $0 as? LibSessionRespondingViewController }
             let presentedNavController: UINavigationController? = (navController.presentedViewController as? UINavigationController)
-            let presentedTargetViewControllers: [any SessionUtilRespondingViewController] = (presentedNavController?
+            let presentedTargetViewControllers: [any LibSessionRespondingViewController] = (presentedNavController?
                 .viewControllers
-                .compactMap { $0 as? SessionUtilRespondingViewController })
+                .compactMap { $0 as? LibSessionRespondingViewController })
                 .defaulting(to: [])
             
             // Make sure we have a conversation list and that one of the removed conversations are
@@ -356,7 +356,7 @@ internal extension SessionUtil {
                     guard
                         let targetViewController: UIViewController = navController.viewControllers
                             .last(where: { viewController in
-                                ((viewController as? SessionUtilRespondingViewController)?.isConversationList)
+                                ((viewController as? LibSessionRespondingViewController)?.isConversationList)
                                     .defaulting(to: false)
                             })
                     else { return }
@@ -376,7 +376,7 @@ internal extension SessionUtil {
                         let targetViewController: UIViewController = presentedNavController?
                             .viewControllers
                             .last(where: { viewController in
-                                ((viewController as? SessionUtilRespondingViewController)?.isConversationList)
+                                ((viewController as? LibSessionRespondingViewController)?.isConversationList)
                                     .defaulting(to: false)
                             })
                     else { return }
@@ -423,22 +423,22 @@ internal extension SessionUtil {
             .defaulting(to: 0)
         
         // Ensure the change occurred after the last config message was handled (minus the buffer period)
-        return (changeTimestampMs >= (configDumpTimestampMs - Int64(SessionUtil.configChangeBufferPeriod * 1000)))
+        return (changeTimestampMs >= (configDumpTimestampMs - Int64(LibSession.configChangeBufferPeriod * 1000)))
     }
     
     static func checkLoopLimitReached(_ loopCounter: inout Int, for variant: ConfigDump.Variant, maxLoopCount: Int = 50000) throws {
         loopCounter += 1
         
         guard loopCounter < maxLoopCount else {
-            SNLog("[SessionUtil] Got stuck in infinite loop processing '\(variant.description)' data")
-            throw SessionUtilError.processingLoopLimitReached
+            SNLog("[LibSession] Got stuck in infinite loop processing '\(variant.description)' data")
+            throw LibSessionError.processingLoopLimitReached
         }
     }
 }
 
 // MARK: - External Outgoing Changes
 
-public extension SessionUtil {
+public extension LibSession {
     static func conversationInConfig(
         _ db: Database? = nil,
         threadId: String,
@@ -454,7 +454,7 @@ public extension SessionUtil {
             }
         }()
         
-        return dependencies[cache: .sessionUtil]
+        return dependencies[cache: .libSession]
             .config(for: configVariant, sessionId: userSessionId)
             .wrappedValue
             .map { config in
@@ -468,7 +468,7 @@ public extension SessionUtil {
                         guard threadId != userSessionId.hexString else {
                             return (
                                 !visibleOnly ||
-                                SessionUtil.shouldBeVisible(priority: user_profile_get_nts_priority(conf))
+                                LibSession.shouldBeVisible(priority: user_profile_get_nts_priority(conf))
                             )
                         }
                         
@@ -479,7 +479,7 @@ public extension SessionUtil {
                         /// If the user opens a conversation with an existing contact but doesn't send them a message
                         /// then the one-to-one conversation should remain hidden so we want to delete the `SessionThread`
                         /// when leaving the conversation
-                        return (!visibleOnly || SessionUtil.shouldBeVisible(priority: contact.priority))
+                        return (!visibleOnly || LibSession.shouldBeVisible(priority: contact.priority))
                         
                     case .community:
                         let maybeUrlInfo: OpenGroupUrlInfo? = dependencies[singleton: .storage]
@@ -519,7 +519,7 @@ public extension SessionUtil {
 
 // MARK: - ColumnKey
 
-internal extension SessionUtil {
+internal extension LibSession {
     struct ColumnKey: Equatable, Hashable {
         let sourceType: Any.Type
         let columnName: String
@@ -545,7 +545,7 @@ internal extension SessionUtil {
 
 // MARK: - PriorityVisibilityInfo
 
-extension SessionUtil {
+extension LibSession {
     struct PriorityVisibilityInfo: Codable, FetchableRecord, Identifiable {
         let id: String
         let variant: SessionThread.Variant
@@ -554,16 +554,16 @@ extension SessionUtil {
     }
 }
 
-// MARK: - SessionUtilRespondingViewController
+// MARK: - LibSessionRespondingViewController
 
-public protocol SessionUtilRespondingViewController {
+public protocol LibSessionRespondingViewController {
     var isConversationList: Bool { get }
     
     func isConversation(in threadIds: [String]) -> Bool
     func forceRefreshIfNeeded()
 }
 
-public extension SessionUtilRespondingViewController {
+public extension LibSessionRespondingViewController {
     var isConversationList: Bool { false }
     
     func isConversation(in threadIds: [String]) -> Bool { return false }

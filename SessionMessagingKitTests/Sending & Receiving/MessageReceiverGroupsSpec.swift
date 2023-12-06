@@ -116,13 +116,13 @@ class MessageReceiverGroupsSpec: QuickSpec {
         @TestState var secretKey: [UInt8]! = Array(Data(hex: TestConstants.edSecretKey))
         @TestState var groupEdPK: [UInt8]! = groupKeyPair.publicKey
         @TestState var groupEdSK: [UInt8]! = groupKeyPair.secretKey
-        @TestState var userGroupsConfig: SessionUtil.Config! = {
+        @TestState var userGroupsConfig: LibSession.Config! = {
             var conf: UnsafeMutablePointer<config_object>!
             _ = user_groups_init(&conf, &secretKey, nil, 0, nil)
             
             return .object(conf)
         }()
-        @TestState var convoInfoVolatileConfig: SessionUtil.Config! = {
+        @TestState var convoInfoVolatileConfig: LibSession.Config! = {
             var conf: UnsafeMutablePointer<config_object>!
             _ = convo_info_volatile_init(&conf, &secretKey, nil, 0, nil)
             
@@ -146,14 +146,14 @@ class MessageReceiverGroupsSpec: QuickSpec {
             
             return conf
         }()
-        @TestState var groupInfoConfig: SessionUtil.Config! = .object(groupInfoConf)
-        @TestState var groupMembersConfig: SessionUtil.Config! = .object(groupMembersConf)
-        @TestState var groupKeysConfig: SessionUtil.Config! = .groupKeys(
+        @TestState var groupInfoConfig: LibSession.Config! = .object(groupInfoConf)
+        @TestState var groupMembersConfig: LibSession.Config! = .object(groupMembersConf)
+        @TestState var groupKeysConfig: LibSession.Config! = .groupKeys(
             groupKeysConf,
             info: groupInfoConf,
             members: groupMembersConf
         )
-        @TestState(cache: .sessionUtil, in: dependencies) var mockSessionUtilCache: MockSessionUtilCache! = MockSessionUtilCache(
+        @TestState(cache: .libSession, in: dependencies) var mockLibSessionCache: MockLibSessionCache! = MockLibSessionCache(
             initialSetup: { cache in
                 let userSessionId: SessionId = SessionId(.standard, hex: TestConstants.publicKey)
                 
@@ -625,15 +625,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
                                 $0.setConfig(for: .groupInfo, sessionId: groupId, to: .any)
                             })
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
                                 $0.setConfig(for: .groupMembers, sessionId: groupId, to: .any)
                             })
-                        expect(mockSessionUtilCache)
+                        expect(mockLibSessionCache)
                             .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
                                 $0.setConfig(for: .groupKeys, sessionId: groupId, to: .any)
                             })
@@ -906,7 +906,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(SessionUtil.isAdmin(groupSessionId: groupId, using: dependencies))
+                    expect(LibSession.isAdmin(groupSessionId: groupId, using: dependencies))
                         .to(beTrue())
                 }
                 
@@ -2884,15 +2884,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupKeys, sessionId: groupId, to: nil)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupInfo, sessionId: groupId, to: nil)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupMembers, sessionId: groupId, to: nil)
                         })
@@ -2909,15 +2909,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupKeys, sessionId: groupId, to: nil)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupInfo, sessionId: groupId, to: nil)
                         })
-                    expect(mockSessionUtilCache)
+                    expect(mockLibSessionCache)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
                             $0.setConfig(for: .groupMembers, sessionId: groupId, to: nil)
                         })
@@ -3329,7 +3329,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
 
 // MARK: - Convenience
 
-private extension SessionUtil.Config {
+private extension LibSession.Config {
     var conf: UnsafeMutablePointer<config_object>? {
         switch self {
             case .object(let conf): return conf
