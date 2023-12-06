@@ -2,7 +2,6 @@
 
 import Foundation
 import Combine
-import Sodium
 import GRDB
 import SessionUtilitiesKit
 import SessionMessagingKit
@@ -116,7 +115,6 @@ enum Onboarding {
         }
         
         func preregister(
-            with seed: Data,
             ed25519KeyPair: KeyPair,
             x25519KeyPair: KeyPair,
             using dependencies: Dependencies = Dependencies()
@@ -130,7 +128,6 @@ enum Onboarding {
             dependencies[singleton: .storage].write { db in
                 try Identity.store(
                     db,
-                    seed: seed,
                     ed25519KeyPair: ed25519KeyPair,
                     x25519KeyPair: x25519KeyPair
                 )

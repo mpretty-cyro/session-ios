@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import Sodium
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
@@ -149,7 +148,7 @@ final class RegisterVC : BaseVC {
         topSpacer.heightAnchor.constraint(equalTo: bottomSpacer.heightAnchor, multiplier: 1).isActive = true
         
         // Peform initial seed update
-        updateSeed()
+        try? updateSeed()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -168,8 +167,8 @@ final class RegisterVC : BaseVC {
     
     // MARK: Updating
     
-    private func updateSeed(using dependencies: Dependencies = Dependencies()) {
-        seed = try! dependencies[singleton: .crypto].tryGenerate(.randomBytes(numberBytes: 16))
+    private func updateSeed(using dependencies: Dependencies = Dependencies()) throws {
+        seed = try dependencies[singleton: .crypto].tryGenerate(.randomBytes(16))
     }
     
     private func updateKeyPair() {
@@ -211,7 +210,6 @@ final class RegisterVC : BaseVC {
     @objc private func register() {
         Onboarding.Flow.register
             .preregister(
-                with: seed,
                 ed25519KeyPair: ed25519KeyPair,
                 x25519KeyPair: x25519KeyPair
             )

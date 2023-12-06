@@ -427,7 +427,7 @@ open class Storage {
                 case (_, errSecItemNotFound):
                     // No keySpec was found so we need to generate a new one
                     do {
-                        var keySpec: Data = try dependencies[singleton: .crypto].tryGenerate(.randomBytes(numberBytes: kSQLCipherKeySpecLength))
+                        var keySpec: Data = try dependencies[singleton: .crypto].tryGenerate(.randomBytes(kSQLCipherKeySpecLength))
                         defer { keySpec.resetBytes(in: 0..<keySpec.count) } // Reset content immediately after use
                         
                         try dependencies[singleton: .keychain].set(data: keySpec, service: .storage, key: .dbCipherKeySpec)

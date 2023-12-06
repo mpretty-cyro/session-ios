@@ -5,8 +5,12 @@ import SessionUtil
 
 @testable import SessionMessagingKit
 
-extension SessionUtil.Config: Mocked {
-    static var mock: SessionUtil.Config = .invalid
+extension Message.Destination: Mocked {
+    static var mock: Message.Destination = .contact(publicKey: "")
+}
+
+extension SessionMessagingKit.SessionUtil.Config: Mocked {
+    static var mock: SessionMessagingKit.SessionUtil.Config = .invalid
 }
 
 extension ConfigDump.Variant: Mocked {

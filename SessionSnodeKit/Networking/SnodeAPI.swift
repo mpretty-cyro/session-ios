@@ -4,7 +4,6 @@
 
 import Foundation
 import Combine
-import Sodium
 import GRDB
 import SessionUtilitiesKit
 
@@ -482,21 +481,17 @@ public final class SnodeAPI {
         for onsName: String,
         using dependencies: Dependencies = Dependencies()
     ) -> AnyPublisher<String, Error> {
-        let validationCount = 3
-        
-        // The name must be lowercased
-        let onsName = onsName.lowercased()
-        
-        // Hash the ONS name using BLAKE2b
-        let nameAsData = [UInt8](onsName.data(using: String.Encoding.utf8)!)
-        
-        guard let nameHash = dependencies[singleton: .crypto].generate(.hash(message: nameAsData)) else {
+        // Hash the ONS name (in lowercase) using BLAKE2b
+        guard
+            let nameData: Data = onsName.lowercased().data(using: .utf8),
+            let nameHash: [UInt8] = dependencies[singleton: .crypto].generate(.hash(message: Array(nameData)))
+        else {
             return Fail(error: SnodeAPIError.hashingFailed)
                 .eraseToAnyPublisher()
         }
         
         // Ask 3 different snodes for the Session ID associated with the given name hash
-        let base64EncodedNameHash = nameHash.toBase64()
+        let validationCount = 3
         
         return Publishers
             .MergeMany(
@@ -513,7 +508,7 @@ public final class SnodeAPI {
                                                 endpoint: .daemonOnsResolve,
                                                 body: ONSResolveRequest(
                                                     type: 0, // type 0 means Session
-                                                    base64EncodedNameHash: base64EncodedNameHash
+                                                    base64EncodedNameHash: Data(nameHash).base64EncodedString()
                                                 )
                                             )
                                         ),
@@ -523,10 +518,8 @@ public final class SnodeAPI {
                                     )
                                     .decoded(as: ONSResolveResponse.self)
                                     .tryMap { _, response -> String in
-                                        try response.sessionId(
-                                            nameBytes: nameAsData,
-                                            nameHashBytes: nameHash,
-                                            using: dependencies
+                                        try dependencies[singleton: .crypto].tryGenerate(
+                                            .sessionId(name: onsName, response: response)
                                         )
                                     }
                                     .retry(4)

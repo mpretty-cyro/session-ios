@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
@@ -1888,8 +1887,8 @@ class OpenGroupManagerSpec: QuickSpec {
                     mockCrypto
                         .when {
                             $0.generate(
-                                .decryptedBytesAeadXChaCha20(
-                                    authenticatedCipherText: .any,
+                                .plaintextWithXChaCha20(
+                                    ciphertext: .any,
                                     secretKey: .any,
                                     nonce: .any
                                 )

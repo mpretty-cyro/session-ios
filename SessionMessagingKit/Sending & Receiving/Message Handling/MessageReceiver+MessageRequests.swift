@@ -86,8 +86,7 @@ extension MessageReceiver {
                     .sessionId(
                         senderId,
                         matchesBlindedId: blindedIdLookup.blindedId,
-                        serverPublicKey: blindedIdLookup.openGroupPublicKey,
-                        using: dependencies
+                        serverPublicKey: blindedIdLookup.openGroupPublicKey
                     )
                 )
             else { return }

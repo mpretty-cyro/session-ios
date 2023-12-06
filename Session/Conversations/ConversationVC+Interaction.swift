@@ -7,7 +7,6 @@ import Combine
 import CoreServices
 import Photos
 import PhotosUI
-import Sodium
 import GRDB
 import SessionUIKit
 import SessionMessagingKit

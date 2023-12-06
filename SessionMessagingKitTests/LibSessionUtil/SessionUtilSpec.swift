@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 
@@ -43,7 +42,7 @@ class SessionUtilSpec: QuickSpec {
         @TestState(singleton: .crypto, in: dependencies) var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
                 crypto
-                    .when { $0.generate(.ed25519KeyPair(seed: .any, using: .any)) }
+                    .when { $0.generate(.ed25519KeyPair(seed: .any)) }
                     .thenReturn(
                         KeyPair(
                             publicKey: Data.data(
@@ -56,7 +55,7 @@ class SessionUtilSpec: QuickSpec {
                         )
                     )
                 crypto
-                    .when { try $0.tryGenerate(.signature(message: .any, secretKey: .any)) }
+                    .when { try $0.tryGenerate(.signature(message: .any, ed25519SecretKey: .any)) }
                     .thenReturn(
                         Authentication.Signature.standard(signature: Array("TestSignature".data(using: .utf8)!))
                     )

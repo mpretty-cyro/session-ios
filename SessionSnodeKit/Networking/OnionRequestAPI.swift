@@ -654,8 +654,7 @@ public enum OnionRequestAPI {
                 
                 guard
                     let base64EncodedIVAndCiphertext = json["result"] as? String,
-                    let ivAndCiphertext = Data(base64Encoded: base64EncodedIVAndCiphertext),
-                    ivAndCiphertext.count >= dependencies[singleton: .crypto].size(.onionRequestIVSize)
+                    let ivAndCiphertext = Data(base64Encoded: base64EncodedIVAndCiphertext)
                 else {
                     return Fail(error: HTTPError.invalidJSON)
                         .eraseToAnyPublisher()
@@ -743,11 +742,6 @@ public enum OnionRequestAPI {
                 
             // V4 Onion Requests have a very different structure for responses
             case .v4:
-                guard responseData.count >= dependencies[singleton: .crypto].size(.onionRequestIVSize) else {
-                    return Fail(error: HTTPError.invalidResponse)
-                        .eraseToAnyPublisher()
-                }
-                
                 do {
                     let data: Data = try dependencies[singleton: .crypto].tryGenerate(
                         .onionRequestResponse(

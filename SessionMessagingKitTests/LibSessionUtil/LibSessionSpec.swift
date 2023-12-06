@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 
@@ -14,13 +13,10 @@ import Nimble
 class LibSessionSpec: QuickSpec {
     static let maxMessageSizeBytes: Int = 76800  // Storage server's limit, should match `config.hpp` in libSession
     
-    // FIXME: Would be good to move the identity generation into the libSession-util instead of using Sodium separately
     static let userSeed: Data = Data(hex: "0123456789abcdef0123456789abcdef")
-    static let seed: Data = Data(
-        hex: "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210"
-    )
+    static let seed: Data = Data(hex: "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210")
     static let identity: (ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) = try! Identity.generate(from: userSeed)
-    static let keyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: seed))!
+    static let keyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: Array(seed)))!
     static let userEdSK: [UInt8] = identity.ed25519KeyPair.secretKey
     static let edPK: [UInt8] = keyPair.publicKey
     static let edSK: [UInt8] = keyPair.secretKey
@@ -1366,10 +1362,9 @@ fileprivate extension LibSessionSpec {
                     "052222222222222222222222222222222222222222222222222222222222222222": true
                 ]))
                 
-                // FIXME: Would be good to move these into the libSession-util instead of using Sodium separately
                 let groupSeed: Data = Data(hex: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
-                let groupEd25519KeyPair = Sodium().sign.keyPair(seed: groupSeed.bytes)!
-                let groupX25519PublicKey = Sodium().sign.toX25519(ed25519PublicKey: groupEd25519KeyPair.publicKey)!
+                let groupEd25519KeyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: Array(groupSeed)))!
+                let groupX25519PublicKey: [UInt8] = Crypto().generate(.x25519(ed25519Pubkey: groupEd25519KeyPair.publicKey))!
                 
                 // Note: this isn't exactly what Session actually does here for legacy closed
                 // groups (rather it uses X25519 keys) but for this test the distinction doesn't matter.
@@ -2753,23 +2748,14 @@ fileprivate extension LibSessionSpec {
             
             // MARK: -- generates config correctly
             it("generates config correctly") {
-                let userSeed: Data = Data(hex: "0123456789abcdef0123456789abcdef")
-                let seed: Data = Data(
-                    hex: "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210"
-                )
-                
-                // FIXME: Would be good to move these into the libSession-util instead of using Sodium separately
-                let identity = try! Identity.generate(from: userSeed)
-                let keyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: seed))!
-                let userEdSK: [UInt8] = identity.ed25519KeyPair.secretKey
-                var edPK: [UInt8] = keyPair.publicKey
-                var edSK: [UInt8] = keyPair.secretKey
+                var edPK: [UInt8] = LibSessionSpec.keyPair.publicKey
+                var edSK: [UInt8] = LibSessionSpec.keyPair.secretKey
                 
                 expect(userEdSK.toHexString().suffix(64))
                     .to(equal("4cb76fdc6d32278e3f83dbf608360ecc6b65727934b85d2fb86862ff98c46ab7"))
                 expect(edPK.toHexString())
                     .to(equal("cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"))
-                expect(String(Data(edSK.prefix(32)).toHexString())).to(equal(seed.toHexString()))
+                expect(String(Data(edSK.prefix(32)).toHexString())).to(equal(LibSessionSpec.seed.toHexString()))
                 
                 // Initialize a brand new, empty config because we have no dump data to deal with.
                 var error: [CChar] = [CChar](repeating: 0, count: 256)

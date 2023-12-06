@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -734,8 +733,6 @@ public final class OpenGroupManager {
                     openGroupServerPublicKey: openGroup.publicKey,
                     message: message,
                     data: messageData,
-                    isOutgoing: fromOutbox,
-                    otherBlindedPublicKey: (fromOutbox ? message.recipient : message.sender),
                     using: dependencies
                 )
                 
@@ -947,12 +944,11 @@ public final class OpenGroupManager {
                         .filter(id: groupId)
                         .asRequest(of: String.self)
                         .fetchOne(db),
-                    let blindedKeyPair: KeyPair = dependencies[singleton: .crypto].generate(
-                        .blindedKeyPair(
-                            serverPublicKey: openGroupPublicKey,
-                            edKeyPair: userEdKeyPair,
-                            using: dependencies
-                        )
+                    let blinded15KeyPair: KeyPair = dependencies[singleton: .crypto].generate(
+                        .blinded15KeyPair(serverPublicKey: openGroupPublicKey, ed25519SecretKey: userEdKeyPair.secretKey)
+                    ),
+                    let blinded25KeyPair: KeyPair = dependencies[singleton: .crypto].generate(
+                        .blinded25KeyPair(serverPublicKey: openGroupPublicKey, ed25519SecretKey: userEdKeyPair.secretKey)
                     )
                 else { return false }
                 guard
@@ -960,8 +956,8 @@ public final class OpenGroupManager {
                         sessionId.prefix != .blinded15 &&
                         sessionId.prefix != .blinded25
                     ) ||
-                    publicKey == SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString ||
-                    publicKey == SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
+                    publicKey == SessionId(.blinded15, publicKey: blinded15KeyPair.publicKey).hexString ||
+                    publicKey == SessionId(.blinded25, publicKey: blinded25KeyPair.publicKey).hexString
                 else { return false }
                 
                 // If we got to here that means that the 'publicKey' value matches one of the current
@@ -970,8 +966,8 @@ public final class OpenGroupManager {
                 let possibleKeys: Set<String> = Set([
                     userSessionId.hexString,
                     SessionId(.unblinded, publicKey: userEdKeyPair.publicKey).hexString,
-                    SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString,
-                    SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
+                    SessionId(.blinded15, publicKey: blinded15KeyPair.publicKey).hexString,
+                    SessionId(.blinded25, publicKey: blinded25KeyPair.publicKey).hexString
                 ])
                 
                 return GroupMember

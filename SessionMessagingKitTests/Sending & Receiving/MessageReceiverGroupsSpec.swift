@@ -17,7 +17,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
         // MARK: Configuration
         
         let groupSeed: Data = Data(hex: "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210")
-        @TestState var groupKeyPair: KeyPair! = Crypto().generate(.ed25519KeyPair(seed: groupSeed))
+        @TestState var groupKeyPair: KeyPair! = Crypto().generate(.ed25519KeyPair(seed: Array(groupSeed)))
         @TestState var groupId: SessionId! = SessionId(.group, hex: "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece")
         @TestState var groupSecretKey: Data! = Data(hex:
             "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +

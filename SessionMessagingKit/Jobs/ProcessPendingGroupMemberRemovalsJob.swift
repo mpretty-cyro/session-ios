@@ -110,12 +110,13 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                 )
                 let deleteMessageData: [(recipient: SessionId, message: Data)] = pendingRemovals.keys
                     .compactMap { try? LibSessionMessage.groupKicked(memberId: $0, groupKeysGen: currentGen) }
-                let encryptedDeleteMessageData: Data = try SessionUtil.encrypt(
-                    messages: deleteMessageData.map { $0.message },
-                    toRecipients: deleteMessageData.map { $0.recipient },
-                    ed25519PrivateKey: Array(groupIdentityPrivateKey),
-                    domain: .kickedMessage,
-                    using: dependencies
+                let encryptedDeleteMessageData: Data = try dependencies[singleton: .crypto].tryGenerate(
+                    .ciphertextWithMultiEncrypt(
+                        messages: deleteMessageData.map { $0.message },
+                        toRecipients: deleteMessageData.map { $0.recipient },
+                        ed25519PrivateKey: Array(groupIdentityPrivateKey),
+                        domain: .kickedMessage
+                    )
                 )
                 let preparedGroupDeleteMessage: HTTP.PreparedRequest<Void> = try SnodeAPI
                     .preparedSendMessage(

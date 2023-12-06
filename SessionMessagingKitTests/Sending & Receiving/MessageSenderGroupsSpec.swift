@@ -17,7 +17,7 @@ class MessageSenderGroupsSpec: QuickSpec {
         // MARK: Configuration
         
         let groupSeed: Data = Data(hex: "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210")
-        let groupKeyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: groupSeed))!
+        let groupKeyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: Array(groupSeed)))!
         @TestState var groupId: SessionId! = SessionId(.group, hex: "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece")
         @TestState var groupSecretKey: Data! = Data(hex:
             "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +
@@ -95,7 +95,7 @@ class MessageSenderGroupsSpec: QuickSpec {
                     .when { $0.generate(.tokenSubaccount(config: .any, groupSessionId: .any, memberId: .any)) }
                     .thenReturn(Array("TestSubAccountToken".data(using: .utf8)!))
                 crypto
-                    .when { try $0.tryGenerate(.randomBytes(numberBytes: .any)) }
+                    .when { try $0.tryGenerate(.randomBytes(.any)) }
                     .thenReturn(Data((0..<DisplayPictureManager.aes256KeyByteLength).map { _ in 1 }))
                 crypto
                     .when { $0.generate(.uuid()) }

@@ -6,9 +6,44 @@ import Foundation
 import SessionUtil
 import SessionUtilitiesKit
 
-internal extension Crypto.Size {
-    static let onionRequestIVSize: Crypto.Size = Crypto.Size(id: "onionRequestIVSize") { 12 }
+// MARK: - ONS Response
+
+internal extension Crypto.Generator {
+    static func sessionId(
+        name: String,
+        response: SnodeAPI.ONSResolveResponse
+    ) -> Crypto.Generator<String> {
+        return Crypto.Generator(
+            id: "sessionId_for_ONS_response",
+            args: [name, response]
+        ) {
+            guard let hexEncodedNonce: String = response.result.nonce else {
+                throw SnodeAPIError.decryptionFailed
+            }
+            
+            // Name must be in lowercase
+            var cLowercaseName: [CChar] = name.lowercased().cArray
+            var cCiphertext: [UInt8] = Array(Data(hex: response.result.encryptedValue))
+            var cNonce: [UInt8] = Array(Data(hex: hexEncodedNonce))
+            var cSessionId: [CChar] = [CChar](repeating: 0, count: 67)
+            
+            guard
+                session_decrypt_ons_response(
+                    &cLowercaseName,
+                    cLowercaseName.count,
+                    &cCiphertext,
+                    cCiphertext.count,
+                    &cNonce,
+                    &cSessionId
+                )
+            else { throw SnodeAPIError.decryptionFailed }
+            
+            return String(cString: cSessionId)
+        }
+    }
 }
+
+// MARK: - Onion Request
 
 internal extension Crypto.Generator {
     static func onionRequestPayload(

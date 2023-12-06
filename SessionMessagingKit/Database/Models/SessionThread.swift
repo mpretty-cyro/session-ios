@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -581,12 +580,28 @@ public extension SessionThread {
         
         guard capabilities.isEmpty || capabilities.contains(.blind) else { return nil }
         
-        let blindedKeyPair: KeyPair? = dependencies[singleton: .crypto].generate(
-            .blindedKeyPair(serverPublicKey: openGroupInfo.publicKey, edKeyPair: userEdKeyPair, using: dependencies)
-        )
-        
-        return blindedKeyPair.map { keyPair -> SessionId in
-            SessionId(blindingPrefix, publicKey: keyPair.publicKey)
+        switch blindingPrefix {
+            case .blinded15:
+                return dependencies[singleton: .crypto]
+                    .generate(
+                        .blinded15KeyPair(
+                            serverPublicKey: openGroupInfo.publicKey,
+                            ed25519SecretKey: userEdKeyPair.secretKey
+                        )
+                    )
+                    .map { SessionId(.blinded15, publicKey: $0.publicKey) }
+                
+            case .blinded25:
+                return dependencies[singleton: .crypto]
+                    .generate(
+                        .blinded25KeyPair(
+                            serverPublicKey: openGroupInfo.publicKey,
+                            ed25519SecretKey: userEdKeyPair.secretKey
+                        )
+                    )
+                    .map { SessionId(.blinded25, publicKey: $0.publicKey) }
+                
+            default: return nil
         }
     }
 }

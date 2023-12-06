@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
 import GRDB
 import SessionUtilitiesKit
 
@@ -96,8 +95,8 @@ class MessageReceiverDecryptionSpec: QuickSpec {
                 crypto
                     .when {
                         $0.generate(
-                            .decryptedBytesAeadXChaCha20(
-                                authenticatedCipherText: .any,
+                            .plaintextWithXChaCha20(
+                                ciphertext: .any,
                                 secretKey: .any,
                                 nonce: .any
                             )
@@ -383,8 +382,8 @@ class MessageReceiverDecryptionSpec: QuickSpec {
                     mockCrypto
                         .when {
                             $0.generate(
-                                .decryptedBytesAeadXChaCha20(
-                                    authenticatedCipherText: .any,
+                                .plaintextWithXChaCha20(
+                                    ciphertext: .any,
                                     secretKey: .any,
                                     nonce: .any
                                 )
@@ -417,8 +416,8 @@ class MessageReceiverDecryptionSpec: QuickSpec {
                     mockCrypto
                         .when {
                             $0.generate(
-                                .decryptedBytesAeadXChaCha20(
-                                    authenticatedCipherText: .any,
+                                .plaintextWithXChaCha20(
+                                    ciphertext: .any,
                                     secretKey: .any,
                                     nonce: .any
                                 )

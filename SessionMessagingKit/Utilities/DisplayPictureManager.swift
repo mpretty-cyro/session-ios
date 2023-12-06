@@ -266,7 +266,7 @@ public struct DisplayPictureManager {
                 }()
                 
                 newEncryptionKey = try dependencies[singleton: .crypto]
-                    .tryGenerate(.randomBytes(numberBytes: DisplayPictureManager.aes256KeyByteLength))
+                    .tryGenerate(.randomBytes(DisplayPictureManager.aes256KeyByteLength))
                 fileExtension = {
                     switch guessedFormat {
                         case .gif: return "gif"     // stringlint:disable
