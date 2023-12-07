@@ -2603,7 +2603,7 @@ fileprivate extension LibSessionUtilSpec {
         var member: config_group_member = config_group_member()
         
         guard groups_members_get_or_construct(conf, &member, &cSessionId) else {
-            throw SessionUtilError.getOrConstructFailedUnexpectedly
+            throw LibSessionError.getOrConstructFailedUnexpectedly
         }
         
         // Set the values to the maximum data that can fit
@@ -2614,13 +2614,13 @@ fileprivate extension LibSessionUtilSpec {
                 case .promoted: member.promoted = true
                 
                 case .name:
-                    member.name = rand.nextBytes(count: SessionUtil.sizeMaxNameBytes)
+                    member.name = rand.nextBytes(count: LibSession.sizeMaxNameBytes)
                         .toHexString()
                         .toLibSession()
                 
                 case .profile_pic:
                     member.profile_pic = user_profile_pic(
-                        url: rand.nextBytes(count: SessionUtil.sizeMaxProfileUrlBytes)
+                        url: rand.nextBytes(count: LibSession.sizeMaxProfileUrlBytes)
                             .toHexString()
                             .toLibSession(),
                         key: Data(rand.nextBytes(count: 32))

@@ -33,67 +33,55 @@ class CryptoOpenGroupAPISpec: QuickSpec {
         describe("Crypto for OpenGroupAPI") {
             // MARK: -- when generating a blinded15 key pair
             context("when generating a blinded15 key pair") {
-                // MARK: ---- successfully generates a blinded key pair
-                it("successfully generates a blinded key pair") {
+                // MARK: ---- successfully generates
+                it("successfully generates") {
                     let result = crypto.generate(
-                        .blindedKeyPair(
+                        .blinded15KeyPair(
                             serverPublicKey: TestConstants.serverPublicKey,
-                            edKeyPair: KeyPair(
-                                publicKey: Data(hex: TestConstants.edPublicKey).bytes,
-                                secretKey: Data(hex: TestConstants.edSecretKey).bytes
-                            ),
-                            using: dependencies
+                            ed25519SecretKey: Data(hex: TestConstants.edSecretKey).bytes
                         )
                     )
                     
                     // Note: The first 64 characters of the secretKey are consistent but the chars after that always differ
-                    expect(result?.publicKey.toHexString()).to(equal(TestConstants.blindedPublicKey))
-                    expect(String(result?.secretKey.toHexString().prefix(64) ?? ""))
-                        .to(equal("16663322d6b684e1c9dcc02b9e8642c3affd3bc431a9ea9e63dbbac88ce7a305"))
-                }
-                
-                // MARK: ---- fails if the edKeyPair public key length wrong
-                it("fails if the edKeyPair public key length wrong") {
-                    let result = crypto.generate(
-                        .blindedKeyPair(
-                            serverPublicKey: TestConstants.serverPublicKey,
-                            edKeyPair: KeyPair(
-                                publicKey: Data(hex: String(TestConstants.edPublicKey.prefix(4))).bytes,
-                                secretKey: Data(hex: TestConstants.edSecretKey).bytes
-                            ),
-                            using: dependencies
-                        )
-                    )
-                    
-                    expect(result).to(beNil())
+                    expect(result?.publicKey.toHexString()).to(equal(TestConstants.blind15PublicKey))
+                    expect(result?.secretKey.toHexString()).to(equal(TestConstants.blind15SecretKey))
                 }
                 
                 // MARK: ---- fails if the edKeyPair secret key length wrong
-                it("fails if the edKeyPair secret key length wrong") {
+                it("fails if the ed25519SecretKey length wrong") {
                     let result = crypto.generate(
-                        .blindedKeyPair(
+                        .blinded15KeyPair(
                             serverPublicKey: TestConstants.serverPublicKey,
-                            edKeyPair: KeyPair(
-                                publicKey: Data(hex: TestConstants.edPublicKey).bytes,
-                                secretKey: Data(hex: String(TestConstants.edSecretKey.prefix(4))).bytes
-                            ),
-                            using: dependencies
+                            ed25519SecretKey: Array(Data(hex: String(TestConstants.edSecretKey.prefix(4))))
                         )
                     )
                     
                     expect(result).to(beNil())
                 }
-                
-                // MARK: ---- fails if it cannot generate a blinding factor
-                it("fails if it cannot generate a blinding factor") {
+            }
+            
+            // MARK: -- when generating a blinded25 key pair
+            context("when generating a blinded25 key pair") {
+                // MARK: ---- successfully generates
+                it("successfully generates") {
                     let result = crypto.generate(
-                        .blindedKeyPair(
-                            serverPublicKey: "Test",
-                            edKeyPair: KeyPair(
-                                publicKey: Data(hex: TestConstants.edPublicKey).bytes,
-                                secretKey: Data(hex: TestConstants.edSecretKey).bytes
-                            ),
-                            using: dependencies
+                        .blinded25KeyPair(
+                            serverPublicKey: TestConstants.serverPublicKey,
+                            ed25519SecretKey: Data(hex: TestConstants.edSecretKey).bytes
+                        )
+                    )
+                    
+                    // Note: The first 64 characters of the secretKey are consistent but the chars after that always differ
+                    expect(result?.publicKey.toHexString()).to(equal(TestConstants.blind25PublicKey))
+                    expect(result?.secretKey.toHexString()).to(equal(TestConstants.blind25SecretKey))
+                }
+                
+                // MARK: ---- fails if the edKeyPair secret key length wrong
+                it("fails if the ed25519SecretKey length wrong") {
+                    let result = crypto.generate(
+                        .blinded25KeyPair(
+                            serverPublicKey: TestConstants.serverPublicKey,
+                            ed25519SecretKey: Data(hex: String(TestConstants.edSecretKey.prefix(4))).bytes
                         )
                     )
                     
@@ -106,32 +94,63 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                 // MARK: ---- generates a correct signature
                 it("generates a correct signature") {
                     let result = crypto.generate(
-                        .signatureSOGS(
+                        .signatureBlind15(
                             message: "TestMessage".bytes,
-                            secretKey: Data(hex: TestConstants.edSecretKey).bytes,
-                            blindedSecretKey: Data(hex: "44d82cc15c0a5056825cae7520b6b52d000a23eb0c5ed94c4be2d9dc41d2d409").bytes,
-                            blindedPublicKey: Data(hex: "0bb7815abb6ba5142865895f3e5286c0527ba4d31dbb75c53ce95e91ffe025a2").bytes
+                            serverPublicKey: TestConstants.serverPublicKey,
+                            ed25519SecretKey: Array(Data(hex: TestConstants.edSecretKey))
                         )
                     )
                     
                     expect(result?.toHexString())
                         .to(equal(
-                            "dcc086abdd2a740d9260b008fb37e12aa0ff47bd2bd9e177bbbec37fd46705a9" +
-                            "072ce747bda66c788c3775cdd7ad60ad15a478e0886779aad5d795fd7bf8350d"
+                            "245003f1627ebdfc6099c32597d426ef84d1b301861a5ffbbac92dde6c608334" +
+                            "ceb56a022a094a9a664fae034b50eed40bd1bfb262c7e542c979eec265ae3f07"
+                        ))
+                }
+            }
+            
+            // MARK: -- when generating a signatureBlind25
+            context("when generating a signatureBlind25") {
+                // MARK: ---- generates a correct signature
+                it("generates a correct signature") {
+                    let result = crypto.generate(
+                        .signatureBlind25(
+                            message: "TestMessage".bytes,
+                            serverPublicKey: TestConstants.serverPublicKey,
+                            ed25519SecretKey: Data(hex: TestConstants.edSecretKey).bytes
+                        )
+                    )
+                    
+                    expect(result?.toHexString())
+                        .to(equal(
+                            "9ff9b7fb7d435c7a2c0b0b2ae64963baaf394386b9f7c7f924eeac44ec0f74c7" +
+                            "fe6304c73a9b3a65491f81e44b545e54631e83e9a412eaed5fd4db2e05ec830c"
                         ))
                 }
             }
             
             // MARK: -- when checking if a session id matches a blinded id
             context("when checking if a session id matches a blinded id") {
-                // MARK: ---- returns true when they match
-                it("returns true when they match") {
+                // MARK: ---- returns true when a blind15 id matches
+                it("returns true when a blind15 id matches") {
                     let result = crypto.verify(
                         .sessionId(
                             "05\(TestConstants.publicKey)",
-                            matchesBlindedId: "15\(TestConstants.blindedPublicKey)",
-                            serverPublicKey: TestConstants.serverPublicKey,
-                            using: dependencies
+                            matchesBlindedId: "15\(TestConstants.blind15PublicKey)",
+                            serverPublicKey: TestConstants.serverPublicKey
+                        )
+                    )
+                    
+                    expect(result).to(beTrue())
+                }
+                
+                // MARK: ---- returns true when a blind25 id matches
+                it("returns true when a blind25 id matches") {
+                    let result = crypto.verify(
+                        .sessionId(
+                            "05\(TestConstants.publicKey)",
+                            matchesBlindedId: "25\(TestConstants.blind25PublicKey)",
+                            serverPublicKey: TestConstants.serverPublicKey
                         )
                     )
                     
@@ -143,9 +162,8 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                     let result = crypto.verify(
                         .sessionId(
                             "AB\(TestConstants.publicKey)",
-                            matchesBlindedId: "15\(TestConstants.blindedPublicKey)",
-                            serverPublicKey: TestConstants.serverPublicKey,
-                            using: dependencies
+                            matchesBlindedId: "15\(TestConstants.blind15PublicKey)",
+                            serverPublicKey: TestConstants.serverPublicKey
                         )
                     )
                     
@@ -157,23 +175,8 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                     let result = crypto.verify(
                         .sessionId(
                             "05\(TestConstants.publicKey)",
-                            matchesBlindedId: "AB\(TestConstants.blindedPublicKey)",
-                            serverPublicKey: TestConstants.serverPublicKey,
-                            using: dependencies
-                        )
-                    )
-                    
-                    expect(result).to(beFalse())
-                }
-                
-                // MARK: ---- returns false if it fails to generate the blinding factor
-                it("returns false if it fails to generate the blinding factor") {
-                    let result = crypto.verify(
-                        .sessionId(
-                            "05\(TestConstants.publicKey)",
-                            matchesBlindedId: "15\(TestConstants.blindedPublicKey)",
-                            serverPublicKey: "Test",
-                            using: dependencies
+                            matchesBlindedId: "AB\(TestConstants.blind15PublicKey)",
+                            serverPublicKey: TestConstants.serverPublicKey
                         )
                     )
                     
@@ -183,43 +186,6 @@ class CryptoOpenGroupAPISpec: QuickSpec {
             
             // MARK: -- when encrypting with the session blinding protocol
             context("when encrypting with the session blinding protocol") {
-                beforeEach {
-                    mockCrypto
-                        .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
-                        .thenReturn(
-                            KeyPair(
-                                publicKey: Data(hex: TestConstants.publicKey).bytes,
-                                secretKey: Data(hex: TestConstants.edSecretKey).bytes
-                            )
-                        )
-                    mockCrypto
-                        .when {
-                            $0.generate(
-                                .sharedBlindedEncryptionKey(
-                                    secretKey: .any,
-                                    otherBlindedPublicKey: .any,
-                                    fromBlindedPublicKey: .any,
-                                    toBlindedPublicKey: .any,
-                                    using: .any
-                                )
-                            )
-                        }
-                        .thenReturn([1, 2, 3])
-                    mockCrypto
-                        .when {
-                            $0.generate(
-                                .encryptedBytesAeadXChaCha20(
-                                    message: .any,
-                                    secretKey: .any,
-                                    nonce: .any,
-                                    additionalData: .any,
-                                    using: .any
-                                )
-                            )
-                        }
-                        .thenReturn([2, 3, 4])
-                }
-                
                 // MARK: ---- can encrypt for a blind15 recipient correctly
                 it("can encrypt for a blind15 recipient correctly") {
                     let result: Data? = mockStorage.read { db in
@@ -227,7 +193,7 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                             .ciphertextWithSessionBlindingProtocol(
                                 db,
                                 plaintext: "TestMessage".data(using: .utf8)!,
-                                recipientBlindedId: "15\(TestConstants.blindedPublicKey)",
+                                recipientBlindedId: "15\(TestConstants.blind15PublicKey)",
                                 serverPublicKey: TestConstants.serverPublicKey,
                                 using: dependencies
                             )
@@ -246,7 +212,7 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                             .ciphertextWithSessionBlindingProtocol(
                                 db,
                                 plaintext: "TestMessage".data(using: .utf8)!,
-                                recipientBlindedId: "25\(TestConstants.blindedPublicKey)",
+                                recipientBlindedId: "25\(TestConstants.blind25PublicKey)",
                                 serverPublicKey: TestConstants.serverPublicKey,
                                 using: dependencies
                             )
@@ -265,7 +231,7 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                             .ciphertextWithSessionBlindingProtocol(
                                 db,
                                 plaintext: "TestMessage".data(using: .utf8)!,
-                                recipientBlindedId: "15\(TestConstants.blindedPublicKey)",
+                                recipientBlindedId: "15\(TestConstants.blind15PublicKey)",
                                 serverPublicKey: TestConstants.serverPublicKey,
                                 using: dependencies
                             )
@@ -306,7 +272,7 @@ class CryptoOpenGroupAPISpec: QuickSpec {
                                 .ciphertextWithSessionBlindingProtocol(
                                     db,
                                     plaintext: "TestMessage".data(using: .utf8)!,
-                                    recipientBlindedId: "15\(TestConstants.blindedPublicKey)",
+                                    recipientBlindedId: "15\(TestConstants.blind15PublicKey)",
                                     serverPublicKey: TestConstants.serverPublicKey,
                                     using: dependencies
                                 )
@@ -319,24 +285,160 @@ class CryptoOpenGroupAPISpec: QuickSpec {
             
             // MARK: -- when decrypting with the session blinding protocol
             context("when decrypting with the session blinding protocol") {
-                // MARK: ---- successfully decrypts a message
-                it("successfully decrypts a message") {
-                    let result = try? MessageReceiver.decryptWithSessionProtocol(
-                        ciphertext: Data(
-                            base64Encoded: "SRP0eBUWh4ez6ppWjUs5/Wph5fhnPRgB5zsWWnTz+FBAw/YI3oS2pDpIfyetMTbU" +
-                            "sFMhE5G4PbRtQFey1hsxLl221Qivc3ayaX2Mm/X89Dl8e45BC+Lb/KU9EdesxIK4pVgYXs9XrMtX3v8" +
-                            "dt0eBaXneOBfr7qB8pHwwMZjtkOu1ED07T9nszgbWabBphUfWXe2U9K3PTRisSCI="
-                        )!,
-                        using: KeyPair(
-                            publicKey: Data(hex: TestConstants.publicKey).bytes,
-                            secretKey: Data(hex: TestConstants.privateKey).bytes
-                        ),
-                        using: Dependencies()   // Don't mock
-                    )
+                // MARK: ---- can decrypt a blind15 message correctly
+                it("can decrypt a blind15 message correctly") {
+                    let result = mockStorage.read { db in
+                        try crypto.tryGenerate(
+                            .plaintextWithSessionBlindingProtocol(
+                                db,
+                                ciphertext: Data(
+                                    base64Encoded: "AMuM6E07xyYzN1/gP64v9TelMjkylHsFZznTzE7rDIykIHBHKbdkLnXo4Q1iVWdD" +
+                                    "ct9F9YqIsRsqmdLl1t6nfQtWoiUSkjBChvg3J61f7rpS3/A+"
+                                )!,
+                                senderId: "15\(TestConstants.blind15PublicKey)",
+                                recipientId: "15\(TestConstants.blind15PublicKey)",
+                                serverPublicKey: TestConstants.serverPublicKey,
+                                using: dependencies
+                            )
+                        )
+                    }
                     
                     expect(String(data: (result?.plaintext ?? Data()), encoding: .utf8)).to(equal("TestMessage"))
-                    expect(result?.senderX25519PublicKey)
-                        .to(equal("0588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
+                    expect(result?.senderSessionIdHex).to(equal("05\(TestConstants.publicKey)"))
+                }
+                
+                // MARK: ---- can decrypt a blind25 message correctly
+                it("can decrypt a blind25 message correctly") {
+                    let result = mockStorage.read { db in
+                        try crypto.tryGenerate(
+                            .plaintextWithSessionBlindingProtocol(
+                                db,
+                                ciphertext: Data(
+                                    base64Encoded: "AMmaZncBPI7EqWW1eTg6QoZtPW255IXy+M4uoh33ZgQdJb7gmsU7wJ+wEhgNDOd6" +
+                                    "4E822uYinFpZCLK81t6nfQtWoiUSkjBChvg3J61f7rpS3/A+"
+                                )!,
+                                senderId: "25\(TestConstants.blind25PublicKey)",
+                                recipientId: "25\(TestConstants.blind25PublicKey)",
+                                serverPublicKey: TestConstants.serverPublicKey,
+                                using: dependencies
+                            )
+                        )
+                    }
+                    
+                    expect(String(data: (result?.plaintext ?? Data()), encoding: .utf8)).to(equal("TestMessage"))
+                    expect(result?.senderSessionIdHex).to(equal("05\(TestConstants.publicKey)"))
+                }
+                
+                // MARK: ---- throws an error if there is no ed25519 keyPair
+                it("throws an error if there is no ed25519 keyPair") {
+                    mockStorage.write { db in
+                        _ = try Identity.filter(id: .ed25519PublicKey).deleteAll(db)
+                        _ = try Identity.filter(id: .ed25519SecretKey).deleteAll(db)
+                    }
+                    
+                    mockStorage.read { db in
+                        expect {
+                            try crypto.tryGenerate(
+                                .plaintextWithSessionBlindingProtocol(
+                                    db,
+                                    ciphertext: Data(
+                                        base64Encoded: "SRP0eBUWh4ez6ppWjUs5/Wph5fhnPRgB5zsWWnTz+FBAw/YI3oS2pDpIfyetMTbU" +
+                                        "sFMhE5G4PbRtQFey1hsxLl221Qivc3ayaX2Mm/X89Dl8e45BC+Lb/KU9EdesxIK4pVgYXs9XrMtX3v8" +
+                                        "dt0eBaXneOBfr7qB8pHwwMZjtkOu1ED07T9nszgbWabBphUfWXe2U9K3PTRisSCI="
+                                    )!,
+                                    senderId: "25\(TestConstants.blind25PublicKey)",
+                                    recipientId: "25\(TestConstants.blind25PublicKey)",
+                                    serverPublicKey: TestConstants.serverPublicKey,
+                                    using: dependencies
+                                )
+                            )
+                        }
+                        .to(throwError(MessageSenderError.noUserED25519KeyPair))
+                    }
+                }
+                
+                // MARK: ---- throws an error if the data is too short
+                it("throws an error if the data is too short") {
+                    mockStorage.read { db in
+                        expect {
+                            try crypto.tryGenerate(
+                                .plaintextWithSessionBlindingProtocol(
+                                    db,
+                                    ciphertext: Data([1, 2, 3]),
+                                    senderId: "15\(TestConstants.blind15PublicKey)",
+                                    recipientId: "15\(TestConstants.blind15PublicKey)",
+                                    serverPublicKey: TestConstants.serverPublicKey,
+                                    using: dependencies
+                                )
+                            )
+                        }
+                        .to(throwError(MessageReceiverError.decryptionFailed))
+                    }
+                }
+                
+                // MARK: ---- throws an error if the data version is not 0
+                it("throws an error if the data version is not 0") {
+                    mockStorage.read { db in
+                        expect {
+                            try crypto.tryGenerate(
+                                .plaintextWithSessionBlindingProtocol(
+                                    db,
+                                    ciphertext: (
+                                        Data([1]) +
+                                        "TestMessage".data(using: .utf8)! +
+                                        Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!
+                                    ),
+                                    senderId: "15\(TestConstants.blind15PublicKey)",
+                                    recipientId: "15\(TestConstants.blind15PublicKey)",
+                                    serverPublicKey: TestConstants.serverPublicKey,
+                                    using: dependencies
+                                )
+                            )
+                        }
+                        .to(throwError(MessageReceiverError.decryptionFailed))
+                    }
+                }
+                
+                // MARK: ---- throws an error if it cannot decrypt the data
+                it("throws an error if it cannot decrypt the data") {
+                    mockStorage.read { db in
+                        expect {
+                            try crypto.tryGenerate(
+                                .plaintextWithSessionBlindingProtocol(
+                                    db,
+                                    ciphertext: "RandomData".data(using: .utf8)!,
+                                    senderId: "25\(TestConstants.blind25PublicKey)",
+                                    recipientId: "25\(TestConstants.blind25PublicKey)",
+                                    serverPublicKey: TestConstants.serverPublicKey,
+                                    using: dependencies
+                                )
+                            )
+                        }
+                        .to(throwError(MessageReceiverError.decryptionFailed))
+                    }
+                }
+                
+                // MARK: ---- throws an error if the inner bytes are too short
+                it("throws an error if the inner bytes are too short") {
+                    mockStorage.read { db in
+                        expect {
+                            try crypto.tryGenerate(
+                                .plaintextWithSessionBlindingProtocol(
+                                    db,
+                                    ciphertext: (
+                                        Data([0]) +
+                                        "TestMessage".data(using: .utf8)! +
+                                        Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!
+                                    ),
+                                    senderId: "15\(TestConstants.blind15PublicKey)",
+                                    recipientId: "15\(TestConstants.blind15PublicKey)",
+                                    serverPublicKey: TestConstants.serverPublicKey,
+                                    using: dependencies
+                                )
+                            )
+                        }
+                        .to(throwError(MessageReceiverError.decryptionFailed))
+                    }
                 }
             }
         }

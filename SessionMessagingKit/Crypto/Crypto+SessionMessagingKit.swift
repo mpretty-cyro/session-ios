@@ -37,16 +37,18 @@ public extension Crypto.Generator {
             }()
             
             var cPlaintext: [UInt8] = Array(plaintext)
-            var cEd25519PrivKey: [UInt8] = ed25519KeyPair.secretKey
+            var cEd25519SecretKey: [UInt8] = ed25519KeyPair.secretKey
             var cDestinationPubKey: [UInt8] = Array(destinationX25519PublicKey)
             var maybeCiphertext: UnsafeMutablePointer<UInt8>? = nil
             var ciphertextLen: Int = 0
             
             guard
+                cEd25519SecretKey.count == 64,
+                cDestinationPubKey.count == 32,
                 session_encrypt_for_recipient_deterministic(
                     &cPlaintext,
                     cPlaintext.count,
-                    &cEd25519PrivKey,
+                    &cEd25519SecretKey,
                     &cDestinationPubKey,
                     &maybeCiphertext,
                     &ciphertextLen
@@ -125,16 +127,17 @@ public extension Crypto.Generator {
             }()
             
             var cCiphertext: [UInt8] = Array(ciphertext)
-            var cEd25519PrivKey: [UInt8] = ed25519KeyPair.secretKey
+            var cEd25519SecretKey: [UInt8] = ed25519KeyPair.secretKey
             var cSenderSessionId: [CChar] = [CChar](repeating: 0, count: 67)
             var maybePlaintext: UnsafeMutablePointer<UInt8>? = nil
             var plaintextLen: Int = 0
             
             guard
+                cEd25519SecretKey.count == 64,
                 session_decrypt_incoming(
                     &cCiphertext,
                     cCiphertext.count,
-                    &cEd25519PrivKey,
+                    &cEd25519SecretKey,
                     &cSenderSessionId,
                     &maybePlaintext,
                     &plaintextLen
@@ -166,6 +169,8 @@ public extension Crypto.Generator {
             var plaintextLen: Int = 0
             
             guard
+                cX25519Pubkey.count == 32,
+                cX25519Seckey.count == 32,
                 session_decrypt_incoming_legacy_group(
                     &cCiphertext,
                     cCiphertext.count,
@@ -199,6 +204,7 @@ public extension Crypto.Generator {
             var plaintextLen: Int = 0
             
             guard
+                cEncKey.count == 32,
                 session_decrypt_push_notification(
                     &cPayload,
                     cPayload.count,

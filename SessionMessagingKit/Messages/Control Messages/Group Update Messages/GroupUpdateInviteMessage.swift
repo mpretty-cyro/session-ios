@@ -53,7 +53,7 @@ public final class GroupUpdateInviteMessage: ControlMessage {
         )
     }
     
-    private init(
+    internal init(
         inviteeSessionIdHexString: String,
         groupSessionId: SessionId,
         groupName: String,

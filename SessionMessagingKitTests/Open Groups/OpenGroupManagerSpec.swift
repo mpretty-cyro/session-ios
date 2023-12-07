@@ -88,9 +88,9 @@ class OpenGroupManagerSpec: QuickSpec {
             posted: 1234567890,
             expires: 1234567990,
             base64EncodedMessage: Data(
-                Bytes(arrayLiteral: 0) +
+                [UInt8](arrayLiteral: 0) +
                 "TestMessage".bytes +
-                Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!.bytes
+                Array(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!)
             ).base64EncodedString()
         )
         @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
@@ -125,11 +125,9 @@ class OpenGroupManagerSpec: QuickSpec {
         @TestState(singleton: .network, in: dependencies) var mockNetwork: MockNetwork! = MockNetwork()
         @TestState(singleton: .crypto, in: dependencies) var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
-                crypto.when { $0.generate(.hash(message: .any, outputLength: .any)) }.thenReturn([])
+                crypto.when { $0.generate(.hash(message: .any, length: .any)) }.thenReturn([])
                 crypto
-                    .when { crypto in
-                        crypto.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any))
-                    }
+                    .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn(
                         KeyPair(
                             publicKey: Data(hex: TestConstants.publicKey).bytes,
@@ -137,29 +135,17 @@ class OpenGroupManagerSpec: QuickSpec {
                         )
                     )
                 crypto
-                    .when {
-                        $0.generate(
-                            .signatureSOGS(
-                                message: .any,
-                                secretKey: .any,
-                                blindedSecretKey: .any,
-                                blindedPublicKey: .any
-                            )
-                        )
-                    }
+                    .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn("TestSogsSignature".bytes)
                 crypto
-                    .when { $0.generate(.signature(message: .any, secretKey: .any)) }
+                    .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
                     .thenReturn(Authentication.Signature.standard(signature: "TestSignature".bytes))
-                crypto.when { $0.size(.nonce16) }.thenReturn(16)
                 crypto
-                    .when { $0.generate(.nonce16()) }
+                    .when { $0.generate(.randomBytes(16)) }
                     .thenReturn(Data(base64Encoded: "pK6YRtQApl4NhECGizF0Cg==")!.bytes)
-                crypto.when { $0.size(.nonce24) }.thenReturn(24)
                 crypto
-                    .when { $0.generate(.nonce24()) }
+                    .when { $0.generate(.randomBytes(24)) }
                     .thenReturn(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!.bytes)
-                crypto.when { $0.size(.publicKey) }.thenReturn(32)
             }
         )
         @TestState(defaults: .standard, in: dependencies) var mockUserDefaults: MockUserDefaults! = MockUserDefaults()
@@ -1871,35 +1857,23 @@ class OpenGroupManagerSpec: QuickSpec {
                     mockCrypto
                         .when {
                             $0.generate(
-                                .sharedBlindedEncryptionKey(
-                                    secretKey: .any,
-                                    otherBlindedPublicKey: .any,
-                                    fromBlindedPublicKey: .any,
-                                    toBlindedPublicKey: .any,
+                                .plaintextWithSessionBlindingProtocol(
+                                    .any,
+                                    ciphertext: .any,
+                                    senderId: .any,
+                                    recipientId: .any,
+                                    serverPublicKey: .any,
                                     using: .any
                                 )
                             )
                         }
-                        .thenReturn([])
+                        .thenReturn((
+                            plaintext: Data(base64Encoded:"ChQKC1Rlc3RNZXNzYWdlONCI7I/3Iw==")! +
+                            Data([UInt8](repeating: 0, count: 32)),
+                            senderSessionIdHex: "05\(TestConstants.publicKey)"
+                        ))
                     mockCrypto
-                        .when { $0.generate(.blindingFactor(serverPublicKey: .any, using: .any)) }
-                        .thenReturn([])
-                    mockCrypto
-                        .when {
-                            $0.generate(
-                                .plaintextWithXChaCha20(
-                                    ciphertext: .any,
-                                    secretKey: .any,
-                                    nonce: .any
-                                )
-                            )
-                        }
-                        .thenReturn(
-                            Data(base64Encoded:"ChQKC1Rlc3RNZXNzYWdlONCI7I/3Iw==")!.bytes +
-                            [UInt8](repeating: 0, count: 32)
-                        )
-                    mockCrypto
-                        .when { $0.generate(.x25519(ed25519PublicKey: .any)) }
+                        .when { $0.generate(.x25519(ed25519Pubkey: .any)) }
                         .thenReturn(Data(hex: TestConstants.publicKey).bytes)
                 }
                 
@@ -1995,19 +1969,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("for the inbox") {
                     beforeEach {
                         mockCrypto
-                            .when { $0.generate(.combinedKeys(lhsKeyBytes: .any, rhsKeyBytes: .any)) }
-                            .thenReturn(SessionId(.standard, hex: testDirectMessage.sender).publicKey)
-                        mockCrypto
-                            .when {
-                                $0.verify(
-                                    .sessionId(
-                                        .any,
-                                        matchesBlindedId: .any,
-                                        serverPublicKey: .any,
-                                        using: .any
-                                    )
-                                )
-                            }
+                            .when { $0.verify(.sessionId(.any, matchesBlindedId: .any, serverPublicKey: .any)) }
                             .thenReturn(false)
                     }
                     
@@ -2102,19 +2064,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("for the outbox") {
                     beforeEach {
                         mockCrypto
-                            .when { $0.generate(.combinedKeys(lhsKeyBytes: .any, rhsKeyBytes: .any)) }
-                            .thenReturn(SessionId(.standard, hex: testDirectMessage.recipient).publicKey)
-                        mockCrypto
-                            .when {
-                                $0.verify(
-                                    .sessionId(
-                                        .any,
-                                        matchesBlindedId: .any,
-                                        serverPublicKey: .any,
-                                        using: .any
-                                    )
-                                )
-                            }
+                            .when { $0.verify(.sessionId(.any, matchesBlindedId: .any, serverPublicKey: .any)) }
                             .thenReturn(false)
                     }
                     
@@ -2471,7 +2421,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     it("returns true if the key is the current users and the users blinded id is a moderator or admin") {
                         let otherKey: String = TestConstants.publicKey.replacingOccurrences(of: "7", with: "6")
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(
                                 KeyPair(
                                     publicKey: Data(hex: otherKey).bytes,
@@ -2582,7 +2532,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     it("returns true if the key is the current users and the users blinded id is a moderator or admin") {
                         let otherKey: String = TestConstants.publicKey.replacingOccurrences(of: "7", with: "6")
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(
                                 KeyPair(
                                     publicKey: Data(hex: otherKey).bytes,
@@ -2643,7 +2593,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     // MARK: ------ returns false if unable generate a blinded key
                     it("returns false if unable generate a blinded key") {
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         expect(
@@ -2663,7 +2613,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     it("returns false if the key is not the users blinded id") {
                         let otherKey: String = TestConstants.publicKey.replacingOccurrences(of: "7", with: "6")
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(
                                 KeyPair(
                                     publicKey: Data(hex: otherKey).bytes,
@@ -2689,7 +2639,7 @@ class OpenGroupManagerSpec: QuickSpec {
                         let otherKey: String = TestConstants.publicKey.replacingOccurrences(of: "7", with: "6")
                         mockGeneralCache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: otherKey))
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(
                                 KeyPair(
                                     publicKey: Data(hex: TestConstants.publicKey).bytes,
@@ -2727,7 +2677,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     // MARK: ------ returns true if the key is the current users and the users unblinded id is a moderator or admin
                     it("returns true if the key is the current users and the users unblinded id is a moderator or admin") {
                         mockCrypto
-                            .when { $0.generate(.blindedKeyPair(serverPublicKey: .any, edKeyPair: .any, using: .any)) }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(
                                 KeyPair(
                                     publicKey: Data(hex: TestConstants.publicKey).bytes,
@@ -3106,7 +3056,7 @@ extension OpenGroupAPI.RoomPollInfo: Mocked {
 extension OpenGroupAPI.Message: Mocked {
     static var mock: OpenGroupAPI.Message = OpenGroupAPI.Message(
         id: 100,
-        sender: TestConstants.blindedPublicKey,
+        sender: TestConstants.blind15PublicKey,
         posted: 1,
         edited: nil,
         deleted: nil,
@@ -3123,7 +3073,7 @@ extension OpenGroupAPI.Message: Mocked {
 extension OpenGroupAPI.SendDirectMessageResponse: Mocked {
     static var mock: OpenGroupAPI.SendDirectMessageResponse = OpenGroupAPI.SendDirectMessageResponse(
         id: 1,
-        sender: TestConstants.blindedPublicKey,
+        sender: TestConstants.blind15PublicKey,
         recipient: "testRecipient",
         posted: 1122,
         expires: 2233
@@ -3133,7 +3083,7 @@ extension OpenGroupAPI.SendDirectMessageResponse: Mocked {
 extension OpenGroupAPI.DirectMessage: Mocked {
     static var mock: OpenGroupAPI.DirectMessage = OpenGroupAPI.DirectMessage(
         id: 101,
-        sender: TestConstants.blindedPublicKey,
+        sender: TestConstants.blind15PublicKey,
         recipient: "testRecipient",
         posted: 1212,
         expires: 2323,

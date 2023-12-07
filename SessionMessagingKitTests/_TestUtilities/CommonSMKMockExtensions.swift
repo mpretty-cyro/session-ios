@@ -2,6 +2,7 @@
 
 import Foundation
 import SessionUtil
+import SessionUtilitiesKit
 
 @testable import SessionMessagingKit
 

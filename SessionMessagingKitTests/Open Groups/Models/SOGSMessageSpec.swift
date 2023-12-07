@@ -144,16 +144,6 @@ class SOGSMessageSpec: QuickSpec {
                         .to(throwError(HTTPError.parsingFailed))
                     }
                     
-                    // MARK: ------ errors if the dependencies are not provided to the JSONDecoder
-                    it("errors if the dependencies are not provided to the JSONDecoder") {
-                        decoder = JSONDecoder()
-                        
-                        expect {
-                            try decoder.decode(OpenGroupAPI.Message.self, from: messageData)
-                        }
-                        .to(throwError(HTTPError.parsingFailed))
-                    }
-                    
                     // MARK: ------ errors if the session_id value is not valid
                     it("errors if the session_id value is not valid") {
                         messageJson = """
@@ -258,7 +248,7 @@ class SOGSMessageSpec: QuickSpec {
                         // MARK: -------- provides the correct values as parameters
                         it("provides the correct values as parameters") {
                             mockCrypto
-                                .when { $0.verify(.signatureEd25519(.any, publicKey: .any, data: .any)) }
+                                .when { $0.verify(.signatureXed25519(.any, curve25519PublicKey: .any, data: .any)) }
                                 .thenReturn(true)
                             
                             _ = try? decoder.decode(OpenGroupAPI.Message.self, from: messageData)
@@ -268,7 +258,7 @@ class SOGSMessageSpec: QuickSpec {
                                     $0.verify(
                                         .signatureXed25519(
                                             Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!,
-                                            curve25519PublicKey: Data(hex: TestConstants.publicKey),
+                                            curve25519PublicKey: Array(Data(hex: TestConstants.publicKey)),
                                             data: Data(base64Encoded: "VGVzdERhdGE=")!
                                         )
                                     )

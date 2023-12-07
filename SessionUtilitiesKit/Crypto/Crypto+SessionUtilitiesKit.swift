@@ -34,9 +34,14 @@ public extension Crypto.Generator {
             switch key {
                 case .some(let finalKey):
                     var cKey: [UInt8] = finalKey
-                    session_hash(length, &cMessage, cMessage.count, &cKey, cKey.count, &cHash)
+                    guard session_hash(length, &cMessage, cMessage.count, &cKey, cKey.count, &cHash) else {
+                        throw CryptoError.failedToGenerateOutput
+                    }
                     
-                case .none: session_hash(length, &cMessage, cMessage.count, nil, 0, &cHash)
+                case .none:
+                    guard session_hash(length, &cMessage, cMessage.count, nil, 0, &cHash) else {
+                        throw CryptoError.failedToGenerateOutput
+                    }
             }
      
             return cHash
@@ -68,7 +73,10 @@ public extension Crypto.Generator {
             var cEd25519Pubkey: [UInt8] = ed25519Pubkey
             var pubkey: [UInt8] = [UInt8](repeating: 0, count: 32)
             
-            guard session_to_curve25519_pubkey(&cEd25519Pubkey, &pubkey) else { throw CryptoError.keyGenerationFailed }
+            guard
+                cEd25519Pubkey.count == 32,
+                session_to_curve25519_pubkey(&cEd25519Pubkey, &pubkey)
+            else { throw CryptoError.keyGenerationFailed }
             
             return pubkey
         }
@@ -81,10 +89,13 @@ public extension Crypto.Generator {
             id: "ed25519Seckey_to_x25519Seckey",
             args: [ed25519Seckey]
         ) {
-            var cEd25519Seckey: [UInt8] = ed25519Seckey
+            var cEd25519SecretKey: [UInt8] = ed25519Seckey
             var seckey: [UInt8] = [UInt8](repeating: 0, count: 32)
             
-            guard session_to_curve25519_seckey(&cEd25519Seckey, &seckey) else { throw CryptoError.keyGenerationFailed }
+            guard
+                cEd25519SecretKey.count == 64,
+                session_to_curve25519_seckey(&cEd25519SecretKey, &seckey)
+            else { throw CryptoError.keyGenerationFailed }
             
             return seckey
         }
@@ -111,7 +122,10 @@ public extension Crypto.Generator {
             var pubkey: [UInt8] = [UInt8](repeating: 0, count: 32)
             var seckey: [UInt8] = [UInt8](repeating: 0, count: 64)
             
-            guard session_ed25519_key_pair_seed(&cSeed, &pubkey, &seckey) else { throw CryptoError.invalidSeed }
+            guard
+                cSeed.count == 32,
+                session_ed25519_key_pair_seed(&cSeed, &pubkey, &seckey)
+            else { throw CryptoError.invalidSeed }
             
             return KeyPair(publicKey: pubkey, secretKey: seckey)
         }
@@ -122,7 +136,10 @@ public extension Crypto.Generator {
             var cEd25519SecretKey: [UInt8] = ed25519SecretKey
             var seed: [UInt8] = [UInt8](repeating: 0, count: 32)
             
-            guard session_seed_for_ed_privkey(&cEd25519SecretKey, &seed) else { throw CryptoError.invalidSeed }
+            guard
+                cEd25519SecretKey.count == 64,
+                session_seed_for_ed_privkey(&cEd25519SecretKey, &seed)
+            else { throw CryptoError.invalidSeed }
             
             return Data(seed)
         }
@@ -130,13 +147,14 @@ public extension Crypto.Generator {
     
     static func signature(message: [UInt8], ed25519SecretKey: [UInt8]) -> Crypto.Generator<Authentication.Signature> {
         return Crypto.Generator(id: "signature", args: [message, ed25519SecretKey]) {
-            var cEd25519Seckey: [UInt8] = ed25519SecretKey
+            var cEd25519SecretKey: [UInt8] = ed25519SecretKey
             var cMessage: [UInt8] = message
             var cSignature: [UInt8] = [UInt8](repeating: 0, count: 64)
             
-            guard session_ed25519_sign(&cEd25519Seckey, &cMessage, cMessage.count, &cSignature) else {
-                throw CryptoError.signatureGenerationFailed
-            }
+            guard
+                cEd25519SecretKey.count == 64,
+                session_ed25519_sign(&cEd25519SecretKey, &cMessage, cMessage.count, &cSignature)
+            else { throw CryptoError.signatureGenerationFailed }
             
             return Authentication.Signature.standard(signature: cSignature)
         }
@@ -170,6 +188,7 @@ public extension Crypto.Generator {
             var cData: [UInt8] = data
             
             guard
+                cCurve25519PrivateKey.count == 32,
                 session_xed25519_sign(
                     &cSignature,
                     &cCurve25519PrivateKey,

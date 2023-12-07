@@ -22,11 +22,11 @@ public protocol CryptoType {
 
 public extension CryptoType {
     func generate<R>(_ generator: Crypto.Generator<R>) -> R? {
-        return try? generator.generate()
+        return try? tryGenerate(generator)
     }
     
     func generateResult<R>(_ generator: Crypto.Generator<R>) -> Result<R, Error> {
-        return Result(try generator.generate())
+        return Result(try tryGenerate(generator))
     }
 }
 

@@ -42,7 +42,7 @@ class LibSessionSpec: QuickSpec {
         @TestState(singleton: .crypto, in: dependencies) var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
                 crypto
-                    .when { $0.generate(.ed25519KeyPair(seed: .any)) }
+                    .when { $0.generate(.ed25519KeyPair()) }
                     .thenReturn(
                         KeyPair(
                             publicKey: Data.data(
@@ -55,10 +55,8 @@ class LibSessionSpec: QuickSpec {
                         )
                     )
                 crypto
-                    .when { try $0.tryGenerate(.signature(message: .any, ed25519SecretKey: .any)) }
-                    .thenReturn(
-                        Authentication.Signature.standard(signature: Array("TestSignature".data(using: .utf8)!))
-                    )
+                    .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
+                    .thenReturn(Authentication.Signature.standard(signature: Array("TestSignature".data(using: .utf8)!)))
             }
         )
         @TestState(singleton: .network, in: dependencies) var mockNetwork: MockNetwork! = MockNetwork(
@@ -81,9 +79,9 @@ class LibSessionSpec: QuickSpec {
             }
         )
         
-        @TestState var createGroupOutput: SessionUtil.CreatedGroupInfo! = {
+        @TestState var createGroupOutput: LibSession.CreatedGroupInfo! = {
             mockStorage.write(using: dependencies) { db in
-                 try SessionUtil.createGroup(
+                 try LibSession.createGroup(
                     db,
                     name: "TestGroup",
                     description: nil,
@@ -387,9 +385,7 @@ class LibSessionSpec: QuickSpec {
                 it("throws when it fails to generate a new identity ed25519 keyPair") {
                     var resultError: Error? = nil
                     
-                    mockCrypto
-                        .when { $0.generate(.ed25519KeyPair(seed: .any)) }
-                        .thenReturn(nil)
+                    mockCrypto.when { $0.generate(.ed25519KeyPair()) }.thenReturn(nil)
                     
                     mockStorage.write { db in
                         do {

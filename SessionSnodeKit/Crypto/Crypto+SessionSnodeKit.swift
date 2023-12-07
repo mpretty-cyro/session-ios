@@ -28,6 +28,7 @@ internal extension Crypto.Generator {
             var cSessionId: [CChar] = [CChar](repeating: 0, count: 67)
             
             guard
+                cNonce.count == 24,
                 session_decrypt_ons_response(
                     &cLowercaseName,
                     cLowercaseName.count,

@@ -24,6 +24,8 @@ public extension Crypto.Generator {
             var cBlindedSeckey: [UInt8] = [UInt8](repeating: 0, count: 32)
 
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_blind15_key_pair(
                     &cEd25519SecretKey,
                     &cServerPublicKey,
@@ -51,6 +53,8 @@ public extension Crypto.Generator {
             var cBlindedSeckey: [UInt8] = [UInt8](repeating: 0, count: 32)
 
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_blind25_key_pair(
                     &cEd25519SecretKey,
                     &cServerPublicKey,
@@ -78,6 +82,8 @@ public extension Crypto.Generator {
             var cSignature: [UInt8] = [UInt8](repeating: 0, count: 64)
             
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_blind15_sign(
                     &cEd25519SecretKey,
                     &cServerPublicKey,
@@ -106,6 +112,8 @@ public extension Crypto.Generator {
             var cSignature: [UInt8] = [UInt8](repeating: 0, count: 64)
             
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_blind25_sign(
                     &cEd25519SecretKey,
                     &cServerPublicKey,
@@ -163,7 +171,7 @@ public extension Crypto.Generator {
             }()
             
             var cPlaintext: [UInt8] = Array(plaintext)
-            var cEd25519PrivKey: [UInt8] = ed25519KeyPair.secretKey
+            var cEd25519SecretKey: [UInt8] = ed25519KeyPair.secretKey
             var cRecipientBlindedId: [UInt8] = Array(Data(hex: recipientBlindedId))
             var cServerPublicKey: [UInt8] = Array(Data(hex: serverPublicKey))
             var maybeCiphertext: UnsafeMutablePointer<UInt8>? = nil
@@ -174,10 +182,12 @@ public extension Crypto.Generator {
             }
             
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_encrypt_for_blinded_recipient(
                     &cPlaintext,
                     cPlaintext.count,
-                    &cEd25519PrivKey,
+                    &cEd25519SecretKey,
                     &cServerPublicKey,
                     &cRecipientBlindedId,
                     &maybeCiphertext,
@@ -210,7 +220,7 @@ public extension Crypto.Generator {
             }()
             
             var cCiphertext: [UInt8] = Array(ciphertext)
-            var cEd25519PrivKey: [UInt8] = ed25519KeyPair.secretKey
+            var cEd25519SecretKey: [UInt8] = ed25519KeyPair.secretKey
             var cSenderId: [UInt8] = Array(Data(hex: senderId))
             var cRecipientId: [UInt8] = Array(Data(hex: recipientId))
             var cServerPublicKey: [UInt8] = Array(Data(hex: serverPublicKey))
@@ -221,10 +231,12 @@ public extension Crypto.Generator {
             }
             
             guard
+                cEd25519SecretKey.count == 64,
+                cServerPublicKey.count == 32,
                 session_decrypt_for_blinded_recipient(
                     &cCiphertext,
                     cCiphertext.count,
-                    &cEd25519PrivKey,
+                    &cEd25519SecretKey,
                     &cServerPublicKey,
                     &cSenderId,
                     &cRecipientId,
