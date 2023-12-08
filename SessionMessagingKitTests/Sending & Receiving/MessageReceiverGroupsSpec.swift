@@ -230,6 +230,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 adminSignature: .standard(signature: "TestSignature".bytes)
             )
             result.sender = "051111111111111111111111111111111111111111111111111111111111111111"
+            result.sentTimestamp = 1234567890000
             
             return result
         }()

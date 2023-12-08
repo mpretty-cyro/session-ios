@@ -83,8 +83,8 @@ class OpenGroupManagerSpec: QuickSpec {
         )
         @TestState var testDirectMessage: OpenGroupAPI.DirectMessage! = OpenGroupAPI.DirectMessage(
             id: 128,
-            sender: "15\(TestConstants.publicKey)",
-            recipient: "15\(TestConstants.publicKey)",
+            sender: "15\(TestConstants.blind15PublicKey)",
+            recipient: "15\(TestConstants.blind15PublicKey)",
             posted: 1234567890,
             expires: 1234567990,
             base64EncodedMessage: Data(
@@ -2094,7 +2094,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     it("retrieves an existing blinded id lookup") {
                         mockStorage.write { db in
                             try BlindedIdLookup(
-                                blindedId: "15\(TestConstants.publicKey)",
+                                blindedId: "15\(TestConstants.blind15PublicKey)",
                                 sessionId: "TestSessionId",
                                 openGroupServer: "testserver",
                                 openGroupPublicKey: "05\(TestConstants.publicKey)"
