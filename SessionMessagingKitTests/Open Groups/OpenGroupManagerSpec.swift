@@ -1869,6 +1869,7 @@ class OpenGroupManagerSpec: QuickSpec {
                         }
                         .thenReturn((
                             plaintext: Data(base64Encoded:"ChQKC1Rlc3RNZXNzYWdlONCI7I/3Iw==")! +
+                            Data([0x80]) +
                             Data([UInt8](repeating: 0, count: 32)),
                             senderSessionIdHex: "05\(TestConstants.publicKey)"
                         ))
@@ -1997,14 +1998,23 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     // MARK: ------ ignores a message with invalid data
                     it("ignores a message with invalid data") {
-                        testDirectMessage = OpenGroupAPI.DirectMessage(
-                            id: testDirectMessage.id,
-                            sender: testDirectMessage.sender.replacingOccurrences(of: "8", with: "9"),
-                            recipient: testDirectMessage.recipient,
-                            posted: testDirectMessage.posted,
-                            expires: testDirectMessage.expires,
-                            base64EncodedMessage: Data([1, 2, 3]).base64EncodedString()
-                        )
+                        mockCrypto
+                            .when {
+                                $0.generate(
+                                    .plaintextWithSessionBlindingProtocol(
+                                        .any,
+                                        ciphertext: .any,
+                                        senderId: .any,
+                                        recipientId: .any,
+                                        serverPublicKey: .any,
+                                        using: .any
+                                    )
+                                )
+                            }
+                            .thenReturn((
+                                plaintext: Data("TestInvalid".bytes),
+                                senderSessionIdHex: "05\(TestConstants.publicKey)"
+                            ))
                         
                         mockStorage.write { db in
                             OpenGroupManager.handleDirectMessages(
@@ -2139,21 +2149,30 @@ class OpenGroupManagerSpec: QuickSpec {
                         expect(mockStorage.read { db -> Int in try SessionThread.fetchCount(db) }).to(equal(2))
                         expect(
                             mockStorage.read { db -> SessionThread? in
-                                try SessionThread.fetchOne(db, id: "15\(TestConstants.publicKey)")
+                                try SessionThread.fetchOne(db, id: "15\(TestConstants.blind15PublicKey)")
                             }
                         ).toNot(beNil())
                     }
                     
                     // MARK: ------ ignores a message with invalid data
                     it("ignores a message with invalid data") {
-                        testDirectMessage = OpenGroupAPI.DirectMessage(
-                            id: testDirectMessage.id,
-                            sender: testDirectMessage.sender.replacingOccurrences(of: "8", with: "9"),
-                            recipient: testDirectMessage.recipient,
-                            posted: testDirectMessage.posted,
-                            expires: testDirectMessage.expires,
-                            base64EncodedMessage: Data([1, 2, 3]).base64EncodedString()
-                        )
+                        mockCrypto
+                            .when {
+                                $0.generate(
+                                    .plaintextWithSessionBlindingProtocol(
+                                        .any,
+                                        ciphertext: .any,
+                                        senderId: .any,
+                                        recipientId: .any,
+                                        serverPublicKey: .any,
+                                        using: .any
+                                    )
+                                )
+                            }
+                            .thenReturn((
+                                plaintext: Data("TestInvalid".bytes),
+                                senderSessionIdHex: "05\(TestConstants.publicKey)"
+                            ))
                         
                         mockStorage.write { db in
                             OpenGroupManager.handleDirectMessages(

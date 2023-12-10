@@ -33,18 +33,18 @@ class CryptoSMKSpec: QuickSpec {
         describe("Crypto for SessionMessagingKit") {
             // MARK: -- can convert an ed25519 public key into an x25519 public key
             it("can convert an ed25519 public key into an x25519 public key") {
-                let result = crypto.generate(.x25519(ed25519Pubkey: TestConstants.edPublicKey.bytes))
+                let result = crypto.generate(.x25519(ed25519Pubkey: Array(Data(hex: TestConstants.edPublicKey))))
                 
                 expect(result?.toHexString())
-                    .to(equal("95ffb559d4e804e9b414a5178454c426f616b4a61089b217b41165dbb7c9fe2d"))
+                    .to(equal("88672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
             }
             
             // MARK: -- can convert an ed25519 private key into an x25519 private key
             it("can convert an ed25519 private key into an x25519 private key") {
-                let result = crypto.generate(.x25519(ed25519Seckey: TestConstants.edSecretKey.bytes))
+                let result = crypto.generate(.x25519(ed25519Seckey: Array(Data(hex: TestConstants.edSecretKey))))
                 
                 expect(result?.toHexString())
-                    .to(equal("c83f9a1479b103c275d2db2d6c199fdc6f589b29b742f6405e01cc5a9a1d135d"))
+                    .to(equal("30d796c1ddb4dc455fd998a98aa275c247494a9a7bde9c1fee86ae45cd585241"))
             }
             
             // MARK: -- when generating a hash
