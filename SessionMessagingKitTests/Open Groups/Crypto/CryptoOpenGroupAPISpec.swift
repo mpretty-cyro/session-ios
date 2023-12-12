@@ -27,7 +27,6 @@ class CryptoOpenGroupAPISpec: QuickSpec {
             }
         )
         @TestState(singleton: .crypto, in: dependencies) var crypto: Crypto! = Crypto()
-        @TestState var mockCrypto: MockCrypto! = MockCrypto()
         
         // MARK: - Crypto for OpenGroupAPI
         describe("Crypto for OpenGroupAPI") {

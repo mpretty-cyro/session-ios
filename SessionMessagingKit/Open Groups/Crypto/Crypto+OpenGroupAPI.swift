@@ -139,9 +139,9 @@ public extension Crypto.Verification {
             id: "sessionId",
             args: [standardSessionId, blindedSessionId, serverPublicKey]
         ) {
-            var cSessionId: [UInt8] = Array(Data(hex: standardSessionId))
-            var cBlindedId15: [UInt8] = Array(Data(hex: blindedSessionId))
-            var cServerPublicKey: [UInt8] = Array(Data(hex: serverPublicKey))
+            var cSessionId: [CChar] = standardSessionId.cArray
+            var cBlindedId15: [CChar] = blindedSessionId.cArray
+            var cServerPublicKey: [CChar] = serverPublicKey.cArray
             
             return session_id_matches_blinded_id(
                 &cSessionId,
@@ -176,10 +176,6 @@ public extension Crypto.Generator {
             var cServerPublicKey: [UInt8] = Array(Data(hex: serverPublicKey))
             var maybeCiphertext: UnsafeMutablePointer<UInt8>? = nil
             var ciphertextLen: Int = 0
-            
-                }
-            }
-            }
             
             guard
                 cEd25519SecretKey.count == 64,
@@ -227,8 +223,6 @@ public extension Crypto.Generator {
             var cSenderSessionId: [CChar] = [CChar](repeating: 0, count: 67)
             var maybePlaintext: UnsafeMutablePointer<UInt8>? = nil
             var plaintextLen: Int = 0
-            
-            }
             
             guard
                 cEd25519SecretKey.count == 64,
