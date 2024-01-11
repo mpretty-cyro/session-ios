@@ -154,7 +154,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             dependencies[defaults: .appGroup, key: .isCallOngoing] = false
             dependencies[defaults: .appGroup, key: .lastCallPreOffer] = nil
             
-            if CurrentAppContext().isInBackground() {
+            if Singleton.hasAppContext && Singleton.appContext.isInBackground {
                 (UIApplication.shared.delegate as? AppDelegate)?.stopPollers(using: dependencies)
                 DDLog.flushLog()
             }
@@ -200,10 +200,8 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         callUpdate.supportsDTMF = false
     }
     
-    public static func suspendDatabaseIfCallEndedInBackground(
-        using dependencies: Dependencies = Dependencies()
-    ) {
-        if CurrentAppContext().isInBackground() {
+    public static func suspendDatabaseIfCallEndedInBackground() {
+        if Singleton.hasAppContext && Singleton.appContext.isInBackground {
             // Stop all jobs except for message sending and when completed suspend the database
             dependencies[singleton: .jobRunner].stopAndClearPendingJobs(exceptForVariant: .messageSend) {
                 Storage.suspendDatabaseAccess()
@@ -226,9 +224,9 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             }
             
             DispatchQueue.main.async {
-                guard CurrentAppContext().isMainAppAndActive else { return }
+                guard Singleton.hasAppContext && Singleton.appContext.isMainAppAndActive else { return }
                 
-                guard let presentingVC = CurrentAppContext().frontmostViewController() else {
+                guard let presentingVC = Singleton.appContext.frontmostViewController else {
                     preconditionFailure()   // FIXME: Handle more gracefully
                 }
                 
@@ -248,6 +246,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     }
     
     public func handleAnswerMessage(_ message: CallMessage) {
+        guard Singleton.hasAppContext else { return }
         guard Thread.isMainThread else {
             DispatchQueue.main.async {
                 self.handleAnswerMessage(message)
@@ -255,10 +254,11 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             return
         }
         
-        (CurrentAppContext().frontmostViewController() as? CallVC)?.handleAnswerMessage(message)
+        (Singleton.appContext.frontmostViewController as? CallVC)?.handleAnswerMessage(message)
     }
     
     public func dismissAllCallUI() {
+        guard Singleton.hasAppContext else { return }
         guard Thread.isMainThread else {
             DispatchQueue.main.async {
                 self.dismissAllCallUI()
@@ -267,7 +267,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         }
         
         IncomingCallBanner.current?.dismiss()
-        (CurrentAppContext().frontmostViewController() as? CallVC)?.handleEndCallMessage()
+        (Singleton.appContext.frontmostViewController as? CallVC)?.handleEndCallMessage()
         MiniCallView.current?.dismiss()
     }
 }
