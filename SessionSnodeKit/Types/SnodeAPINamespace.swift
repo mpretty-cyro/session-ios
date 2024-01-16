@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtil
 import SessionUtilitiesKit
 
 public extension SnodeAPI {
@@ -202,6 +203,26 @@ public extension SnodeAPI {
                 
                 case .unknown: return "unknown"
                 case .all: return "all"
+            }
+        }
+    }
+}
+
+// MARK: - LibSession extension
+
+public extension SnodeAPI.Namespace {
+    var cNamespace: SessionUtil.NAMESPACE {
+        get throws {
+            switch self {
+                case .configContacts: return NAMESPACE_CONTACTS
+                case .configConvoInfoVolatile: return NAMESPACE_CONVO_INFO_VOLATILE
+                case .configUserGroups: return NAMESPACE_USER_GROUPS
+                case .configUserProfile: return NAMESPACE_USER_PROFILE
+                    
+                case .configGroupInfo: return NAMESPACE_GROUP_INFO
+                case .configGroupMembers: return NAMESPACE_GROUP_MEMBERS
+                case .configGroupKeys: return NAMESPACE_GROUP_KEYS
+                default: throw CryptoError.failedToGenerateOutput
             }
         }
     }

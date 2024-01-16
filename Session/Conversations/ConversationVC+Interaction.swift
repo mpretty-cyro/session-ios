@@ -83,7 +83,8 @@ extension ConversationVC:
                         threadVariant: self.viewModel.threadData.threadVariant,
                         currentUserIsClosedGroupMember: self.viewModel.threadData.currentUserIsClosedGroupMember,
                         currentUserIsClosedGroupAdmin: self.viewModel.threadData.currentUserIsClosedGroupAdmin,
-                        config: self.viewModel.threadData.disappearingMessagesConfiguration!
+                        config: self.viewModel.threadData.disappearingMessagesConfiguration!,
+                        using: self.viewModel.dependencies
                     )
                 )
                 navigationController?.pushViewController(viewController, animated: true)
@@ -106,7 +107,8 @@ extension ConversationVC:
                             }
                         }
                     }
-                }
+                },
+                using: self.viewModel.dependencies
             )
         )
         navigationController?.pushViewController(viewController, animated: true)
@@ -145,18 +147,28 @@ extension ConversationVC:
             return
         }
         
-        Permissions.requestMicrophonePermissionIfNeeded()
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies)
         
         let threadId: String = self.viewModel.threadData.threadId
         
         guard AVAudioSession.sharedInstance().recordPermission == .granted else { return }
         guard self.viewModel.threadData.threadVariant == .contact else { return }
-        guard AppEnvironment.shared.callManager.currentCall == nil else { return }
-        guard let call: SessionCall = Dependencies()[singleton: .storage].read({ db in SessionCall(db, for: threadId, uuid: UUID().uuidString.lowercased(), mode: .offer, outgoing: true) }) else {
-            return
-        }
+        guard viewModel.dependencies[singleton: .callManager].currentCall == nil else { return }
+        guard
+            let call: SessionCall = viewModel.dependencies[singleton: .storage]
+                .read({ [dependencies = viewModel.dependencies] db in
+                    SessionCall(
+                        db,
+                        for: threadId,
+                        uuid: UUID().uuidString.lowercased(),
+                        mode: .offer,
+                        outgoing: true,
+                        using: dependencies
+                    )
+                })
+        else { return }
         
-        let callVC = CallVC(for: call)
+        let callVC = CallVC(for: call, using: viewModel.dependencies)
         callVC.conversationVC = self
         hideInputAccessoryView()
         
@@ -279,14 +291,14 @@ extension ConversationVC:
     // MARK: - ExpandingAttachmentsButtonDelegate
 
     func handleGIFButtonTapped() {
-        guard Dependencies()[singleton: .storage, key: .isGiphyEnabled] else {
+        guard viewModel.dependencies[singleton: .storage, key: .isGiphyEnabled] else {
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "GIPHY_PERMISSION_TITLE".localized(),
                     body: .text("GIPHY_PERMISSION_MESSAGE".localized()),
                     confirmTitle: "continue_2".localized()
-                ) { [weak self] _ in
-                    Dependencies()[singleton: .storage].writeAsync(
+                ) { [weak self, dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage].writeAsync(
                         updates: { db in
                             db[.isGiphyEnabled] = true
                         },
@@ -303,7 +315,7 @@ extension ConversationVC:
             return
         }
         
-        let gifVC = GifPickerViewController()
+        let gifVC = GifPickerViewController(using: viewModel.dependencies)
         gifVC.delegate = self
         
         let navController = StyledNavigationController(rootViewController: gifVC)
@@ -325,11 +337,12 @@ extension ConversationVC:
         let threadId: String = self.viewModel.threadData.threadId
         let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
         
-        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded(using: self.viewModel.dependencies) { [weak self, dependencies = self.viewModel.dependencies] in
             DispatchQueue.main.async {
                 let sendMediaNavController = SendMediaNavigationController.showingMediaLibraryFirst(
                     threadId: threadId,
-                    threadVariant: threadVariant
+                    threadVariant: threadVariant,
+                    using: dependencies
                 )
                 sendMediaNavController.sendMediaNavDelegate = self
                 sendMediaNavController.modalPresentationStyle = .fullScreen
@@ -339,9 +352,11 @@ extension ConversationVC:
     }
     
     func handleCameraButtonTapped() {
-        guard Permissions.requestCameraPermissionIfNeeded(presentingViewController: self) else { return }
+        guard Permissions.requestCameraPermissionIfNeeded(presentingViewController: self, using: viewModel.dependencies) else {
+            return
+        }
         
-        Permissions.requestMicrophonePermissionIfNeeded()
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies)
         
         if AVAudioSession.sharedInstance().recordPermission != .granted {
             SNLog("Proceeding without microphone access. Any recorded video will be silent.")
@@ -349,7 +364,8 @@ extension ConversationVC:
         
         let sendMediaNavController = SendMediaNavigationController.showingCameraFirst(
             threadId: self.viewModel.threadData.threadId,
-            threadVariant: self.viewModel.threadData.threadVariant
+            threadVariant: self.viewModel.threadData.threadVariant,
+            using: self.viewModel.dependencies
         )
         sendMediaNavController.sendMediaNavDelegate = self
         sendMediaNavController.modalPresentationStyle = .fullScreen
@@ -406,7 +422,7 @@ extension ConversationVC:
         }
         
         let fileName = urlResourceValues.name ?? NSLocalizedString("ATTACHMENT_DEFAULT_FILENAME", comment: "")
-        guard let dataSource = DataSourcePath.dataSource(with: url, shouldDeleteOnDeallocation: false) else {
+        guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false) else {
             DispatchQueue.main.async { [weak self] in
                 let modal: ConfirmationModal = ConfirmationModal(
                     targetView: self?.view,
@@ -434,26 +450,29 @@ extension ConversationVC:
     }
 
     func showAttachmentApprovalDialog(for attachments: [SignalAttachment]) {
-        let navController = AttachmentApprovalViewController.wrappedInNavController(
+        guard let navController = AttachmentApprovalViewController.wrappedInNavController(
             threadId: self.viewModel.threadData.threadId,
             threadVariant: self.viewModel.threadData.threadVariant,
             attachments: attachments,
-            approvalDelegate: self
-        )
+            approvalDelegate: self,
+            using: self.viewModel.dependencies
+        ) else { return }
+        
         navController.modalPresentationStyle = .fullScreen
         
         present(navController, animated: true, completion: nil)
     }
 
     func showAttachmentApprovalDialogAfterProcessingVideo(at url: URL, with fileName: String) {
-        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: true, message: nil) { [weak self] modalActivityIndicator in
-            let dataSource = DataSourcePath.dataSource(with: url, shouldDeleteOnDeallocation: false)!
+        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: true, message: nil) { [weak self, dependencies = self.viewModel.dependencies] modalActivityIndicator in
+            let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false)!
             dataSource.sourceFilename = fileName
             
             SignalAttachment
                 .compressVideoAsMp4(
                     dataSource: dataSource,
-                    dataUTI: kUTTypeMPEG4 as String
+                    dataUTI: kUTTypeMPEG4 as String,
+                    using: dependencies
                 )
                 .attachmentPublisher
                 .sinkUntilComplete(
@@ -668,14 +687,14 @@ extension ConversationVC:
     }
 
     func handleMessageSent() {
-        if Dependencies()[singleton: .storage, key: .playNotificationSoundInForeground] {
+        if viewModel.dependencies[singleton: .storage, key: .playNotificationSoundInForeground] {
             let soundID = Preferences.Sound.systemSoundId(for: .messageSent, quiet: true)
             AudioServicesPlaySystemSound(soundID)
         }
         
         let threadId: String = self.viewModel.threadData.threadId
         
-        Dependencies()[singleton: .storage].writeAsync { db in
+        viewModel.dependencies[singleton: .storage].writeAsync { db in
             TypingIndicators.didStopTyping(db, threadId: threadId, direction: .outgoing)
             
             _ = try SessionThread
@@ -690,8 +709,8 @@ extension ConversationVC:
                 title: "modal_link_previews_title".localized(),
                 body: .text("modal_link_previews_explanation".localized()),
                 confirmTitle: "modal_link_previews_button_title".localized()
-            ) { [weak self] _ in
-                Dependencies()[singleton: .storage].writeAsync { db in
+            ) { [weak self, dependencies = viewModel.dependencies] _ in
+                dependencies[singleton: .storage].writeAsync { db in
                     db[.areLinkPreviewsEnabled] = true
                 }
                 
@@ -724,7 +743,7 @@ extension ConversationVC:
             )
             
             if needsToStartTypingIndicator {
-                Dependencies()[singleton: .storage].writeAsync { db in
+                viewModel.dependencies[singleton: .storage].writeAsync { db in
                     TypingIndicators.start(db, threadId: threadId, direction: .outgoing)
                 }
             }
@@ -738,15 +757,17 @@ extension ConversationVC:
     func didPasteImageFromPasteboard(_ image: UIImage) {
         guard let imageData = image.jpegData(compressionQuality: 1.0) else { return }
         
-        let dataSource = DataSourceValue.dataSource(with: imageData, utiType: kUTTypeJPEG as String)
+        let dataSource = DataSourceValue(data: imageData, utiType: kUTTypeJPEG as String)
         let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: kUTTypeJPEG as String, imageQuality: .medium)
 
-        let approvalVC = AttachmentApprovalViewController.wrappedInNavController(
+        guard let approvalVC = AttachmentApprovalViewController.wrappedInNavController(
             threadId: self.viewModel.threadData.threadId,
             threadVariant: self.viewModel.threadData.threadVariant,
             attachments: [ attachment ],
-            approvalDelegate: self
-        )
+            approvalDelegate: self,
+            using: self.viewModel.dependencies
+        ) else { return }
+        
         approvalVC.modalPresentationStyle = .fullScreen
         
         self.present(approvalVC, animated: true, completion: nil)
@@ -909,7 +930,9 @@ extension ConversationVC:
 
     func handleItemTapped(
         _ cellViewModel: MessageViewModel,
-        gestureRecognizer: UITapGestureRecognizer
+        cell: UITableViewCell,
+        cellLocation: CGPoint,
+        using dependencies: Dependencies
     ) {
         guard cellViewModel.variant != .standardOutgoing || (cellViewModel.state != .failed && cellViewModel.state != .failedToSync) else {
             // Show the failed message sheet
@@ -957,24 +980,33 @@ extension ConversationVC:
             return
         }
         
+        /// Takes the `cell` and a `targetView` and returns `true` if the user tapped a link in the cell body text instead
+        /// of the `targetView`
+        func handleLinkTapIfNeeded(cell: UITableViewCell, targetView: UIView?) -> Bool {
+            let locationInTargetView: CGPoint = cell.convert(cellLocation, to: targetView)
+            
+            guard
+                let visibleCell: VisibleMessageCell = cell as? VisibleMessageCell,
+                targetView?.bounds.contains(locationInTargetView) != true,
+                visibleCell.bodyTappableLabel?.containsLinks == true
+            else { return false }
+            
+            let tappableLabelPoint: CGPoint = cell.convert(cellLocation, to: visibleCell.bodyTappableLabel)
+            visibleCell.bodyTappableLabel?.handleTouch(at: tappableLabelPoint)
+            return true
+        }
+        
         switch cellViewModel.cellType {
             case .voiceMessage: viewModel.playOrPauseAudio(for: cellViewModel)
             
             case .mediaMessage:
                 guard
-                    let sectionIndex: Int = self.viewModel.interactionData
-                        .firstIndex(where: { $0.model == .messages }),
-                    let messageIndex: Int = self.viewModel.interactionData[sectionIndex]
-                        .elements
-                        .firstIndex(where: { $0.id == cellViewModel.id }),
-                    let cell = tableView.cellForRow(at: IndexPath(row: messageIndex, section: sectionIndex)) as? VisibleMessageCell,
-                    let albumView: MediaAlbumView = cell.albumView
+                    let albumView: MediaAlbumView = (cell as? VisibleMessageCell)?.albumView,
+                    !handleLinkTapIfNeeded(cell: cell, targetView: albumView)
                 else { return }
                 
-                let locationInCell: CGPoint = gestureRecognizer.location(in: cell)
-                
                 // Figure out which of the media views was tapped
-                let locationInAlbumView: CGPoint = cell.convert(locationInCell, to: albumView)
+                let locationInAlbumView: CGPoint = cell.convert(cellLocation, to: albumView)
                 guard let mediaView = albumView.mediaView(forLocation: locationInAlbumView) else { return }
                 
                 switch mediaView.attachment.state {
@@ -1052,6 +1084,7 @@ extension ConversationVC:
                 
             case .audio:
                 guard
+                    !handleLinkTapIfNeeded(cell: cell, targetView: (cell as? VisibleMessageCell)?.documentView),
                     let attachment: Attachment = cellViewModel.attachments?.first,
                     let originalFilePath: String = attachment.originalFilePath
                 else { return }
@@ -1063,6 +1096,7 @@ extension ConversationVC:
                 
             case .genericAttachment:
                 guard
+                    !handleLinkTapIfNeeded(cell: cell, targetView: (cell as? VisibleMessageCell)?.documentView),
                     let attachment: Attachment = cellViewModel.attachments?.first,
                     let originalFilePath: String = attachment.originalFilePath
                 else { return }
@@ -1073,7 +1107,7 @@ extension ConversationVC:
                 if
                     attachment.isText ||
                     attachment.isMicrosoftDoc ||
-                    attachment.contentType == OWSMimeTypeApplicationPdf
+                    attachment.contentType == MimeTypeUtil.MimeType.applicationPdf
                 {
                     
                     let interactionController: UIDocumentInteractionController = UIDocumentInteractionController(url: fileUrl)
@@ -1095,26 +1129,55 @@ extension ConversationVC:
                 navigationController?.present(shareVC, animated: true, completion: nil)
                 
             case .textOnlyMessage:
-                if let quote: Quote = cellViewModel.quote {
-                    // Scroll to the original quoted message
-                    let maybeOriginalInteractionInfo: Interaction.TimestampInfo? = Dependencies()[singleton: .storage].read { db in
-                        try quote.originalInteraction
-                            .select(.id, .timestampMs)
-                            .asRequest(of: Interaction.TimestampInfo.self)
-                            .fetchOne(db)
-                    }
+                guard let visibleCell: VisibleMessageCell = cell as? VisibleMessageCell else { return }
+                
+                let quotePoint: CGPoint = visibleCell.convert(cellLocation, to: visibleCell.quoteView)
+                let linkPreviewPoint: CGPoint = visibleCell.convert(cellLocation, to: visibleCell.linkPreviewView?.previewView)
+                let tappableLabelPoint: CGPoint = visibleCell.convert(cellLocation, to: visibleCell.bodyTappableLabel)
+                let containsLinks: Bool = (
+                    // If there is only a single link and it matches the LinkPreview then consider this _just_ a
+                    // LinkPreview
+                    visibleCell.bodyTappableLabel?.containsLinks == true && (
+                        (visibleCell.bodyTappableLabel?.links.count ?? 0) > 1 ||
+                        visibleCell.bodyTappableLabel?.links[cellViewModel.linkPreview?.url ?? ""] == nil
+                    )
+                )
+                let quoteViewContainsTouch: Bool = (visibleCell.quoteView?.bounds.contains(quotePoint) == true)
+                let linkPreviewViewContainsTouch: Bool = (visibleCell.linkPreviewView?.previewView.bounds.contains(linkPreviewPoint) == true)
+                
+                switch (containsLinks, quoteViewContainsTouch, linkPreviewViewContainsTouch, cellViewModel.quote, cellViewModel.linkPreview) {
+                    // If the message contains both links and a quote, and the user tapped on the quote; OR the
+                    // message only contained a quote, then scroll to the quote
+                    case (true, true, _, .some(let quote), _), (false, _, _, .some(let quote), _):
+                        let maybeOriginalInteractionInfo: Interaction.TimestampInfo? = dependencies[singleton: .storage].read { db in
+                            try quote.originalInteraction
+                                .select(.id, .timestampMs)
+                                .asRequest(of: Interaction.TimestampInfo.self)
+                                .fetchOne(db)
+                        }
+                        
+                        guard let interactionInfo: Interaction.TimestampInfo = maybeOriginalInteractionInfo else {
+                            return
+                        }
+                        
+                        self.scrollToInteractionIfNeeded(
+                            with: interactionInfo,
+                            focusBehaviour: .highlight,
+                            originalIndexPath: self.tableView.indexPath(for: cell)
+                        )
                     
-                    guard let interactionInfo: Interaction.TimestampInfo = maybeOriginalInteractionInfo else {
-                        return
-                    }
+                    // If the message contains both links and a LinkPreview, and the user tapped on
+                    // the LinkPreview; OR the message only contained a LinkPreview, then open the link
+                    case (true, _, true, _, .some(let linkPreview)), (false, _, _, _, .some(let linkPreview)):
+                        switch linkPreview.variant {
+                            case .standard: openUrl(linkPreview.url)
+                            case .openGroupInvitation: joinOpenGroup(name: linkPreview.title, url: linkPreview.url)
+                        }
                     
-                    self.scrollToInteractionIfNeeded(with: interactionInfo, focusBehaviour: .highlight)
-                }
-                else if let linkPreview: LinkPreview = cellViewModel.linkPreview {
-                    switch linkPreview.variant {
-                        case .standard: openUrl(linkPreview.url)
-                        case .openGroupInvitation: joinOpenGroup(name: linkPreview.title, url: linkPreview.url)
-                    }
+                    // If the message contained links then interact with them directly
+                    case (true, _, _, _, _): visibleCell.bodyTappableLabel?.handleTouch(at: tappableLabelPoint)
+                        
+                    default: break
                 }
                 
             default: break
@@ -1567,7 +1630,7 @@ extension ConversationVC:
     
     func handleReactionSentFailure(_ pendingReaction: Reaction?, remove: Bool) {
         guard let pendingReaction = pendingReaction else { return }
-        Dependencies()[singleton: .storage].writeAsync { db in
+        viewModel.dependencies[singleton: .storage].writeAsync { db in
             // Reverse the database
             if remove {
                 try pendingReaction.insert(db)
@@ -1593,7 +1656,8 @@ extension ConversationVC:
             },
             dismissHandler: { [weak self] in
                 self?.showInputAccessoryView()
-            }
+            },
+            using: self.viewModel.dependencies
         )
         
         present(emojiPicker, animated: true, completion: nil)
@@ -1668,7 +1732,7 @@ extension ConversationVC:
                         )
                 ),
                 confirmTitle: "JOIN_COMMUNITY_BUTTON_TITLE".localized(),
-                onConfirm: { modal in
+                onConfirm: { [dependencies = viewModel.dependencies] modal in
                     guard let presentingViewController: UIViewController = modal.presentingViewController else {
                         return
                     }
@@ -1685,7 +1749,7 @@ extension ConversationVC:
                         return presentingViewController.present(errorModal, animated: true, completion: nil)
                     }
                     
-                    Dependencies()[singleton: .storage]
+                    dependencies[singleton: .storage]
                         .writePublisher { db in
                             OpenGroupManager.shared.add(
                                 db,
@@ -1714,7 +1778,7 @@ extension ConversationVC:
                                         // If there was a failure then the group will be in invalid state until
                                         // the next launch so remove it (the user will be left on the previous
                                         // screen so can re-trigger the join)
-                                        Dependencies()[singleton: .storage].writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             OpenGroupManager.shared.delete(
                                                 db,
                                                 openGroupId: OpenGroup.idFor(roomToken: room, server: server),
@@ -1872,7 +1936,7 @@ extension ConversationVC:
                         attachment.state == .downloaded ||
                         attachment.state == .uploaded
                     ),
-                    let utiType: String = MIMETypeUtil.utiType(forMIMEType: attachment.contentType),
+                    let utiType: String = MimeTypeUtil.utiType(for: attachment.contentType),
                     let originalFilePath: String = attachment.originalFilePath,
                     let data: Data = try? Data(contentsOf: URL(fileURLWithPath: originalFilePath))
                 else { return }
@@ -2166,8 +2230,10 @@ extension ConversationVC:
     // MARK: - VoiceMessageRecordingViewDelegate
 
     func startVoiceMessageRecording() {
+        guard viewModel.dependencies.hasInitialised(singleton: .appContext) else { return }
+        
         // Request permission if needed
-        Permissions.requestMicrophonePermissionIfNeeded() { [weak self] in
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.cancelVoiceMessageRecording()
             }
@@ -2181,8 +2247,8 @@ extension ConversationVC:
         self.viewModel.stopAudio()
         
         // Create URL
-        let directory: String = OWSTemporaryDirectory()
-        let fileName: String = "\(SnodeAPI.currentOffsetTimestampMs()).m4a"
+        let directory: String = viewModel.dependencies[singleton: .appContext].temporaryDirectory
+        let fileName: String = "\(SnodeAPI.currentOffsetTimestampMs(using: viewModel.dependencies)).m4a"
         let url: URL = URL(fileURLWithPath: directory).appendingPathComponent(fileName)
         
         // Set up audio session
@@ -2266,7 +2332,7 @@ extension ConversationVC:
         }
         
         // Get data
-        let dataSourceOrNil = DataSourcePath.dataSource(with: audioRecorder.url, shouldDeleteOnDeallocation: true)
+        let dataSourceOrNil = DataSourcePath(fileUrl: audioRecorder.url, shouldDeleteOnDeinit: true)
         self.audioRecorder = nil
         
         guard let dataSource = dataSourceOrNil else { return SNLog("Couldn't load recorded data.") }

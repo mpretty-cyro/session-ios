@@ -226,11 +226,6 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Note: This is a hack to ensure `isRTL` is initially gets run on the main thread so the value
-        // is cached (it gets called on background threads and if it hasn't cached the value then it can
-        // cause odd performance issues since it accesses UIKit)
-        _ = CurrentAppContext().isRTL
-        
         // Preparation
         SessionApp.homeViewController.mutate { $0 = self }
         
@@ -531,7 +526,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         // Container view
         let profilePictureViewContainer = UIView()
         profilePictureViewContainer.addSubview(profilePictureView)
-        profilePictureView.autoPinEdgesToSuperviewEdges()
+        profilePictureView.pin(to: profilePictureViewContainer)
         profilePictureViewContainer.addSubview(pathStatusView)
         pathStatusView.pin(.trailing, to: .trailing, of: profilePictureViewContainer)
         pathStatusView.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
@@ -842,7 +837,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     }
     
     func createNewDMFromDeepLink(sessionId: String) {
-        let newDMVC = NewDMVC(sessionId: sessionId, shouldShowBackButton: false)
+        let newDMVC = NewDMVC(sessionId: sessionId, shouldShowBackButton: false, using: dependencies)
         let navigationController = StyledNavigationController(rootViewController: newDMVC)
         if UIDevice.current.isIPad {
             navigationController.modalPresentationStyle = .fullScreen

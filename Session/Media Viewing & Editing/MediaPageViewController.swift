@@ -180,8 +180,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         galleryRailView.isHidden = true
         galleryRailView.delegate = self
-        galleryRailView.autoSetDimension(.height, toSize: 72)
-        footerBar.autoSetDimension(.height, toSize: 44)
+        galleryRailView.set(.height, to: 72)
+        footerBar.set(.height, to: 44)
 
         let bottomContainer: DynamicallySizedView = DynamicallySizedView()
         bottomContainer.clipsToBounds = true
@@ -193,7 +193,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         bottomStack.axis = .vertical
         bottomStack.isLayoutMarginsRelativeArrangement = true
         bottomContainer.addSubview(bottomStack)
-        bottomStack.autoPinEdgesToSuperviewEdges()
+        bottomStack.pin(to: bottomContainer)
         
         let galleryRailBlockingView: UIView = UIView()
         galleryRailBlockingView.themeBackgroundColor = .backgroundPrimary
@@ -790,7 +790,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         self.navigationController?.view.isUserInteractionEnabled = false
         self.navigationController?.dismiss(animated: true, completion: { [weak self] in
-            if !IsLandscapeOrientationEnabled() {
+            if !UIDevice.current.isIPad {
                 UIDevice.current.ows_setOrientation(.portrait)
             }
             
@@ -853,13 +853,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         containerView.layoutMargins = UIEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
 
         containerView.addSubview(stackView)
-
-        stackView.autoPinEdge(toSuperviewMargin: .top, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .trailing, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .bottom, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .leading, relation: .greaterThanOrEqual)
-        stackView.setContentHuggingHigh()
-        stackView.autoCenterInSuperview()
+        stackView.pin(.top, greaterThanOrEqualTo: .top, of: containerView)
+        stackView.pin(.trailing, greaterThanOrEqualTo: .trailing, of: containerView)
+        stackView.pin(.bottom, lessThanOrEqualTo: .bottom, of: containerView)
+        stackView.pin(.leading, lessThanOrEqualTo: .leading, of: containerView)
+        stackView.setContentHugging(to: .required)
+        stackView.center(in: containerView)
 
         return containerView
     }()

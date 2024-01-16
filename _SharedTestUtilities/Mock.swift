@@ -61,6 +61,17 @@ public class Mock<T> {
         )
     }
     
+    func mockThrowingNoReturn(funcName: String = #function, args: [Any?] = [], untrackedArgs: [Any?] = []) throws {
+        try functionHandler.mockThrowingNoReturn(
+            funcName,
+            parameterCount: args.count,
+            parameterSummary: summary(for: args),
+            allParameterSummaryCombinations: summaries(for: args),
+            args: args,
+            untrackedArgs: untrackedArgs
+        )
+    }
+    
     // MARK: - Functions
     
     internal func reset() {
@@ -138,6 +149,15 @@ protocol MockFunctionHandler {
         args: [Any?],
         untrackedArgs: [Any?]
     ) throws -> Output
+    
+    func mockThrowingNoReturn(
+        _ functionName: String,
+        parameterCount: Int,
+        parameterSummary: String,
+        allParameterSummaryCombinations: [ParameterCombination],
+        args: [Any?],
+        untrackedArgs: [Any?]
+    ) throws
 }
 
 // MARK: - CallDetails
@@ -288,6 +308,22 @@ internal class MockFunctionBuilder<T, R>: MockFunctionHandler {
             case let value as Output: return value
             default: throw MockError.mockedData
         }
+    }
+    
+    func mockThrowingNoReturn(
+        _ functionName: String,
+        parameterCount: Int,
+        parameterSummary: String,
+        allParameterSummaryCombinations: [ParameterCombination],
+        args: [Any?],
+        untrackedArgs: [Any?]
+    ) throws {
+        self.functionName = functionName
+        self.parameterCount = parameterCount
+        self.parameterSummary = parameterSummary
+        self.allParameterSummaryCombinations = allParameterSummaryCombinations
+        
+        if let returnError: Error = returnError { throw returnError }
     }
     
     // MARK: - Build
@@ -443,6 +479,29 @@ internal class FunctionConsumer: MockFunctionHandler {
             case (.some(let error), _): throw error
             case (_, .some(let value as Output)): return value
             default: throw MockError.mockedData
+        }
+    }
+    
+    func mockThrowingNoReturn(
+        _ functionName: String,
+        parameterCount: Int,
+        parameterSummary: String,
+        allParameterSummaryCombinations: [ParameterCombination],
+        args: [Any?],
+        untrackedArgs: [Any?]
+    ) throws {
+        let expectation: MockFunction = getExpectation(
+            functionName,
+            parameterCount: parameterCount,
+            parameterSummary: parameterSummary,
+            allParameterSummaryCombinations: allParameterSummaryCombinations,
+            args: args,
+            untrackedArgs: untrackedArgs
+        )
+
+        switch expectation.returnError {
+            case .some(let error): throw error
+            default: break
         }
     }
     

@@ -30,7 +30,7 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
         threadId: String,
         threadVariant: SessionThread.Variant,
         didTriggerSearch: @escaping () -> (),
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) {
         self.dependencies = dependencies
         self.threadId = threadId
@@ -476,7 +476,7 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
                                 identifier: "Disappearing messages",
                                 label: "\(ThreadSettingsViewModel.self).disappearing_messages"
                             ),
-                            onTap: { [weak self] in
+                            onTap: { [weak self, dependencies] in
                                 self?.transitionToScreen(
                                     SessionTableViewController(
                                         viewModel: ThreadDisappearingMessagesSettingsViewModel(
@@ -484,7 +484,8 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
                                             threadVariant: threadViewModel.threadVariant,
                                             currentUserIsClosedGroupMember: threadViewModel.currentUserIsClosedGroupMember,
                                             currentUserIsClosedGroupAdmin: threadViewModel.currentUserIsClosedGroupAdmin,
-                                            config: current.disappearingMessagesConfig
+                                            config: current.disappearingMessagesConfig,
+                                            using: dependencies
                                         )
                                     )
                                 )

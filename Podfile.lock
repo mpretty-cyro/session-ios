@@ -27,7 +27,6 @@ PODS:
     - NVActivityIndicatorView/Base (= 5.1.1)
   - NVActivityIndicatorView/Base (5.1.1)
   - OpenSSL-Universal (1.1.1300)
-  - PureLayout (3.1.9)
   - Quick (7.3.0)
   - Reachability (3.2)
   - SAMKeychain (1.5.3)
@@ -52,7 +51,6 @@ DEPENDENCIES:
   - GRDB.swift/SQLCipher
   - Nimble
   - NVActivityIndicatorView
-  - PureLayout (~> 3.1.8)
   - Quick
   - Reachability
   - SAMKeychain
@@ -69,7 +67,6 @@ SPEC REPOS:
     - GRDB.swift
     - NVActivityIndicatorView
     - OpenSSL-Universal
-    - PureLayout
     - Reachability
     - SAMKeychain
     - SQLCipher
@@ -105,7 +102,6 @@ SPEC CHECKSUMS:
   Nimble: f8a8219d16f176429b951e8f7e72df5c23ceddc0
   NVActivityIndicatorView: 1f6c5687f1171810aa27a3296814dc2d7dec3667
   OpenSSL-Universal: e7311447fd2419f57420c79524b641537387eff2
-  PureLayout: 5fb5e5429519627d60d079ccb1eaa7265ce7cf88
   Quick: d32871931c05547cb4e0bc9009d66a18b50d8558
   Reachability: 33e18b67625424e47b6cde6d202dce689ad7af96
   SAMKeychain: 483e1c9f32984d50ca961e26818a534283b4cd5c
@@ -116,6 +112,6 @@ SPEC CHECKSUMS:
   xcbeautify: 6e2f57af5c3a86d490376d5758030a8dcc201c1b
   YYImage: f1ddd15ac032a58b78bbed1e012b50302d318331
 
-PODFILE CHECKSUM: 7c87bd18d090ea05dac11994de32aff4a67f5f1a
+PODFILE CHECKSUM: 7d3ca2ae9cbbead1dcc5fa719a11b760177c2b4a
 
 COCOAPODS: 1.14.3

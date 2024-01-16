@@ -10,10 +10,12 @@ import SignalCoreKit
 class ScreenLockUI {
     public static let shared: ScreenLockUI = ScreenLockUI()
     
+    private var dependencies: Dependencies?
+    
     public lazy var screenBlockingWindow: UIWindow = {
         let result: UIWindow = UIWindow()
         result.isHidden = false
-        result.windowLevel = ._Background
+        result.windowLevel = .background
         result.isOpaque = true
         result.themeBackgroundColorForced = .theme(.classicDark, color: .backgroundPrimary)
         result.rootViewController = self.screenBlockingViewController
@@ -41,11 +43,11 @@ class ScreenLockUI {
     /// Unlike UIApplication.applicationState, this state reflects the notifications, i.e. "did become active", "will resign active",
     /// "will enter foreground", "did enter background".
     ///
-    ///We want to update our state to reflect these transitions and have the "update" logic be consistent with "last reported"
-    ///state. i.e. when you're responding to "will resign active", we need to behave as though we're already inactive.
+    /// We want to update our state to reflect these transitions and have the "update" logic be consistent with "last reported"
+    /// state. i.e. when you're responding to "will resign active", we need to behave as though we're already inactive.
     ///
-    ///Secondly, we need to show the screen protection _before_ we become inactive in order for it to be reflected in the
-    ///app switcher.
+    /// Secondly, we need to show the screen protection _before_ we become inactive in order for it to be reflected in the
+    /// app switcher.
     private var appIsInactiveOrBackground: Bool = false {
         didSet {
             if self.appIsInactiveOrBackground {
@@ -120,25 +122,25 @@ class ScreenLockUI {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationDidBecomeActive),
-            name: .OWSApplicationDidBecomeActive,
+            name: .sessionDidBecomeActive,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationWillResignActive),
-            name: .OWSApplicationWillResignActive,
+            name: .sessionWillResignActive,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationWillEnterForeground),
-            name: .OWSApplicationWillEnterForeground,
+            name: .sessionWillEnterForeground,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationDidEnterBackground),
-            name: .OWSApplicationDidEnterBackground,
+            name: .sessionDidEnterBackground,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -149,7 +151,8 @@ class ScreenLockUI {
         )
     }
     
-    public func setupWithRootWindow(rootWindow: UIWindow) {
+    public func setupWithRootWindow(rootWindow: UIWindow, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.screenBlockingWindow.frame = rootWindow.bounds
     }
 
@@ -166,9 +169,11 @@ class ScreenLockUI {
         //
         // It's not safe to access OWSScreenLock.isScreenLockEnabled
         // until the app is ready.
-        AppReadiness.runNowOrWhenAppWillBecomeReady { [weak self] in
+        dependencies?[singleton: .appReadiness].runNowOrWhenAppWillBecomeReady { [weak self, dependencies] in
             DispatchQueue.global(qos: .background).async {
-                self?.isScreenLockLocked.mutate { $0 = Dependencies()[singleton: .storage, key: .isScreenLockEnabled] }
+                self?.isScreenLockLocked.mutate {
+                    $0 = (dependencies?[singleton: .storage, key: .isScreenLockEnabled] == true)
+                }
                 
                 DispatchQueue.main.async {
                     self?.ensureUI()
@@ -180,7 +185,7 @@ class ScreenLockUI {
     // MARK: - Functions
 
     private func tryToActivateScreenLockBasedOnCountdown() {
-        guard AppReadiness.isAppReady() else {
+        guard dependencies?[singleton: .appReadiness].isAppReady == true else {
             // It's not safe to access OWSScreenLock.isScreenLockEnabled
             // until the app is ready.
             //
@@ -208,8 +213,8 @@ class ScreenLockUI {
     /// * The blocking window has the correct state.
     /// * That we show the "iOS auth UI to unlock" if necessary.
     private func ensureUI() {
-        guard AppReadiness.isAppReady() else {
-            AppReadiness.runNowOrWhenAppWillBecomeReady { [weak self] in
+        guard dependencies?[singleton: .appReadiness].isAppReady == true else {
+            dependencies?[singleton: .appReadiness].runNowOrWhenAppWillBecomeReady { [weak self] in
                 self?.ensureUI()
             }
             return
@@ -294,7 +299,7 @@ class ScreenLockUI {
     private func createScreenBlockingWindow(rootWindow: UIWindow) {
         let window: UIWindow = UIWindow(frame: rootWindow.bounds)
         window.isHidden = false
-        window.windowLevel = ._Background
+        window.windowLevel = .background
         window.isOpaque = true
         window.themeBackgroundColorForced = .theme(.classicDark, color: .backgroundPrimary)
 
@@ -367,7 +372,7 @@ class ScreenLockUI {
     @objc private func clockDidChange() {
         Logger.info("clock did change")
 
-        guard AppReadiness.isAppReady() else {
+        guard dependencies?[singleton: .appReadiness].isAppReady == true else {
             // It's not safe to access OWSScreenLock.isScreenLockEnabled
             // until the app is ready.
             //

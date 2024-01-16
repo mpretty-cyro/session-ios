@@ -7,6 +7,7 @@ import DifferenceKit
 import SessionUIKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 
 class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTableSource, PagedObservationSource {
     typealias TableItem = SessionThreadViewModel

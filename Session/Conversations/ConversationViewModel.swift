@@ -19,6 +19,14 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         case highlight
     }
     
+    // MARK: - ContentSwapLocation
+    
+    public enum ContentSwapLocation {
+        case none
+        case earlier
+        case later
+    }
+    
     // MARK: - Action
     
     public enum Action {
@@ -210,12 +218,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             // If we don't have a `initialFocusedInfo` then default to `.pageBefore` (it'll query
             // from a `0` offset)
-            guard let initialFocusedInfo: Interaction.TimestampInfo = (focusedInteractionInfo ?? initialData?.initialUnreadInteractionInfo) else {
-                self?.pagedDataObserver?.load(.pageBefore)
-                return
+            switch (focusedInteractionInfo ?? initialData?.initialUnreadInteractionInfo) {
+                case .some(let info): self?.pagedDataObserver?.load(.initialPageAround(id: info.id))
+                case .none: self?.pagedDataObserver?.load(.pageBefore)
             }
-            
-            self?.pagedDataObserver?.load(.initialPageAround(id: initialFocusedInfo.id))
         }
     }
     
@@ -568,7 +574,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
             try? LinkPreview.generateAttachmentIfPossible(
                 imageData: draft.jpegImageData,
-                mimeType: OWSMimeTypeImageJpeg
+                mimeType: MimeTypeUtil.MimeType.imageJpeg
             )
         }
         
@@ -700,14 +706,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Mentions
     
-    public func mentions(
-        for query: String = "",
-        using dependencies: Dependencies = Dependencies()
-    ) -> [MentionInfo] {
+    public func mentions(for query: String = "") -> [MentionInfo] {
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
         
         return dependencies[singleton: .storage]
-            .read { db -> [MentionInfo] in
+            .read { [dependencies] db -> [MentionInfo] in
                 let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
                 let pattern: FTS5Pattern? = try? SessionThreadViewModel.pattern(db, searchTerm: query, forTable: Profile.self)
                 let capabilities: Set<Capability.Variant> = (threadData.threadVariant != .community ?
@@ -740,10 +743,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Functions
     
-    public func updateDraft(
-        to draft: String,
-        using dependencies: Dependencies = Dependencies()
-    ) {
+    public func updateDraft(to draft: String) {
         let threadId: String = self.threadId
         let currentDraft: String = dependencies[singleton: .storage]
             .read { db in
@@ -763,6 +763,15 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 .filter(id: threadId)
                 .updateAll(db, SessionThread.Columns.messageDraft.set(to: draft))
         }
+    }
+    
+    /// This method indicates whether the client should try to mark the thread or it's messages as read (it's an optimisation for fully read
+    /// conversations so we can avoid iterating through the visible conversation cells every scroll)
+    public func shouldTryMarkAsRead() -> Bool {
+        return (
+            (threadData.threadUnreadCount ?? 0) > 0 ||
+            threadData.threadWasMarkedUnread == true
+        )
     }
     
     /// This method marks a thread as read and depending on the target may also update the interactions within a thread as read
@@ -816,14 +825,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         markAsReadTrigger.send((target, timestampMs))
     }
     
-    public func swapToThread(updatedThreadId: String, using dependencies: Dependencies = Dependencies()) {
-        let oldestMessageId: Int64? = self.interactionData
-            .filter { $0.model == .messages }
-            .first?
-            .elements
-            .first?
-            .id
-        
+    public func swapToThread(updatedThreadId: String, focussedMessageId: Int64?) {
         self.threadId = updatedThreadId
         self.observableThreadData = self.setupObservableThreadData(for: updatedThreadId)
         self.pagedDataObserver = self.setupPagedObserver(
@@ -836,16 +838,16 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         
         // Try load everything up to the initial visible message, fallback to just the initial page of messages
         // if we don't have one
-        switch oldestMessageId {
-            case .some(let id): self.pagedDataObserver?.load(.untilInclusive(id: id, padding: 0))
+        switch focussedMessageId {
+            case .some(let id): self.pagedDataObserver?.load(.initialPageAround(id: id))
             case .none: self.pagedDataObserver?.load(.pageBefore)
         }
     }
     
-    public func trustContact(using dependencies: Dependencies = Dependencies()) {
+    public func trustContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        dependencies[singleton: .storage].writeAsync { [threadId] db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
                 .updateAll(db, Contact.Columns.isTrusted.set(to: true))
@@ -873,10 +875,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
-    public func unblockContact(using dependencies: Dependencies = Dependencies()) {
+    public func unblockContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        dependencies[singleton: .storage].writeAsync { [threadId] db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
                 .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false), using: dependencies)

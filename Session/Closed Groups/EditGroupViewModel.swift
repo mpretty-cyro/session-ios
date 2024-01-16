@@ -34,7 +34,7 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
     
     // MARK: - Initialization
     
-    init(threadId: String, using dependencies: Dependencies = Dependencies()) {
+    init(threadId: String, using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.threadId = threadId
         self.userSessionId = getUserSessionId(using: dependencies)
@@ -468,7 +468,7 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
     }
     
     private func showPhotoLibraryForAvatar() {
-        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded(using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 let picker: UIImagePickerController = UIImagePickerController()
                 picker.sourceType = .photoLibrary

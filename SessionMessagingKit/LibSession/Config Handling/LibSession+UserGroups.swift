@@ -226,7 +226,7 @@ internal extension LibSession {
             .subtracting(communities.map { $0.data.threadId })
         
         if !communityIdsToRemove.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove))
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -415,7 +415,7 @@ internal extension LibSession {
             .subtracting(legacyGroups.map { $0.id })
         
         if !legacyGroupIdsToRemove.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove))
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -529,7 +529,7 @@ internal extension LibSession {
             .subtracting(groups.map { $0.groupSessionId })
         
         if !groupSessionIdsToRemove.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(groupSessionIdsToRemove))
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(groupSessionIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(

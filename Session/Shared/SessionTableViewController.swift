@@ -7,6 +7,7 @@ import DifferenceKit
 import SessionUIKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 
 protocol SessionViewModelAccessible {
     var viewModelType: AnyObject.Type { get }

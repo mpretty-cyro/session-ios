@@ -154,8 +154,8 @@ public enum GroupPromoteMemberJob: JobExecutor {
                         // Don't do anything if there are no 'failedIds' values or we can't get a window
                         guard
                             !failedIds.isEmpty,
-                            HasAppContext(),
-                            let mainWindow: UIWindow = CurrentAppContext().mainWindow
+                            dependencies.hasInitialised(singleton: .appContext),
+                            let mainWindow: UIWindow = dependencies[singleton: .appContext].mainWindow
                         else { return }
                         
                         typealias FetchedData = (groupName: String, profileInfo: [String: Profile])

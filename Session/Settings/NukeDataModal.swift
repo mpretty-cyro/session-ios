@@ -284,7 +284,7 @@ final class NukeDataModal: Modal {
         ///
         /// **Note:** This is file as long as this process kills the app, if it doesn't then we need an alternate mechanism to flag that
         /// the `JobRunner` is allowed to start it's queues again
-        dependencies[singleton: .jobRunner].stopAndClearPendingJobs()
+        dependencies[singleton: .jobRunner].stopAndClearPendingJobs(using: dependencies)
         
         // Clear the app badge and notifications
         dependencies[singleton: .notificationsManager].clearAllNotifications()
@@ -309,7 +309,7 @@ final class NukeDataModal: Modal {
         // profile storage
         let wasUnlinked: Bool = dependencies[defaults: .standard, key: .wasUnlinked]
         
-        SessionApp.resetAppData {
+        SessionApp.resetAppData(using: dependencies) {
             // Resetting the data clears the old user defaults. We need to restore the unlink default.
             dependencies[defaults: .standard, key: .wasUnlinked] = wasUnlinked
         }

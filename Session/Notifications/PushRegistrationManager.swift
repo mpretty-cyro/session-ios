@@ -266,8 +266,11 @@ public enum PushRegistrationError: Error {
     
     // NOTE: This function MUST report an incoming call.
     public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
+        // Called via the OS so create a default 'Dependencies' instance
+        let dependencies: Dependencies = Dependencies()
+        
         SNLog("[Calls] Receive new voip notification.")
-        owsAssertDebug(CurrentAppContext().isMainApp)
+        owsAssertDebug(dependencies.hasInitialised(singleton: .appContext) && dependencies[singleton: .appContext].isMainApp)
         owsAssertDebug(type == .voIP)
         let payload = payload.dictionaryPayload
         
@@ -280,8 +283,6 @@ public enum PushRegistrationError: Error {
             return
         }
         
-        // Called via the OS so create a default 'Dependencies' instance
-        let dependencies: Dependencies = Dependencies()
         Storage.resumeDatabaseAccess()
         
         let maybeCall: SessionCall? = dependencies[singleton: .storage].write { db in
@@ -300,7 +301,7 @@ public enum PushRegistrationError: Error {
                 }
             }()
             
-            let call: SessionCall = SessionCall(db, for: caller, uuid: uuid, mode: .answer)
+            let call: SessionCall = SessionCall(db, for: caller, uuid: uuid, mode: .answer, using: dependencies)
             let thread: SessionThread = try SessionThread.fetchOrCreate(
                 db,
                 id: caller,

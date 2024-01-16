@@ -29,7 +29,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     
     var focusedInteractionInfo: Interaction.TimestampInfo?
     var focusBehaviour: ConversationViewModel.FocusBehaviour = .none
-    var shouldHighlightNextScrollToInteraction: Bool = false
     
     // Search
     var isShowingSearchUI = false
@@ -168,7 +167,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
 
     lazy var snInputView: InputView = InputView(
         threadVariant: self.viewModel.initialThreadVariant,
-        delegate: self
+        delegate: self,
+        using: self.viewModel.dependencies
     )
 
     lazy var unreadCountView: UIView = {
@@ -680,7 +680,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 visibleOnly: false
             )
         {
-            Dependencies()[singleton: .storage].writeAsync { db in
+            viewModel.dependencies[singleton: .storage].writeAsync { db in
                 _ = try SessionThread   // Intentionally use `deleteAll` here instead of `deleteOrLeave`
                     .filter(id: threadId)
                     .deleteAll(db)
@@ -715,10 +715,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     private func startObservingChanges(didReturnFromBackground: Bool = false) {
         guard dataChangeObservable == nil else { return }
         
-        dataChangeObservable = Dependencies()[singleton: .storage].start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableThreadData,
             onError:  { _ in },
-            onChange: { [weak self] maybeThreadData in
+            onChange: { [weak self, dependencies = viewModel.dependencies] maybeThreadData in
                 guard let threadData: SessionThreadViewModel = maybeThreadData else {
                     // If the thread data is null and the id was blinded then we just unblinded the thread
                     // and need to swap over to the new one
@@ -728,7 +728,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                             (try? SessionId.Prefix(from: sessionId)) == .blinded15 ||
                             (try? SessionId.Prefix(from: sessionId)) == .blinded25
                         ),
-                        let blindedLookup: BlindedIdLookup = Dependencies()[singleton: .storage].read({ db in
+                        let blindedLookup: BlindedIdLookup = dependencies[singleton: .storage].read({ db in
                             try BlindedIdLookup
                                 .filter(id: sessionId)
                                 .fetchOne(db)
@@ -752,13 +752,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     
                     // Stop observing changes
                     self?.stopObservingChanges()
-                    Dependencies()[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
                     
                     // Swap the observing to the updated thread
-                    self?.viewModel.swapToThread(updatedThreadId: unblindedId)
+                    let newestVisibleMessageId: Int64? = self?.fullyVisibleCellViewModels()?.last?.id
+                    self?.viewModel.swapToThread(updatedThreadId: unblindedId, focussedMessageId: newestVisibleMessageId)
                     
                     // Start observing changes again
-                    Dependencies()[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
                     self?.startObservingChanges()
                     return
                 }
@@ -1065,14 +1066,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         struct ItemChangeInfo {
             let isInsertAtTop: Bool
             let firstIndexIsVisible: Bool
-            let visibleIndexPath: IndexPath
-            let oldVisibleIndexPath: IndexPath
+            let visibleIndexPath: IndexPath?
+            let oldVisibleIndexPath: IndexPath?
             
             init(
                 isInsertAtTop: Bool = false,
                 firstIndexIsVisible: Bool = false,
-                visibleIndexPath: IndexPath = IndexPath(row: 0, section: 0),
-                oldVisibleIndexPath: IndexPath = IndexPath(row: 0, section: 0)
+                visibleIndexPath: IndexPath? = nil,
+                oldVisibleIndexPath: IndexPath? = nil
             ) {
                 self.isInsertAtTop = isInsertAtTop
                 self.firstIndexIsVisible = firstIndexIsVisible
@@ -1086,22 +1087,39 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         let wasLoadingMore: Bool = self.isLoadingMore
         let wasOffsetCloseToBottom: Bool = self.isCloseToBottom
         let numItemsInUpdatedData: [Int] = updatedData.map { $0.elements.count }
-        let didSwapAllContent: Bool = (updatedData
-            .first(where: { $0.model == .messages })?
-            .elements
-            .contains(where: {
-                $0.id == self.viewModel.interactionData
-                .first(where: { $0.model == .messages })?
+        let didSwapAllContent: Bool = {
+            // The dynamic headers use negative id values so by using `compactMap` and returning
+            // null in those cases allows us to exclude them without another iteration via `filter`
+            let currentIds: Set<Int64> = (self.viewModel.interactionData
+                .first { $0.model == .messages }?
                 .elements
-                .first?
-                .id
-            }))
-            .defaulting(to: false)
-        let itemChangeInfo: ItemChangeInfo? = {
+                .compactMap { $0.id > 0 ? $0.id : nil }
+                .asSet())
+                .defaulting(to: [])
+            let updatedIds: Set<Int64> = (updatedData
+                .first { $0.model == .messages }?
+                .elements
+                .compactMap { $0.id > 0 ? $0.id : nil }
+                .asSet())
+                .defaulting(to: [])
+            
+            return updatedIds.isDisjoint(with: currentIds)
+        }()
+        let itemChangeInfo: ItemChangeInfo = {
             guard
                 isInsert,
                 let oldSectionIndex: Int = self.viewModel.interactionData.firstIndex(where: { $0.model == .messages }),
                 let newSectionIndex: Int = updatedData.firstIndex(where: { $0.model == .messages }),
+                let firstVisibleIndexPath: IndexPath = self.tableView.indexPathsForVisibleRows?
+                    .filter({
+                        $0.section == oldSectionIndex &&
+                        self.viewModel.interactionData[$0.section].elements[$0.row].cellType != .dateHeader
+                    })
+                    .sorted()
+                    .first
+            else { return ItemChangeInfo() }
+            
+            guard
                 let newFirstItemIndex: Int = updatedData[newSectionIndex].elements
                     .firstIndex(where: { item -> Bool in
                         // Since the first item is probably a `DateHeaderCell` (which would likely
@@ -1115,20 +1133,28 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                             item.id == messages[safe: 1]?.id
                         )
                     }),
-                let firstVisibleIndexPath: IndexPath = self.tableView.indexPathsForVisibleRows?
-                    .filter({
-                        $0.section == oldSectionIndex &&
-                        self.viewModel.interactionData[$0.section].elements[$0.row].cellType != .dateHeader
-                    })
-                    .sorted()
-                    .first,
                 let newVisibleIndex: Int = updatedData[newSectionIndex].elements
                     .firstIndex(where: { item in
                         item.id == self.viewModel.interactionData[oldSectionIndex]
                             .elements[firstVisibleIndexPath.row]
                             .id
                     })
-            else { return nil }
+            else {
+                let oldTimestamps: [Int64] = self.viewModel.interactionData[oldSectionIndex]
+                    .elements
+                    .filter { $0.cellType != .dateHeader }
+                    .map { $0.timestampMs }
+                let newTimestamps: [Int64] = updatedData[newSectionIndex]
+                    .elements
+                    .filter { $0.cellType != .dateHeader }
+                    .map { $0.timestampMs }
+                
+                return ItemChangeInfo(
+                    isInsertAtTop: ((newTimestamps.max() ?? Int64.max) < (oldTimestamps.min() ?? Int64.min)),
+                    firstIndexIsVisible: (firstVisibleIndexPath.row == 0),
+                    oldVisibleIndexPath: firstVisibleIndexPath
+                )
+            }
             
             return ItemChangeInfo(
                 isInsertAtTop: (
@@ -1143,25 +1169,25 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             )
         }()
         
-        guard !isInsert || itemChangeInfo?.isInsertAtTop == true else {
+        guard !isInsert || (!didSwapAllContent && itemChangeInfo.isInsertAtTop) else {
             self.viewModel.updateInteractionData(updatedData)
             self.tableView.reloadData()
             
-            // Animate to the target interaction (or the bottom) after a slightly delay to prevent buggy
-            // animation conflicts
+            // If we had a focusedInteractionInfo then scroll to it (and hide the search
+            // result bar loading indicator)
             if let focusedInteractionInfo: Interaction.TimestampInfo = self.focusedInteractionInfo {
-                // If we had a focusedInteractionInfo then scroll to it (and hide the search
-                // result bar loading indicator)
-                let delay: DispatchTime = (didSwapAllContent ?
-                    .now() :
-                    (.now() + .milliseconds(100))
-                )
-                
-                DispatchQueue.main.asyncAfter(deadline: delay) { [weak self] in
+                self.tableView.afterNextLayoutSubviews(when: { _, _, _ in true }, then: { [weak self] in
                     self?.searchController.resultsBar.stopLoading()
                     self?.scrollToInteractionIfNeeded(
                         with: focusedInteractionInfo,
-                        focusBehaviour: (self?.shouldHighlightNextScrollToInteraction == true ? .highlight : .none),
+                        focusBehaviour: (self?.focusBehaviour ?? .none),
+                        contentSwapLocation: {
+                            switch (didSwapAllContent, itemChangeInfo.isInsertAtTop) {
+                                case (true, true): return .earlier
+                                case (true, false): return .later
+                                default: return .none
+                            }
+                        }(),
                         isAnimated: true
                     )
                     
@@ -1170,7 +1196,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                         self?.isLoadingMore = false
                         self?.autoLoadNextPageIfNeeded()
                     }
-                }
+                })
             }
             else if wasOffsetCloseToBottom && !wasLoadingMore && numItemsInserted < 5 {
                 /// Scroll to the bottom if an interaction was just inserted and we either just sent a message or are close enough to the
@@ -1200,8 +1226,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         ///
         /// Unfortunately the UITableView also does some weird things when updating (where it won't have updated it's internal data until
         /// after it performs the next layout); the below code checks a condition on layout and if it passes it calls a closure
-        if let itemChangeInfo: ItemChangeInfo = itemChangeInfo, itemChangeInfo.isInsertAtTop {
-            let oldCellRect: CGRect = self.tableView.rectForRow(at: itemChangeInfo.oldVisibleIndexPath)
+        if itemChangeInfo.isInsertAtTop, let visibleIndexPath: IndexPath = itemChangeInfo.visibleIndexPath, let oldVisibleIndexPath: IndexPath = itemChangeInfo.oldVisibleIndexPath {
+            let oldCellRect: CGRect = self.tableView.rectForRow(at: oldVisibleIndexPath)
             let oldCellTopOffset: CGFloat = (self.tableView.frame.minY - self.tableView.convert(oldCellRect, to: self.tableView.superview).minY)
             
             // The the user triggered the 'scrollToTop' animation (by tapping in the nav bar) then we
@@ -1223,11 +1249,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     // a large number of cells when getting search results which are very far away
                     // only to instantly start scrolling making the calculation redundant)
                     UIView.performWithoutAnimation {
-                        self?.tableView.scrollToRow(
-                            at: itemChangeInfo.visibleIndexPath,
-                            at: .top,
-                            animated: false
-                        )
+                        self?.tableView.scrollToRow(at: visibleIndexPath, at: .top, animated: false)
                         self?.tableView.contentOffset.y += oldCellTopOffset
                     }
                     
@@ -1238,7 +1260,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                             self?.searchController.resultsBar.stopLoading()
                             self?.scrollToInteractionIfNeeded(
                                 with: focusedInteractionInfo,
-                                focusBehaviour: (self?.shouldHighlightNextScrollToInteraction == true ? .highlight : .none),
+                                focusBehaviour: (self?.focusBehaviour ?? .none),
                                 isAnimated: true
                             )
                         }
@@ -1258,7 +1280,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     self?.searchController.resultsBar.stopLoading()
                     self?.scrollToInteractionIfNeeded(
                         with: focusedInteractionInfo,
-                        focusBehaviour: (self?.shouldHighlightNextScrollToInteraction == true ? .highlight : .none),
+                        focusBehaviour: (self?.focusBehaviour ?? .none),
                         isAnimated: true
                     )
                     
@@ -1283,7 +1305,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             deleteRowsAnimation: .fade,
             insertRowsAnimation: .none,
             reloadRowsAnimation: .none,
-            interrupt: { itemChangeInfo?.isInsertAtTop == true || $0.changeCount > ConversationViewModel.pageSize }
+            interrupt: { itemChangeInfo.isInsertAtTop || $0.changeCount > ConversationViewModel.pageSize }
         ) { [weak self] updatedData in
             self?.viewModel.updateInteractionData(updatedData)
         }
@@ -1767,7 +1789,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             self.scrollToInteractionIfNeeded(
                 with: lastInteractionInfo,
                 position: .bottom,
-                isJumpingToLastInteraction: true,
                 isAnimated: true
             )
             return
@@ -1808,17 +1829,15 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }
     
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-        guard
-            let focusedInteractionInfo: Interaction.TimestampInfo = self.focusedInteractionInfo,
-            self.shouldHighlightNextScrollToInteraction
-        else {
+        guard let focusedInteractionInfo: Interaction.TimestampInfo = self.focusedInteractionInfo else {
             self.focusedInteractionInfo = nil
             self.focusBehaviour = .none
-            self.shouldHighlightNextScrollToInteraction = false
             return
         }
         
         let behaviour: ConversationViewModel.FocusBehaviour = self.focusBehaviour
+        self.focusedInteractionInfo = nil
+        self.focusBehaviour = .none
         
         DispatchQueue.main.async { [weak self] in
             self?.markFullyVisibleAndOlderCellsAsRead(interactionInfo: focusedInteractionInfo)
@@ -1898,12 +1917,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             ipadCancelButton.setThemeTitleColor(.textPrimary, for: .normal)
             searchBarContainer.addSubview(ipadCancelButton)
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
-            ipadCancelButton.autoVCenterInSuperview()
-            searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
+            ipadCancelButton.center(.vertical, in: searchBarContainer)
+            searchBar.pin(.top, to: .top, of: searchBar)
+            searchBar.pin(.leading, to: .leading, of: searchBar)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
+            searchBar.pin(.bottom, to: .bottom, of: searchBar)
         }
         else {
-            searchBar.autoPinEdgesToSuperviewMargins()
+            searchBar.pin(toMarginsOf: searchBarContainer)
         }
         
         // Nav bar buttons
@@ -1963,6 +1984,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         hideSearchUI()
     }
     
+    func conversationSearchControllerDependencies() -> Dependencies { return viewModel.dependencies }
+    func currentVisibleIds() -> [Int64] { return (fullyVisibleCellViewModels() ?? []).map { $0.id } }
+    
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?) {
         viewModel.lastSearchedText = searchText
         tableView.reloadRows(at: tableView.indexPathsForVisibleRows ?? [], with: UITableView.RowAnimation.none)
@@ -1976,12 +2000,13 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         with interactionInfo: Interaction.TimestampInfo,
         focusBehaviour: ConversationViewModel.FocusBehaviour = .none,
         position: UITableView.ScrollPosition = .middle,
-        isJumpingToLastInteraction: Bool = false,
+        contentSwapLocation: ConversationViewModel.ContentSwapLocation = .none,
+        originalIndexPath: IndexPath? = nil,
         isAnimated: Bool = true
     ) {
         // Store the info incase we need to load more data (call will be re-triggered)
+        self.focusBehaviour = focusBehaviour
         self.focusedInteractionInfo = interactionInfo
-        self.shouldHighlightNextScrollToInteraction = (focusBehaviour == .highlight)
         
         // Ensure the target interaction has been loaded
         guard
@@ -1999,18 +2024,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             self.searchController.resultsBar.startLoading()
             
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                if isJumpingToLastInteraction {
-                    self?.viewModel.pagedDataObserver?.load(.jumpTo(
-                        id: interactionInfo.id,
-                        paddingForInclusive: 5
-                    ))
-                }
-                else {
-                    self?.viewModel.pagedDataObserver?.load(.untilInclusive(
-                        id: interactionInfo.id,
-                        padding: 5
-                    ))
-                }
+                self?.viewModel.pagedDataObserver?.load(.jumpTo(
+                    id: interactionInfo.id,
+                    paddingForInclusive: 5
+                ))
             }
             return
         }
@@ -2068,7 +2085,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 self?.updateScrollToBottom(force: true)
             }
             
-            self.shouldHighlightNextScrollToInteraction = false
             self.focusedInteractionInfo = nil
             self.focusBehaviour = .none
             return
@@ -2083,51 +2099,88 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         guard !self.tableView.bounds.contains(targetRect) else {
             self.markFullyVisibleAndOlderCellsAsRead(interactionInfo: interactionInfo)
             self.highlightCellIfNeeded(interactionId: interactionInfo.id, behaviour: focusBehaviour)
+            self.focusedInteractionInfo = nil
+            self.focusBehaviour = .none
             return
+        }
+        
+        // As an optimisation if the target cell is too far away we just reload the entire table instead of loading
+        // all intermediate messages, as a result the scroll animation can be buggy (as the contentOffset could
+        // actually end up on the wrong side of the destination before the scroll animation starts)
+        //
+        // To get around this we immediately jump to a position 10 cells above/below the destination and then scroll
+        // which appears as though the screen has properly scrolled between the messages
+        switch contentSwapLocation {
+            case .none:
+                if let originalIndexPath: IndexPath = originalIndexPath {
+                    // Since we use `estimatedRowHeight` instead of an explicit height there is an annoying issue
+                    // where the cells won't have their heights calculated correctly so jumping between cells can
+                    // result in a scroll animation going the wrong direction - by jumping to the destination and
+                    // back to the current cell all of the relevant cells will have their frames calculated correctly
+                    // and the animation will look correct
+                    self.tableView.scrollToRow(at: targetIndexPath, at: targetPosition, animated: false)
+                    self.tableView.scrollToRow(at: originalIndexPath, at: targetPosition, animated: false)
+                }
+                
+            case .earlier:
+                let targetRow: Int = min(targetIndexPath.row + 10, self.viewModel.interactionData[messageSectionIndex].elements.count - 1)
+                
+                self.tableView.contentOffset = CGPoint(x: 0, y: self.tableView.rectForRow(at: IndexPath(row: targetRow, section: targetIndexPath.section)).midY)
+                
+            case .later:
+                let targetRow: Int = min(targetIndexPath.row - 10, 0)
+                
+                self.tableView.contentOffset = CGPoint(x: 0, y: self.tableView.rectForRow(at: IndexPath(row: targetRow, section: targetIndexPath.section)).midY)
         }
         
         self.tableView.scrollToRow(at: targetIndexPath, at: targetPosition, animated: true)
     }
     
-    func markFullyVisibleAndOlderCellsAsRead(interactionInfo: Interaction.TimestampInfo?) {
-        // We want to mark messages as read on load and while we scroll, so grab the newest message and mark
-        // everything older as read
-        //
-        // Note: For the 'tableVisualBottom' we remove the 'Values.mediumSpacing' as that is the distance
-        // the table content appears above the input view
+    func fullyVisibleCellViewModels() -> [MessageViewModel]? {
+        // We remove the 'Values.mediumSpacing' as that is the distance the table content appears above the input view
+        let tableVisualTop: CGFloat = tableView.frame.minY
         let tableVisualBottom: CGFloat = (tableView.frame.maxY - (tableView.contentInset.bottom - Values.mediumSpacing))
         
         guard
             let visibleIndexPaths: [IndexPath] = self.tableView.indexPathsForVisibleRows,
             let messagesSection: Int = visibleIndexPaths
                 .first(where: { self.viewModel.interactionData[$0.section].model == .messages })?
-                .section,
-            let newestCellViewModel: MessageViewModel = visibleIndexPaths
-                .sorted()
-                .filter({ $0.section == messagesSection })
-                .compactMap({ indexPath -> (frame: CGRect, cellViewModel: MessageViewModel)? in
-                    guard let cell: UITableViewCell = tableView.cellForRow(at: indexPath) else { return nil }
-                    
-                    switch cell {
-                        case is VisibleMessageCell, is CallMessageCell, is InfoMessageCell:
-                            return (
-                                view.convert(cell.frame, from: tableView),
-                                self.viewModel.interactionData[indexPath.section].elements[indexPath.row]
-                            )
-                            
-                        case is TypingIndicatorCell, is DateHeaderCell, is UnreadMarkerCell:
-                            return nil
+                .section
+        else { return nil }
+        
+        return visibleIndexPaths
+            .sorted()
+            .filter({ $0.section == messagesSection })
+            .compactMap({ indexPath -> (frame: CGRect, cellViewModel: MessageViewModel)? in
+                guard let cell: UITableViewCell = tableView.cellForRow(at: indexPath) else { return nil }
+                
+                switch cell {
+                    case is VisibleMessageCell, is CallMessageCell, is InfoMessageCell:
+                        return (
+                            view.convert(cell.frame, from: tableView),
+                            self.viewModel.interactionData[indexPath.section].elements[indexPath.row]
+                        )
                         
-                        default:
-                            SNLog("[ConversationVC] Warning: Processing unhandled cell type when marking as read, this could result in intermittent failures")
-                            return nil
-                    }
-                })
-                // Exclude messages that are partially off the bottom of the screen
-                .filter({ $0.frame.maxY <= tableVisualBottom })
-                .last?
-                .cellViewModel
-        else {
+                    case is TypingIndicatorCell, is DateHeaderCell, is UnreadMarkerCell:
+                        return nil
+                    
+                    default:
+                        SNLog("[ConversationVC] Warning: Processing unhandled cell type when marking as read, this could result in intermittent failures")
+                        return nil
+                }
+            })
+            // Exclude messages that are partially off the the screen
+            .filter({ $0.frame.minY >= tableVisualTop && $0.frame.maxY <= tableVisualBottom })
+            .map { $0.cellViewModel }
+    }
+    
+    func markFullyVisibleAndOlderCellsAsRead(interactionInfo: Interaction.TimestampInfo?) {
+        // Only retrieve the `fullyVisibleCellViewModels` if the viewModel things we should mark something as read
+        guard self.viewModel.shouldTryMarkAsRead() else { return }
+        
+        // We want to mark messages as read on load and while we scroll, so grab the newest message and mark
+        // everything older as read
+        guard let newestCellViewModel: MessageViewModel = fullyVisibleCellViewModels()?.last else {
             // If we weren't able to get any visible cells for some reason then we should fall back to
             // marking the provided interactionInfo as read just in case
             if let interactionInfo: Interaction.TimestampInfo = interactionInfo {
@@ -2147,7 +2200,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }
     
     func highlightCellIfNeeded(interactionId: Int64, behaviour: ConversationViewModel.FocusBehaviour) {
-        self.shouldHighlightNextScrollToInteraction = false
         self.focusedInteractionInfo = nil
         self.focusBehaviour = .none
         

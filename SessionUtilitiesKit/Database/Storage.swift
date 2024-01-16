@@ -13,7 +13,7 @@ import SignalCoreKit
 public extension Singleton {
     static let storage: SingletonConfig<Storage> = Dependencies.create(
         identifier: "storage",
-        createInstance: { _ in Storage() }
+        createInstance: { dependencies in Storage(using: dependencies) }
     )
     static let scheduler: SingletonConfig<ValueObservationScheduler> = Dependencies.create(
         identifier: "scheduler",
@@ -77,15 +77,15 @@ open class Storage {
     
     // MARK: - Initialization
     
-    public init(customWriter: DatabaseWriter? = nil) {
-        configureDatabase(customWriter: customWriter)
+    public init(customWriter: DatabaseWriter? = nil, using dependencies: Dependencies) {
+        configureDatabase(customWriter: customWriter, using: dependencies)
     }
     
-    private func configureDatabase(customWriter: DatabaseWriter? = nil) {
+    private func configureDatabase(customWriter: DatabaseWriter? = nil, using dependencies: Dependencies) {
         // Create the database directory if needed and ensure it's protection level is set before attempting to
         // create the database KeySpec or the database itself
-        OWSFileSystem.ensureDirectoryExists(Storage.sharedDatabaseDirectoryPath)
-        OWSFileSystem.protectFileOrFolder(atPath: Storage.sharedDatabaseDirectoryPath)
+        try? FileSystem.ensureDirectoryExists(at: Storage.sharedDatabaseDirectoryPath, using: dependencies)
+        try? FileSystem.protectFileOrFolder(at: Storage.sharedDatabaseDirectoryPath, using: dependencies)
         
         // If a custom writer was provided then use that (for unit testing)
         guard customWriter == nil else {
@@ -444,9 +444,9 @@ open class Storage {
                     // after device restart until device is unlocked for the first time. If the app receives a push
                     // notification, we won't be able to access the keychain to process that notification, so we should
                     // just terminate by throwing an uncaught exception
-                    if HasAppContext() && (CurrentAppContext().isMainApp || CurrentAppContext().isInBackground()) {
-                        let appState: UIApplication.State = CurrentAppContext().reportedApplicationState
-                        SNLog("CipherKeySpec inaccessible. New install or no unlock since device restart?, ApplicationState: \(NSStringForUIApplicationState(appState))")
+                    if dependencies.hasInitialised(singleton: .appContext) && (dependencies[singleton: .appContext].isMainApp || dependencies[singleton: .appContext].isInBackground) {
+                        let appState: UIApplication.State = dependencies[singleton: .appContext].reportedApplicationState
+                        SNLog("CipherKeySpec inaccessible. New install or no unlock since device restart?, ApplicationState: \(appState.name)")
                         
                         // In this case we should have already detected the situation earlier and exited
                         // gracefully (in the app delegate) using isDatabasePasswordAccessible, but we
@@ -493,11 +493,11 @@ open class Storage {
         try? deleteDbKeys(using: dependencies)
     }
     
-    public static func reconfigureDatabase(using dependencies: Dependencies = Dependencies()) {
-        dependencies[singleton: .storage].configureDatabase()
+    public static func reconfigureDatabase(using dependencies: Dependencies) {
+        dependencies[singleton: .storage].configureDatabase(using: dependencies)
     }
     
-    public static func resetForCleanMigration(using dependencies: Dependencies = Dependencies()) {
+    public static func resetForCleanMigration(using dependencies: Dependencies) {
         // Clear existing content
         resetAllStorage(using: dependencies)
         
@@ -506,9 +506,9 @@ open class Storage {
     }
     
     private static func deleteDatabaseFiles() {
-        OWSFileSystem.deleteFile(databasePath)
-        OWSFileSystem.deleteFile(databasePathShm)
-        OWSFileSystem.deleteFile(databasePathWal)
+        try? FileSystem.deleteFile(at: databasePath)
+        try? FileSystem.deleteFile(at: databasePathShm)
+        try? FileSystem.deleteFile(at: databasePathWal)
     }
     
     private static func deleteDbKeys(using dependencies: Dependencies = Dependencies()) throws {

@@ -143,7 +143,7 @@ internal extension LibSession {
 
                 /// If we are hiding the conversation then kick the user from it if it's currently open
                 if !updatedShouldBeVisible {
-                    LibSession.kickFromConversationUIIfNeeded(removedThreadIds: [sessionId])
+                    LibSession.kickFromConversationUIIfNeeded(removedThreadIds: [sessionId], using: dependencies)
                 }
                 
                 /// Create the thread if it doesn't exist, otherwise just update it's state
@@ -240,7 +240,7 @@ internal extension LibSession {
             .filter { !draftConversationIds.contains($0) }
         
         if !combinedIds.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: combinedIds)
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: combinedIds, using: dependencies)
             
             try Contact
                 .filter(ids: combinedIds)

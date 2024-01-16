@@ -18,7 +18,6 @@ abstract_target 'GlobalDependencies' do
   
   target 'Session' do
     pod 'Reachability'
-    pod 'PureLayout', '~> 3.1.8'
     pod 'NVActivityIndicatorView'
     pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
     pod 'DifferenceKit'
@@ -37,66 +36,61 @@ abstract_target 'GlobalDependencies' do
     
     target 'SessionNotificationServiceExtension'
     
-    # Dependencies that are shared across a number of extensions/frameworks but not all
-    abstract_target 'ExtendedDependencies' do
-      pod 'PureLayout', '~> 3.1.8'
+    target 'SessionShareExtension' do
+      pod 'NVActivityIndicatorView'
+      pod 'DifferenceKit'
+    end
+    
+    target 'SignalUtilitiesKit' do
+      pod 'NVActivityIndicatorView'
+      pod 'Reachability'
+      pod 'SAMKeychain'
+      pod 'SwiftProtobuf', '~> 1.5.0'
+      pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
+      pod 'DifferenceKit'
+    end
+    
+    target 'SessionMessagingKit' do
+      pod 'Reachability'
+      pod 'SAMKeychain'
+      pod 'SwiftProtobuf', '~> 1.5.0'
+      pod 'DifferenceKit'
       
-      target 'SessionShareExtension' do
-        pod 'NVActivityIndicatorView'
-        pod 'DifferenceKit'
+      target 'SessionMessagingKitTests' do
+        inherit! :complete
+        
+        pod 'Quick'
+        pod 'Nimble'
+        
+        # Need to include this for the tests because otherwise it won't actually build
+        pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
       end
+    end
+    
+    target 'SessionUtilitiesKit' do
+      pod 'SAMKeychain'
+      pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
+      pod 'DifferenceKit'
       
-      target 'SignalUtilitiesKit' do
-        pod 'NVActivityIndicatorView'
-        pod 'Reachability'
+      target 'SessionUtilitiesKitTests' do
+        inherit! :complete
+        
+        pod 'Quick'
+        pod 'Nimble'
+      end
+    end
+    
+    target 'SessionSnodeKit' do
+      target 'SessionSnodeKitTests' do
+        inherit! :complete
+        
+        pod 'Quick'
+        pod 'Nimble'
+        
+        # Need to include these for the tests because otherwise it won't actually build
         pod 'SAMKeychain'
-        pod 'SwiftProtobuf', '~> 1.5.0'
         pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
         pod 'DifferenceKit'
-      end
-      
-      target 'SessionMessagingKit' do
-        pod 'Reachability'
-        pod 'SAMKeychain'
-        pod 'SwiftProtobuf', '~> 1.5.0'
-        pod 'DifferenceKit'
-        
-        target 'SessionMessagingKitTests' do
-          inherit! :complete
-          
-          pod 'Quick'
-          pod 'Nimble'
-          
-          # Need to include this for the tests because otherwise it won't actually build
-          pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
-        end
-      end
-      
-      target 'SessionUtilitiesKit' do
-        pod 'SAMKeychain'
-        pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
-        pod 'DifferenceKit'
-        
-        target 'SessionUtilitiesKitTests' do
-          inherit! :complete
-          
-          pod 'Quick'
-          pod 'Nimble'
-        end
-      end
-      
-      target 'SessionSnodeKit' do
-        target 'SessionSnodeKitTests' do
-          inherit! :complete
-          
-          pod 'Quick'
-          pod 'Nimble'
-          
-          # Need to include these for the tests because otherwise it won't actually build
-          pod 'SAMKeychain'
-          pod 'YYImage/libwebp', git: 'https://github.com/signalapp/YYImage'
-          pod 'DifferenceKit'
-        end
       end
     end
   end
