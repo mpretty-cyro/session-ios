@@ -167,7 +167,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
 
     lazy var snInputView: InputView = InputView(
         threadVariant: self.viewModel.initialThreadVariant,
-        delegate: self
+        delegate: self,
+        using: self.viewModel.dependencies
     )
 
     lazy var unreadCountView: UIView = {
@@ -679,7 +680,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 visibleOnly: false
             )
         {
-            Dependencies()[singleton: .storage].writeAsync { db in
+            viewModel.dependencies[singleton: .storage].writeAsync { db in
                 _ = try SessionThread   // Intentionally use `deleteAll` here instead of `deleteOrLeave`
                     .filter(id: threadId)
                     .deleteAll(db)
@@ -714,10 +715,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     private func startObservingChanges(didReturnFromBackground: Bool = false) {
         guard dataChangeObservable == nil else { return }
         
-        dataChangeObservable = Dependencies()[singleton: .storage].start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableThreadData,
             onError:  { _ in },
-            onChange: { [weak self] maybeThreadData in
+            onChange: { [weak self, dependencies = viewModel.dependencies] maybeThreadData in
                 guard let threadData: SessionThreadViewModel = maybeThreadData else {
                     // If the thread data is null and the id was blinded then we just unblinded the thread
                     // and need to swap over to the new one
@@ -727,7 +728,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                             (try? SessionId.Prefix(from: sessionId)) == .blinded15 ||
                             (try? SessionId.Prefix(from: sessionId)) == .blinded25
                         ),
-                        let blindedLookup: BlindedIdLookup = Dependencies()[singleton: .storage].read({ db in
+                        let blindedLookup: BlindedIdLookup = dependencies[singleton: .storage].read({ db in
                             try BlindedIdLookup
                                 .filter(id: sessionId)
                                 .fetchOne(db)
@@ -751,14 +752,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     
                     // Stop observing changes
                     self?.stopObservingChanges()
-                    Dependencies()[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
                     
                     // Swap the observing to the updated thread
                     let newestVisibleMessageId: Int64? = self?.fullyVisibleCellViewModels()?.last?.id
                     self?.viewModel.swapToThread(updatedThreadId: unblindedId, focussedMessageId: newestVisibleMessageId)
                     
                     // Start observing changes again
-                    Dependencies()[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
                     self?.startObservingChanges()
                     return
                 }
@@ -1916,12 +1917,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             ipadCancelButton.setThemeTitleColor(.textPrimary, for: .normal)
             searchBarContainer.addSubview(ipadCancelButton)
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
-            ipadCancelButton.autoVCenterInSuperview()
-            searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
+            ipadCancelButton.center(.vertical, in: searchBarContainer)
+            searchBar.pin(.top, to: .top, of: searchBar)
+            searchBar.pin(.leading, to: .leading, of: searchBar)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
+            searchBar.pin(.bottom, to: .bottom, of: searchBar)
         }
         else {
-            searchBar.autoPinEdgesToSuperviewMargins()
+            searchBar.pin(toMarginsOf: searchBarContainer)
         }
         
         // Nav bar buttons
@@ -1981,6 +1984,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         hideSearchUI()
     }
     
+    func conversationSearchControllerDependencies() -> Dependencies { return viewModel.dependencies }
     func currentVisibleIds() -> [Int64] { return (fullyVisibleCellViewModels() ?? []).map { $0.id } }
     
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?) {

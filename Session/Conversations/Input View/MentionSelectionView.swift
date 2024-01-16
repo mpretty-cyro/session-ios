@@ -4,6 +4,7 @@ import UIKit
 import SessionUIKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 
 final class MentionSelectionView: UIView, UITableViewDataSource, UITableViewDelegate {
     var candidates: [MentionInfo] = [] {

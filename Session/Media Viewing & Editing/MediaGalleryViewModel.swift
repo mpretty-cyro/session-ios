@@ -5,6 +5,7 @@ import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 public class MediaGalleryViewModel {
     public typealias SectionModel = ArraySection<Section, Item>

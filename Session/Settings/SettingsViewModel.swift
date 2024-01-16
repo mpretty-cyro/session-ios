@@ -148,7 +148,7 @@ class SettingsViewModel: SessionTableViewModel, NavigationItemSource, Navigatabl
         .eraseToAnyPublisher()
     
     lazy var rightNavItems: AnyPublisher<[SessionNavItem<NavItem>], Never> = navState
-        .map { [weak self] navState -> [SessionNavItem<NavItem>] in
+        .map { [weak self, dependencies] navState -> [SessionNavItem<NavItem>] in
             switch navState {
                 case .standard:
                     return [
@@ -158,9 +158,7 @@ class SettingsViewModel: SessionTableViewModel, NavigationItemSource, Navigatabl
                                 .withRenderingMode(.alwaysTemplate),
                             style: .plain,
                             accessibilityIdentifier: "Show QR code button",
-                            action: { [weak self] in
-                                self?.transitionToScreen(QRCodeVC())
-                            }
+                            action: { self?.transitionToScreen(QRCodeVC(using: dependencies)) }
                         )
                     ]
                     
@@ -591,7 +589,7 @@ class SettingsViewModel: SessionTableViewModel, NavigationItemSource, Navigatabl
     }
     
     private func showPhotoLibraryForAvatar() {
-        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded(using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 let picker: UIImagePickerController = UIImagePickerController()
                 picker.sourceType = .photoLibrary

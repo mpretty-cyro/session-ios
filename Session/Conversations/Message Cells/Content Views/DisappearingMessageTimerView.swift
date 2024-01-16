@@ -60,13 +60,10 @@ class DisappearingMessageTimerView: UIView {
     
     private func startAnimation() {
         self.clearAnimation()
-        self.animationTimer = Timer.weakScheduledTimer(
+        self.animationTimer = Timer.scheduledTimerOnMainThread(
             withTimeInterval: 0.1,
-            target: self,
-            selector: #selector(updateProgress),
-            userInfo: nil,
             repeats: true
-        )
+        ) { [weak self] _ in self?.updateProgress() }
     }
     
     private func clearAnimation() {

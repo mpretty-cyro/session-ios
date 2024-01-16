@@ -195,7 +195,7 @@ public enum MessageSendJob: JobExecutor {
                         case .failure(let error):
                             switch error {
                                 case MessageSenderError.sendJobTimeout:
-                                    SNLog("[MessageSendJob] Couldn't send message due to error: \(error) (paths: \(OnionRequestAPI.paths.prettifiedDescription)).")
+                                    SNLog("[MessageSendJob] Couldn't send message due to error: \(error) (paths: \(dependencies[cache: .onionRequestAPI].paths.prettifiedDescription)).")
                                     
                                 default:
                                     SNLog("[MessageSendJob] Couldn't send message due to error: \(error).")

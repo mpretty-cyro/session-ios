@@ -2,5 +2,3 @@
 
 FOUNDATION_EXPORT double SignalUtilitiesKitVersionNumber;
 FOUNDATION_EXPORT const unsigned char SignalUtilitiesKitVersionString[];
-
-#import <SignalUtilitiesKit/OWSViewController.h>

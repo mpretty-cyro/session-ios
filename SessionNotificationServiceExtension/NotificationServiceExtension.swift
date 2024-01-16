@@ -42,8 +42,11 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         }
         
         /// Create the context if we don't have it (needed before _any_ interaction with the database)
-        if !Singleton.hasAppContext {
-            Singleton.setup(appContext: NotificationServiceExtensionContext())
+        if !dependencies.hasInitialised(singleton: .appContext) {
+            dependencies.set(singleton: .appContext, to: NotificationServiceExtensionContext())
+            Dependencies.setIsRTLRetriever(requiresMainThread: false) {
+                NotificationServiceExtensionContext.determineDeviceRTL()
+            }
         }
         
         let isCallOngoing: Bool = dependencies[defaults: .appGroup, key: .isCallOngoing]
@@ -54,7 +57,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         DispatchQueue.main.sync { self.setUpIfNecessary(using: dependencies) }
 
         // Handle the push notification
-        Singleton.appReadiness.runNowOrWhenAppDidBecomeReady {
+        dependencies[singleton: .appReadiness].runNowOrWhenAppDidBecomeReady {
             let openGroupPollingPublishers: [AnyPublisher<Void, Error>] = self.pollForOpenGroups(using: dependencies)
             defer {
                 self.openGroupPollCancellable = Publishers
@@ -310,7 +313,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         AssertIsOnMainThread()
 
         // Only mark the app as ready once.
-        guard !Singleton.appReadiness.isAppReady else { return }
+        guard !dependencies[singleton: .appReadiness].isAppReady else { return }
 
         // App isn't ready until storage is ready AND all version migrations are complete.
         guard dependencies[singleton: .storage].isValid && migrationsCompleted else {
@@ -322,7 +325,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         SignalUtilitiesKit.Configuration.performMainSetup(using: dependencies)
 
         // Note that this does much more than set a flag; it will also run all deferred blocks.
-        Singleton.appReadiness.setAppReady()
+        dependencies[singleton: .appReadiness].setAppReady()
     }
     
     // MARK: Handle completion

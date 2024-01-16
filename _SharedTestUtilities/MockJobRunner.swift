@@ -30,8 +30,8 @@ class MockJobRunner: Mock<JobRunnerType>, JobRunnerType {
     func appDidBecomeActive(using dependencies: Dependencies) {}
     func startNonBlockingQueues(using dependencies: Dependencies) {}
     
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, onComplete: (() -> ())?) {
-        mockNoReturn(args: [exceptForVariant, onComplete])
+    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, onComplete: (() -> ())?, using dependencies: Dependencies) {
+        mockNoReturn(args: [exceptForVariant, onComplete], untrackedArgs: [dependencies])
         onComplete?()
     }
     

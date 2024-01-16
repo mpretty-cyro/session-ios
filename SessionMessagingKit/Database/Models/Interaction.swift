@@ -1059,7 +1059,7 @@ public extension Interaction {
                     !attachmentDescription.isEmpty,
                     !body.isEmpty
                 {
-                    if Singleton.hasAppContext && Singleton.appContext.isRTL {
+                    if Dependencies.isRTL {
                         return NSAttributedString(string: "\(body): \(attachmentDescription)")
                     }
                     

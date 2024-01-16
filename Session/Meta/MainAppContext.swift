@@ -16,12 +16,6 @@ final class MainAppContext: AppContext {
     var mainWindow: UIWindow?
     var wasWokenUpByPushNotification: Bool = false
     
-    private static var _isRTL: Bool = {
-        return (UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft)
-    }()
-    
-    var isRTL: Bool { return MainAppContext._isRTL }
-    
     var statusBarHeight: CGFloat { UIApplication.shared.statusBarFrame.size.height }
     var openSystemSettingsAction: UIAlertAction? {
         let result = UIAlertAction(
@@ -33,10 +27,15 @@ final class MainAppContext: AppContext {
         return result
     }
     
+    static func determineDeviceRTL() -> Bool {
+        return (UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft)
+    }
+    
     // MARK: - Initialization
 
     init() {
         self.reportedApplicationState = .inactive
+        self.createTemporaryDirectory()
         
         NotificationCenter.default.addObserver(
             self,
@@ -181,49 +180,5 @@ final class MainAppContext: AppContext {
     
     func setNetworkActivityIndicatorVisible(_ value: Bool) {
         UIApplication.shared.isNetworkActivityIndicatorVisible = value
-    }
-    
-    // MARK: -
-    
-    func clearOldTemporaryDirectories() {
-        // We use the lowest priority queue for this, and wait N seconds
-        // to avoid interfering with app startup.
-        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + .seconds(3)) { [weak self] in
-            guard
-                self?.isAppForegroundAndActive == true,   // Abort if app not active
-                let thresholdDate: Date = self?.appLaunchTime
-            else { return }
-                    
-            // Ignore the "current" temp directory.
-            let currentTempDirName: String = URL(fileURLWithPath: Singleton.appContext.temporaryDirectory).lastPathComponent
-            let dirPath = NSTemporaryDirectory()
-            
-            guard let fileNames: [String] = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return }
-            
-            fileNames.forEach { fileName in
-                guard fileName != currentTempDirName else { return }
-                
-                // Delete files with either:
-                //
-                // a) "ows_temp" name prefix.
-                // b) modified time before app launch time.
-                let filePath: String = URL(fileURLWithPath: dirPath).appendingPathComponent(fileName).absoluteString
-                
-                if !fileName.hasPrefix("ows_temp") {
-                    // It's fine if we can't get the attributes (the file may have been deleted since we found it),
-                    // also don't delete files which were created in the last N minutes
-                    guard
-                        let attributes: [FileAttributeKey: Any] = try? FileManager.default.attributesOfItem(atPath: filePath),
-                        let modificationDate: Date = attributes[.modificationDate] as? Date,
-                        modificationDate.timeIntervalSince1970 <= thresholdDate.timeIntervalSince1970
-                    else { return }
-                }
-                
-                if (!OWSFileSystem.deleteFile(filePath)) {
-                    // This can happen if the app launches before the phone is unlocked.
-                    // Clean up will occur when app becomes active.
-                }
-            }
-        }
     }
 }

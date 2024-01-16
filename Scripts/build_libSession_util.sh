@@ -256,21 +256,10 @@ cp -r "${SRCROOT}/LibSession-Util/include/session" "${TARGET_BUILD_DIR}/libSessi
 modmap="${TARGET_BUILD_DIR}/libSessionUtil/Headers/module.modulemap"
 echo "module SessionUtil {" >"$modmap"
 echo "  module capi {" >>"$modmap"
-for x in $(cd include && find session -name '*.h'); do
+for x in $(cd "${TARGET_BUILD_DIR}/libSessionUtil/Headers" && find session -name '*.h'); do
     echo "    header \"$x\"" >>"$modmap"
 done
 echo -e "    export *\n  }" >>"$modmap"
-if false; then
-    # If we include the cpp headers like this then Xcode will try to load them as C headers (which
-    # of course breaks) and doesn't provide any way to only load the ones you need (because this is
-    # Apple land, why would anything useful be available?).  So we include the headers in the
-    # archive but can't let xcode discover them because it will do it wrong.
-    echo -e "\n  module cppapi {" >>"$modmap"
-    for x in $(cd include && find session -name '*.hpp'); do
-        echo "    header \"$x\"" >>"$modmap"
-    done
-    echo -e "    export *\n  }" >>"$modmap"
-fi
 echo "}" >>"$modmap"
 
 # Output to XCode just so the output is good

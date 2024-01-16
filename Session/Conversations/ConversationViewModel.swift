@@ -574,7 +574,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
             try? LinkPreview.generateAttachmentIfPossible(
                 imageData: draft.jpegImageData,
-                mimeType: OWSMimeTypeImageJpeg
+                mimeType: MimeTypeUtil.MimeType.imageJpeg
             )
         }
         
@@ -706,14 +706,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Mentions
     
-    public func mentions(
-        for query: String = "",
-        using dependencies: Dependencies = Dependencies()
-    ) -> [MentionInfo] {
+    public func mentions(for query: String = "") -> [MentionInfo] {
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
         
         return dependencies[singleton: .storage]
-            .read { db -> [MentionInfo] in
+            .read { [dependencies] db -> [MentionInfo] in
                 let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
                 let pattern: FTS5Pattern? = try? SessionThreadViewModel.pattern(db, searchTerm: query, forTable: Profile.self)
                 let capabilities: Set<Capability.Variant> = (threadData.threadVariant != .community ?
@@ -746,10 +743,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Functions
     
-    public func updateDraft(
-        to draft: String,
-        using dependencies: Dependencies = Dependencies()
-    ) {
+    public func updateDraft(to draft: String) {
         let threadId: String = self.threadId
         let currentDraft: String = dependencies[singleton: .storage]
             .read { db in
@@ -850,10 +844,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
-    public func trustContact(using dependencies: Dependencies = Dependencies()) {
+    public func trustContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        dependencies[singleton: .storage].writeAsync { [threadId] db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
                 .updateAll(db, Contact.Columns.isTrusted.set(to: true))
@@ -881,10 +875,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
-    public func unblockContact(using dependencies: Dependencies = Dependencies()) {
+    public func unblockContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        dependencies[singleton: .storage].writeAsync { [threadId] db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
                 .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false), using: dependencies)

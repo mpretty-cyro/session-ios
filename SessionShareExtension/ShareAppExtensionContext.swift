@@ -18,7 +18,10 @@ final class ShareAppExtensionContext: AppContext {
     var mainWindow: UIWindow?
     var wasWokenUpByPushNotification: Bool = false
     
-    private static var _isRTL: Bool = {
+    var statusBarHeight: CGFloat { return 20 }
+    var openSystemSettingsAction: UIAlertAction?
+    
+    static func determineDeviceRTL() -> Bool {
         // Borrowed from PureLayout's AppExtension compatible RTL support.
         // App Extensions may not access -[UIApplication sharedApplication]; fall back
         // to checking the bundle's preferred localization character direction
@@ -27,18 +30,14 @@ final class ShareAppExtensionContext: AppContext {
                 forLanguage: (Bundle.main.preferredLocalizations.first ?? "")
             ) == Locale.LanguageDirection.rightToLeft
         )
-    }()
-
-    var isRTL: Bool { return ShareAppExtensionContext._isRTL }
-    
-    var statusBarHeight: CGFloat { return 20 }
-    var openSystemSettingsAction: UIAlertAction?
+    }
     
     // MARK: - Initialization
 
     init(rootViewController: UIViewController) {
         self.rootViewController = rootViewController
         self.reportedApplicationState = .active
+        self.createTemporaryDirectory()
         
         NotificationCenter.default.addObserver(
             self,
