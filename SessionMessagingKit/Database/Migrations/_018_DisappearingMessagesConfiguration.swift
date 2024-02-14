@@ -82,7 +82,7 @@ enum _018_DisappearingMessagesConfiguration: Migration {
         
         // Update the configs so the settings are synced
         _ = try LibSession.updatingDisappearingConfigsOneToOne(db, contactUpdate, using: dependencies)
-        _ = try LibSession.batchUpdate(db, disappearingConfigs: legacyGroupUpdate, using: dependencies)
+        _ = try LibSession.batchUpdate(disappearingConfigs: legacyGroupUpdate, using: dependencies)
         
         Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }

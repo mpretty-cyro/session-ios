@@ -349,8 +349,7 @@ public extension SessionThread {
             case (.contact, .forced):
                 // If this wasn't called from config handling then we need to hide the conversation
                 if !calledFromConfigHandling {
-                    try LibSession
-                        .hide(db, contactIds: threadIds, using: dependencies)
+                    try LibSession.hide(contactIds: threadIds, using: dependencies)
                 }
                 
                 _ = try SessionThread

@@ -1,12 +1,383 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
+import Combine
 import GRDB
 import SessionSnodeKit
 import SessionUtil
 import SessionUtilitiesKit
 
-// MARK: - LibSession
+public extension LibSession {
+    class StateManager: StateManagerType {
+        private let dependencies: Dependencies
+        let state: UnsafeMutablePointer<state_object>
+        
+        var lastError: LibSessionError? {
+            guard state.pointee.last_error != nil else { return nil }
+            
+            let errorString = String(cString: state.pointee.last_error)
+            return LibSessionError.libSessionError(errorString)
+        }
+        
+        // MARK: - Initialization
+        
+        init(_ db: Database, using dependencies: Dependencies) throws {
+            // Ensure we have the ed25519 key and that we haven't already loaded the state before
+            // we continue
+            guard let ed25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies) else {
+                throw LibSessionError.userDoesNotExist
+            }
+            
+            // Retrieve the existing dumps from the database and load them into the state
+            let dumps: [ConfigDump] = Array(try ConfigDump.fetchSet(db))
+            let cPubkeys: [UnsafePointer<CChar>?] = dumps
+                .map { dump in dump.sessionId.hexString.cArray }
+                .unsafeCopy()
+            let cDumpData: [UnsafePointer<UInt8>?] = dumps
+                .map { dump in Array(dump.data) }
+                .unsafeCopy()
+            var cDumps: [state_namespaced_dump] = try dumps.enumerated().map { index, dump in
+                state_namespaced_dump(
+                    namespace_: try dump.variant.cNamespace,
+                    pubkey_hex: cPubkeys[index],
+                    data: cDumpData[index],
+                    datalen: dump.data.count
+                )
+            }
+            
+            // Initialise the state
+            var maybeState: UnsafeMutablePointer<state_object>? = nil
+            var secretKey: [UInt8] = ed25519KeyPair.secretKey
+            var error: [CChar] = [CChar](repeating: 0, count: 256)
+            
+            guard
+                state_init(&maybeState, &secretKey, &cDumps, cDumps.count, &error),
+                let state: UnsafeMutablePointer<state_object> = maybeState
+            else {
+                cPubkeys.forEach { $0?.deallocate() }
+                cDumpData.forEach { $0?.deallocate() }
+                throw LibSessionError.libSessionError(String(cString: error))
+            }
+            
+            self.dependencies = dependencies
+            self.state = state
+            cPubkeys.forEach { $0?.deallocate() }
+            cDumpData.forEach { $0?.deallocate() }
+            
+            // Set the current snode timestamp (incase a request was made before this was called)
+            setServiceNodeOffset(dependencies[cache: .snodeAPI].clockOffsetMs)
+            
+            // If an error occurred during any setup process then we want to throw it
+            switch self.lastError {
+                case .some(let error): throw error
+                case .none: SNLog("[LibSession] Completed loadState")
+            }
+        }
+        
+        // MARK: - Internal Functions
+        
+        private func store(
+            _ namespace: NAMESPACE,
+            _ pubkey: UnsafePointer<CChar>?,
+            _ timestamp_ms: UInt64,
+            _ dataPtr: UnsafePointer<UInt8>?,
+            _ dataLen: Int
+        ) {
+            guard
+                let variant: ConfigDump.Variant = ConfigDump.Variant(cNamespace: namespace),
+                let sessionIdHex: String = pubkey.map({ String(cString: $0) }),
+                dataLen > 0,
+                let dumpData: Data = dataPtr.map({ Data(bytes: $0, count: dataLen) })
+            else { return SNLog("[LibSession] Failed to store due to invalid parameters") }
+            
+            dependencies[singleton: .storage].writeAsync(
+                updates: { [state, dependencies] db in
+                    // Save the updated dump to the database
+                    try ConfigDump(
+                        variant: variant,
+                        sessionId: sessionIdHex,
+                        data: dumpData,
+                        timestampMs: Int64(timestamp_ms)
+                    ).upsert(db)
+                    
+                    // Apply the updated states to the database
+                    switch variant {
+                        case .userProfile:
+                            try LibSession.handleUserProfileUpdate(
+                                db,
+                                in: state,
+                                serverTimestampMs: Int64(timestamp_ms),
+                                using: dependencies
+                            )
+                            
+                            case .contacts:
+                                try LibSession.handleContactsUpdate(
+                                    db,
+                                    in: state,
+                                    serverTimestampMs: Int64(timestamp_ms),
+                                    using: dependencies
+                                )
+    
+                            case .convoInfoVolatile:
+                                try LibSession.handleConvoInfoVolatileUpdate(
+                                    db,
+                                    in: state,
+                                    using: dependencies
+                                )
+
+                            case .userGroups:
+                                try LibSession.handleUserGroupsUpdate(
+                                    db,
+                                    in: state,
+                                    serverTimestampMs: Int64(timestamp_ms),
+                                    using: dependencies
+                                )
+                            case .invalid: SNLog("[libSession] Failed to process merge of invalid config namespace")
+                            
+                        default:
+                            break
+                    }
+                },
+                completion: { _, result in
+                    switch result {
+                        case .success: break
+                        case .failure(let error):
+                            SNLog("[LibSession] Failed to store updated state of \(variant) due to error: \(error)")
+                    }
+                }
+            )
+        }
+        
+        private func send(
+            _ pubkey: UnsafePointer<CChar>?,
+            _ dataPtr: UnsafePointer<UInt8>?,
+            _ dataLen: Int,
+            _ requestCtxPtr: UnsafePointer<UInt8>?,
+            _ requestCtxLen: Int
+        ) {// TODO: Determine why this is called twice on a name change
+            guard
+                dataLen > 0,
+                let publicKeyPtr: UnsafePointer<CChar> = pubkey,
+                let publicKey: String = pubkey.map({ String(cString: $0) }),
+                let payloadData: Data = dataPtr.map({ Data(bytes: $0, count: dataLen) }),
+                let requestCtx: Data = requestCtxPtr.map({ Data(bytes: $0, count: requestCtxLen) })
+            else { return SNLog("[LibSession] Failed to send due to invalid parameters") }
+            
+            guard
+                let preparedRequest = try? SnodeAPI.preparedRawSequenceRequest(
+                    publicKey: publicKey,
+                    payload: payloadData,
+                    using: dependencies
+                ),
+                let targetQueue: DispatchQueue = dependencies[singleton: .jobRunner].queue(for: .configurationSync)
+            else { return SNLog("[LibSession] Failed to send due to invalid prepared request") }
+            
+            preparedRequest
+                .send(using: dependencies)
+                .subscribe(on: targetQueue, using: dependencies)
+                .receive(on: targetQueue, using: dependencies)
+                .tryMap { [weak self, state] info, data in
+                    var cResponseData: [UInt8] = Array(data)
+                    var cRequestCtx: [UInt8] = Array(requestCtx)
+                    
+                    guard state_received_send_response(state, publicKeyPtr, &cResponseData, cResponseData.count, &cRequestCtx, cRequestCtx.count) else {
+                        throw (self?.lastError ?? LibSessionError.unknown)
+                    }
+                    
+                    return Just(())
+                        .setFailureType(to: Error.self)
+                        .eraseToAnyPublisher()
+                }
+                .sinkUntilComplete(
+                    receiveCompletion: { result in
+                        switch result {
+                            case .finished: SNLog("[LibSession - Send] Completed for \(publicKey) (reqId: \(requestId))")
+                            case .failure(let error):
+                                SNLog("[LibSession - Send] For \(publicKey) (reqId: \(requestId)) failed due to error: \(error)")
+                        }
+                    }
+                )
+        }
+        
+        // MARK: - Functions
+        
+        /// Once the migrations have completed we need to inform libSession so it can register it's hooks and trigger any pending 'send' and 'store' calls
+        public func registerHooks() throws {
+            // Register hooks to make API calls and write to the database when libSession needs to
+            func manager(_ context: UnsafeMutableRawPointer?, _ hookName: String) -> StateManager? {
+                guard let manager: StateManager = context.map({ Unmanaged<StateManager>.fromOpaque($0).takeUnretainedValue() }) else {
+                    SNLog("[LibSession] Failed to \(hookName) due to invalid context")
+                    return nil
+                }
+                
+                return manager
+            }
+            
+            // Register a hook to be called when libSession logs anything so the logs can be added
+            // to the device logs
+            state_set_logger(
+                state,
+                { logLevel, messagePtr, _ in
+                    guard
+                        let messagePtr = messagePtr
+                    else { return }
+
+                    let message: String = String(cString: messagePtr)
+                    SNLog("[LibSession] \(message)")
+                },
+                nil
+            )
+            
+            // Register a hook to be called when libSession decides it needs to save config data
+            let storeResult: Bool = state_set_store_callback(
+                state,
+                { namespace, pubkey, timestamp_ms, dataPtr, dataLen, context in
+                    manager(context, "store")?.store(namespace, pubkey, timestamp_ms, dataPtr, dataLen)
+                },
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+            
+            // Register a hook to be called when libSession decides it needs to send config data
+            let sendResult: Bool = state_set_send_callback(
+                state,
+                { pubkey, dataPtr, dataLen, requestCtxPtr, requestCtxLen, context in
+                    manager(context, "send")?.send(pubkey, dataPtr, dataLen, requestCtxPtr, requestCtxLen)
+                },
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+            
+            // Ensure the hooks were successfully set
+            guard storeResult && sendResult else { throw lastError ?? LibSessionError.unknown }
+        }
+        
+        public func setServiceNodeOffset(_ offset: Int64) {
+            state_set_service_node_offset(state, offset)
+        }
+        
+        private func performMutation(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) throws {
+            class CWrapper {
+                let mutation: (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void
+                
+                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) {
+                    self.mutation = mutation
+                }
+            }
+            
+            let mutationWrapper: CWrapper = CWrapper(mutation)
+            let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(mutationWrapper).toOpaque()
+            
+            state_mutate_user(state, { maybe_mutable_state, maybeCtx in
+                guard
+                    let mutable_state: UnsafeMutablePointer<mutable_state_user_object> = maybe_mutable_state,
+                    let ctx: UnsafeMutableRawPointer = maybeCtx
+                else { return }
+                
+                do { try Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue().mutation(mutable_state) }
+                catch {
+                    var cError: [CChar] = error.localizedDescription.cArray
+                    mutable_state_user_set_error_if_empty(mutable_state, &cError, cError.count)
+                }
+            }, cWrapperPtr)
+            
+            if let lastError: LibSessionError = self.lastError {
+                throw lastError
+            }
+        }
+        
+        private func performMutation(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) throws {
+            class CWrapper {
+                let mutation: (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void
+                
+                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) {
+                    self.mutation = mutation
+                }
+            }
+            
+            var cPubkey: [CChar] = groupId.hexString.cArray
+            let mutationWrapper: CWrapper = CWrapper(mutation)
+            let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(mutationWrapper).toOpaque()
+            
+            state_mutate_group(state, &cPubkey, { maybe_mutable_state, maybeCtx in
+                guard
+                    let mutable_state: UnsafeMutablePointer<mutable_state_group_object> = maybe_mutable_state,
+                    let ctx: UnsafeMutableRawPointer = maybeCtx
+                else { return }
+                
+                do { try Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue().mutation(mutable_state) }
+                catch {
+                    var cError: [CChar] = error.localizedDescription.cArray
+                    mutable_state_group_set_error_if_empty(mutable_state, &cError, cError.count)
+                }
+            }, cWrapperPtr)
+            
+            if let lastError: LibSessionError = self.lastError {
+                throw lastError
+            }
+        }
+        
+        public func mutate(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) -> Void) {
+            try? performMutation(mutation: mutation)
+        }
+        
+        public func mutate(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) throws {
+            try performMutation(mutation: mutation)
+        }
+        
+        public func mutate(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) -> Void) {
+            try? performMutation(groupId: groupId, mutation: mutation)
+        }
+        
+        public func mutate(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) throws {
+            try performMutation(groupId: groupId, mutation: mutation)
+        }
+        
+        public func merge<T>(sessionIdHexString: String, messages: [T]) throws {
+            guard !messages.isEmpty else { return }
+            guard let messages: [ConfigMessageReceiveJob.Details.MessageInfo] = messages as? [ConfigMessageReceiveJob.Details.MessageInfo] else {
+                throw LibSessionError.cannotMergeInvalidMessageType
+            }
+            
+            let cMessageHashes: [UnsafePointer<CChar>?] = messages
+                .map { message in message.serverHash.cArray }
+                .unsafeCopy()
+            let cMessagesData: [UnsafePointer<UInt8>?] = messages
+                .map { message in Array(message.data) }
+                .unsafeCopy()
+            var configMessages: [state_config_message] = try messages.enumerated()
+                .map { index, message in
+                    state_config_message(
+                        namespace_: try message.namespace.cNamespace,
+                        hash: cMessageHashes[index],
+                        timestamp_ms: UInt64(message.serverTimestampMs),
+                        data: cMessagesData[index],
+                        datalen: message.data.count
+                    )
+                }
+            
+            var pubkeyHex: [CChar] = sessionIdHexString.cArray
+            var cMergedHashesPtr: UnsafeMutablePointer<config_string_list>?
+            
+            guard state_merge(state, &pubkeyHex, &configMessages, configMessages.count, &cMergedHashesPtr) else {
+                throw lastError ?? LibSessionError.unknown
+            }
+            
+            let mergedHashes: [String] = cMergedHashesPtr
+                .map { ptr in
+                    [String](
+                        pointer: ptr.pointee.value,
+                        count: ptr.pointee.len,
+                        defaultValue: []
+                    )
+                }
+                .defaulting(to: [])
+            cMessageHashes.forEach { $0?.deallocate() }
+            cMessagesData.forEach { $0?.deallocate() }
+            cMergedHashesPtr?.deallocate()
+        }
+    }
+}
 
 public extension LibSession {
     // MARK: - Variables
@@ -17,226 +388,13 @@ public extension LibSession {
     
     // MARK: - Loading
     
-    static func clearMemoryState(using dependencies: Dependencies) {
-        dependencies.mutate(cache: .libSession) { cache in
-            cache.removeAll()
-        }
-    }
-    
     static func loadState(_ db: Database, using dependencies: Dependencies) {
-        // Ensure we have the ed25519 key and that we haven't already loaded the state before
-        // we continue
-        guard
-            let ed25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies),
-            dependencies[cache: .libSession].isEmpty
-        else { return SNLog("[LibSession] Ignoring loadState due to existing state") }
-        
-        // Retrieve the existing dumps from the database
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let existingDumps: [ConfigDump] = ((try? ConfigDump.fetchSet(db)) ?? [])
-            .sorted { lhs, rhs in lhs.variant.loadOrder < rhs.variant.loadOrder }
-        let existingDumpVariants: Set<ConfigDump.Variant> = existingDumps
-            .map { $0.variant }
-            .asSet()
-        let missingRequiredVariants: Set<ConfigDump.Variant> = ConfigDump.Variant.userVariants
-            .subtracting(existingDumpVariants)
-        let groupsByKey: [String: ClosedGroup] = (try? ClosedGroup
-            .filter(ClosedGroup.Columns.threadId.like("\(SessionId.Prefix.group.rawValue)%"))
-            .fetchAll(db)
-            .reduce(into: [:]) { result, next in result[next.threadId] = next })
-            .defaulting(to: [:])
-        let groupsWithNoDumps: [ClosedGroup] = groupsByKey
-            .values
-            .filter { group in !existingDumps.contains(where: { $0.sessionId.hexString == group.id }) }
-        
-        // Create the config records for each dump
-        dependencies.mutate(cache: .libSession) { cache in
-            existingDumps.forEach { dump in
-                cache.setConfig(
-                    for: dump.variant,
-                    sessionId: dump.sessionId,
-                    to: try? LibSession
-                        .loadState(
-                            for: dump.variant,
-                            sessionId: dump.sessionId,
-                            userEd25519SecretKey: ed25519KeyPair.secretKey,
-                            groupEd25519SecretKey: groupsByKey[dump.sessionId.hexString]?
-                                .groupIdentityPrivateKey
-                                .map { Array($0) },
-                            cachedData: dump.data,
-                            cache: cache
-                        )
-                        .addingLogger()
-                )
-            }
-            
-            /// It's possible for there to not be dumps for all of the user configs so we load any missing ones to ensure funcitonality
-            /// works smoothly
-            missingRequiredVariants.forEach { variant in
-                cache.setConfig(
-                    for: variant,
-                    sessionId: userSessionId,
-                    to: try? LibSession
-                        .loadState(
-                            for: variant,
-                            sessionId: userSessionId,
-                            userEd25519SecretKey: ed25519KeyPair.secretKey,
-                            groupEd25519SecretKey: nil,
-                            cachedData: nil,
-                            cache: cache
-                        )
-                        .addingLogger()
-                )
-            }
-        }
-        
-        /// It's possible for a group to get created but for a dump to not be created (eg. when a crash happens at the right time), to
-        /// handle this we also load the state of any groups which don't have dumps if they aren't in the `invited` state (those in
-        /// the `invited` state will have their state loaded if the invite is accepted)
-        groupsWithNoDumps
-            .filter { $0.invited != true }
-            .forEach { group in
-                _ = try? LibSession.createGroupState(
-                    groupSessionId: SessionId(.group, hex: group.id),
-                    userED25519KeyPair: ed25519KeyPair,
-                    groupIdentityPrivateKey: group.groupIdentityPrivateKey,
-                    shouldLoadState: true,
-                    using: dependencies
-                )
-            }
-        
-        SNLog("[LibSession] Completed loadState")
+        do { dependencies.set(singleton: .libSession, to: try StateManager(db, using: dependencies)) }
+        catch { SNLog("[LibSession] loadState failed due to error: \(error)") }
     }
     
-    private static func loadState(
-        for variant: ConfigDump.Variant,
-        sessionId: SessionId,
-        userEd25519SecretKey: [UInt8],
-        groupEd25519SecretKey: [UInt8]?,
-        cachedData: Data?,
-        cache: LibSessionCacheType
-    ) throws -> Config {
-        // Setup initial variables (including getting the memory address for any cached data)
-        var conf: UnsafeMutablePointer<config_object>? = nil
-        var keysConf: UnsafeMutablePointer<config_group_keys>? = nil
-        var secretKey: [UInt8] = userEd25519SecretKey
-        var error: [CChar] = [CChar](repeating: 0, count: 256)
-        let cachedDump: (data: UnsafePointer<UInt8>, length: Int)? = cachedData?.withUnsafeBytes { unsafeBytes in
-            return unsafeBytes.baseAddress.map {
-                (
-                    $0.assumingMemoryBound(to: UInt8.self),
-                    unsafeBytes.count
-                )
-            }
-        }
-        let userConfigInitCalls: [ConfigDump.Variant: UserConfigInitialiser] = [
-            .userProfile: user_profile_init,
-            .contacts: contacts_init,
-            .convoInfoVolatile: convo_info_volatile_init,
-            .userGroups: user_groups_init
-        ]
-        let groupConfigInitCalls: [ConfigDump.Variant: GroupConfigInitialiser] = [
-            .groupInfo: groups_info_init,
-            .groupMembers: groups_members_init
-        ]
-        
-        switch (variant, groupEd25519SecretKey) {
-            case (.invalid, _):
-                SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object")
-                throw LibSessionError.unableToCreateConfigObject
-                
-            case (.userProfile, _), (.contacts, _), (.convoInfoVolatile, _), (.userGroups, _):
-                return try (userConfigInitCalls[variant]?(
-                    &conf,
-                    &secretKey,
-                    cachedDump?.data,
-                    (cachedDump?.length ?? 0),
-                    &error
-                ))
-                .toConfig(conf, variant: variant, error: error)
-                
-            case (.groupInfo, .some(var adminSecretKey)), (.groupMembers, .some(var adminSecretKey)):
-                var identityPublicKey: [UInt8] = sessionId.publicKey
-                
-                return try (groupConfigInitCalls[variant]?(
-                    &conf,
-                    &identityPublicKey,
-                    &adminSecretKey,
-                    cachedDump?.data,
-                    (cachedDump?.length ?? 0),
-                    &error
-                ))
-                .toConfig(conf, variant: variant, error: error)
-                
-            case (.groupKeys, .some(var adminSecretKey)):
-                var identityPublicKey: [UInt8] = sessionId.publicKey
-                let infoConfig: Config? = cache.config(for: .groupInfo, sessionId: sessionId).wrappedValue
-                let membersConfig: Config? = cache.config(for: .groupMembers, sessionId: sessionId).wrappedValue
-                
-                guard
-                    case .object(let infoConf) = infoConfig,
-                    case .object(let membersConf) = membersConfig
-                else {
-                    SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
-                    throw LibSessionError.unableToCreateConfigObject
-                }
-                
-                return try groups_keys_init(
-                    &keysConf,
-                    &secretKey,
-                    &identityPublicKey,
-                    &adminSecretKey,
-                    infoConf,
-                    membersConf,
-                    cachedDump?.data,
-                    (cachedDump?.length ?? 0),
-                    &error
-                )
-                .toConfig(keysConf, info: infoConf, members: membersConf, variant: variant, error: error)
-                
-            // It looks like C doesn't deal will passing pointers to null variables well so we need
-            // to explicitly pass 'nil' for the admin key in this case
-            case (.groupInfo, .none), (.groupMembers, .none):
-                var identityPublicKey: [UInt8] = sessionId.publicKey
-                
-                return try (groupConfigInitCalls[variant]?(
-                    &conf,
-                    &identityPublicKey,
-                    nil,
-                    cachedDump?.data,
-                    (cachedDump?.length ?? 0),
-                    &error
-                ))
-                .toConfig(conf, variant: variant, error: error)
-                
-            // It looks like C doesn't deal will passing pointers to null variables well so we need
-            // to explicitly pass 'nil' for the admin key in this case
-            case (.groupKeys, .none):
-                var identityPublicKey: [UInt8] = sessionId.publicKey
-                let infoConfig: Config? = cache.config(for: .groupInfo, sessionId: sessionId).wrappedValue
-                let membersConfig: Config? = cache.config(for: .groupMembers, sessionId: sessionId).wrappedValue
-                
-                guard
-                    case .object(let infoConf) = infoConfig,
-                    case .object(let membersConf) = membersConfig
-                else {
-                    SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: Group info and member config states not loaded")
-                    throw LibSessionError.unableToCreateConfigObject
-                }
-                
-                return try groups_keys_init(
-                    &keysConf,
-                    &secretKey,
-                    &identityPublicKey,
-                    nil,
-                    infoConf,
-                    membersConf,
-                    cachedDump?.data,
-                    (cachedDump?.length ?? 0),
-                    &error
-                )
-                .toConfig(keysConf, info: infoConf, members: membersConf, variant: variant, error: error)
-        }
+    static func clearMemoryState(using dependencies: Dependencies) {
+        dependencies.set(singleton: .libSession, to: LibSession.NoopStateManager())
     }
     
     internal static func createDump(
@@ -374,127 +532,10 @@ public extension LibSession {
     ) throws {
         guard !messages.isEmpty else { return }
         
-        let groupedMessages: [ConfigDump.Variant: [ConfigMessageReceiveJob.Details.MessageInfo]] = messages
-            .grouped(by: { ConfigDump.Variant(namespace: $0.namespace) })
-        
-        let needsPush: Bool = try groupedMessages
-            .sorted { lhs, rhs in lhs.key.namespace.processingOrder < rhs.key.namespace.processingOrder }
-            .reduce(false) { prevNeedsPush, next -> Bool in
-                let sessionId: SessionId = SessionId(hex: sessionIdHexString, dumpVariant: next.key)
-                let needsPush: Bool = try dependencies[cache: .libSession]
-                    .config(for: next.key, sessionId: sessionId)
-                    .mutate { config in
-                        do {
-                            // Merge the messages (if it doesn't merge anything then don't bother trying
-                            // to handle the result)
-                            guard let latestServerTimestampMs: Int64 = try config?.merge(next.value) else {
-                                return config.needsPush
-                            }
-                            
-                            // Apply the updated states to the database
-                            switch next.key {
-                                case .userProfile:
-                                    try LibSession.handleUserProfileUpdate(
-                                        db,
-                                        in: config,
-                                        serverTimestampMs: latestServerTimestampMs,
-                                        using: dependencies
-                                    )
-                                    
-                                case .contacts:
-                                    try LibSession.handleContactsUpdate(
-                                        db,
-                                        in: config,
-                                        serverTimestampMs: latestServerTimestampMs,
-                                        using: dependencies
-                                    )
-                                    
-                                case .convoInfoVolatile:
-                                    try LibSession.handleConvoInfoVolatileUpdate(
-                                        db,
-                                        in: config,
-                                        using: dependencies
-                                    )
-                                    
-                                case .userGroups:
-                                    try LibSession.handleUserGroupsUpdate(
-                                        db,
-                                        in: config,
-                                        serverTimestampMs: latestServerTimestampMs,
-                                        using: dependencies
-                                    )
-                                    
-                                case .groupInfo:
-                                    try LibSession.handleGroupInfoUpdate(
-                                        db,
-                                        in: config,
-                                        groupSessionId: sessionId,
-                                        serverTimestampMs: latestServerTimestampMs,
-                                        using: dependencies
-                                    )
-                                    
-                                case .groupMembers:
-                                    try LibSession.handleGroupMembersUpdate(
-                                        db,
-                                        in: config,
-                                        groupSessionId: sessionId,
-                                        serverTimestampMs: latestServerTimestampMs,
-                                        using: dependencies
-                                    )
-                                    
-                                case .groupKeys:
-                                    try LibSession.handleGroupKeysUpdate(
-                                        db,
-                                        in: config,
-                                        groupSessionId: sessionId,
-                                        using: dependencies
-                                    )
-                                    
-                                case .invalid: SNLog("[libSession] Failed to process merge of invalid config namespace")
-                            }
-                            
-                            // Need to check if the config needs to be dumped (this might have changed
-                            // after handling the merge changes)
-                            guard config.needsDump(using: dependencies) else {
-                                try ConfigDump
-                                    .filter(
-                                        ConfigDump.Columns.variant == next.key &&
-                                        ConfigDump.Columns.publicKey == sessionId.hexString
-                                    )
-                                    .updateAll(
-                                        db,
-                                        ConfigDump.Columns.timestampMs.set(to: latestServerTimestampMs)
-                                    )
-                                
-                                return config.needsPush
-                            }
-                            
-                            try LibSession.createDump(
-                                config: config,
-                                for: next.key,
-                                sessionId: sessionId,
-                                timestampMs: latestServerTimestampMs,
-                                using: dependencies
-                            )?.upsert(db)
-                        }
-                        catch {
-                            SNLog("[LibSession] Failed to process merge of \(next.key) config data")
-                            throw error
-                        }
-                
-                        return config.needsPush
-                    }
-                
-                // Update the 'needsPush' state as needed
-                return (prevNeedsPush || needsPush)
-            }
-        
-        // Now that the local state has been updated, schedule a config sync if needed (this will
-        // push any pending updates and properly update the state)
-        guard needsPush else { return }
-        
-        db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(sessionIdHexString)) { db in
-            ConfigurationSyncJob.enqueue(db, sessionIdHexString: sessionIdHexString)
+        do {
+            try dependencies[singleton: .libSession].merge(sessionIdHexString: sessionIdHexString, messages: messages)
+        }
+        catch {
         }
     }
 }
@@ -659,4 +700,68 @@ public protocol LibSessionCacheType: LibSessionImmutableCacheType, MutableCacheT
     func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?)
     func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?>
     func removeAll()
+}
+
+// MARK: - Convenience
+
+public extension LibSessionError {
+    init(_ state: UnsafeMutablePointer<state_object>) {
+        guard state.pointee.last_error != nil else {
+            self = .unknown
+            return
+        }
+        
+        let errorString = String(cString: state.pointee.last_error)
+        self = LibSessionError.libSessionError(errorString)
+    }
+}
+
+private extension ConfigDump.Variant {
+    init?(cNamespace: NAMESPACE) {
+        switch cNamespace {
+            case NAMESPACE_CONTACTS: self = .contacts
+            case NAMESPACE_CONVO_INFO_VOLATILE: self = .convoInfoVolatile
+            case NAMESPACE_USER_GROUPS: self = .userGroups
+            case NAMESPACE_USER_PROFILE: self = .userProfile
+                
+            case NAMESPACE_GROUP_INFO: self = .groupInfo
+            case NAMESPACE_GROUP_MEMBERS: self = .groupMembers
+            case NAMESPACE_GROUP_KEYS: self = .groupKeys
+            default: return nil
+        }
+    }
+    
+    var cNamespace: NAMESPACE {
+        get throws {
+            switch self {
+                case .contacts: return NAMESPACE_CONTACTS
+                case .convoInfoVolatile: return NAMESPACE_CONVO_INFO_VOLATILE
+                case .userGroups: return NAMESPACE_USER_GROUPS
+                case .userProfile: return NAMESPACE_USER_PROFILE
+                    
+                case .groupInfo: return NAMESPACE_GROUP_INFO
+                case .groupMembers: return NAMESPACE_GROUP_MEMBERS
+                case .groupKeys: return NAMESPACE_GROUP_KEYS
+                default: throw LibSessionError.invalidConfigObject
+            }
+        }
+    }
+}
+
+private extension SnodeAPI.Namespace {
+    var cNamespace: SessionUtil.NAMESPACE {
+        get throws {
+            switch self {
+                case .configContacts: return NAMESPACE_CONTACTS
+                case .configConvoInfoVolatile: return NAMESPACE_CONVO_INFO_VOLATILE
+                case .configUserGroups: return NAMESPACE_USER_GROUPS
+                case .configUserProfile: return NAMESPACE_USER_PROFILE
+                    
+                case .configGroupInfo: return NAMESPACE_GROUP_INFO
+                case .configGroupMembers: return NAMESPACE_GROUP_MEMBERS
+                case .configGroupKeys: return NAMESPACE_GROUP_KEYS
+                default: throw CryptoError.failedToGenerateOutput
+            }
+        }
+    }
 }

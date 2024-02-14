@@ -17,6 +17,7 @@ public enum SnodeAPIError: LocalizedError {
     case emptySnodePool
     case responseFailedValidation
     case unauthorised
+    case ranOutOfRandomSnodes
     
     // ONS
     case decryptionFailed
@@ -37,6 +38,7 @@ public enum SnodeAPIError: LocalizedError {
             case .emptySnodePool: return "Service Node pool is empty."
             case .responseFailedValidation: return "Response failed validation."
             case .unauthorised: return "Unauthorized"
+            case .ranOutOfRandomSnodes: return "Ran out of random snodes to send the request through."
                 
             // ONS
             case .decryptionFailed: return "Couldn't decrypt ONS name."

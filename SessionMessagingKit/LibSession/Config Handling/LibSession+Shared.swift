@@ -123,15 +123,37 @@ internal extension LibSession {
         // If we have no updated threads then no need to continue
         guard !updatedThreads.isEmpty else { return updated }
         
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let groupedThreads: [SessionThread.Variant: [SessionThread]] = updatedThreads
+        try dependencies[singleton: .libSession].mutate { state in
+            try upsert(
+                threads: updatedThreads,
+                openGroupUrlInfo: try OpenGroupUrlInfo
+                    .fetchAll(db, ids: updatedThreads.map { $0.id })
+                    .reduce(into: [:]) { result, next in result[next.threadId] = next },
+                in: state,
+                using: dependencies
+            )
+        }
+        
+        return updated
+    }
+    
+    static func upsert(
+        threads: [SessionThread],
+        openGroupUrlInfo: [String: OpenGroupUrlInfo],
+        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        using dependencies: Dependencies
+    ) throws {
+        let userSessionId: SessionId = getUserSessionId(using: dependencies)
+        let groupedThreads: [SessionThread.Variant: [SessionThread]] = threads
             .grouped(by: \.variant)
-        let urlInfo: [String: OpenGroupUrlInfo] = try OpenGroupUrlInfo
-            .fetchAll(db, ids: updatedThreads.map { $0.id })
-            .reduce(into: [:]) { result, next in result[next.threadId] = next }
         
         // Update the unread state for the threads first (just in case that's what changed)
-        try LibSession.updateMarkedAsUnreadState(db, threads: updatedThreads, using: dependencies)
+        try LibSession.updateMarkedAsUnreadState(
+            threads: threads,
+            openGroupUrlInfo: openGroupUrlInfo,
+            in: state,
+            using: dependencies
+        )
         
         // Then update the `hidden` and `priority` values
         try groupedThreads.forEach { variant, threads in
@@ -140,23 +162,16 @@ internal extension LibSession {
                     // If the 'Note to Self' conversation is pinned then we need to custom handle it
                     // first as it's part of the UserProfile config
                     if let noteToSelf: SessionThread = threads.first(where: { $0.id == userSessionId.hexString }) {
-                        try LibSession.performAndPushChange(
-                            db,
-                            for: .userProfile,
-                            sessionId: userSessionId,
-                            using: dependencies
-                        ) { config in
-                            try LibSession.updateNoteToSelf(
-                                priority: {
-                                    guard noteToSelf.shouldBeVisible else { return LibSession.hiddenPriority }
-                                    
-                                    return noteToSelf.pinnedPriority
-                                        .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
-                                        .defaulting(to: LibSession.visiblePriority)
-                                }(),
-                                in: config
-                            )
-                        }
+                        LibSession.updateNoteToSelf(
+                            priority: {
+                                guard noteToSelf.shouldBeVisible else { return LibSession.hiddenPriority }
+                                
+                                return noteToSelf.pinnedPriority
+                                    .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                    .defaulting(to: LibSession.visiblePriority)
+                            }(),
+                            in: state
+                        )
                     }
                     
                     // Remove the 'Note to Self' convo from the list for updating contact priorities
@@ -164,98 +179,72 @@ internal extension LibSession {
                     
                     guard !remainingThreads.isEmpty else { return }
                     
-                    try LibSession.performAndPushChange(
-                        db,
-                        for: .contacts,
-                        sessionId: userSessionId,
+                    try LibSession.upsert(
+                        contactData: remainingThreads
+                            .map { thread in
+                                SyncedContactInfo(
+                                    id: thread.id,
+                                    priority: {
+                                        guard thread.shouldBeVisible else { return LibSession.hiddenPriority }
+                                        
+                                        return thread.pinnedPriority
+                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                            .defaulting(to: LibSession.visiblePriority)
+                                    }()
+                                )
+                            },
+                        in: state,
                         using: dependencies
-                    ) { config in
-                        try LibSession.upsert(
-                            contactData: remainingThreads
-                                .map { thread in
-                                    SyncedContactInfo(
-                                        id: thread.id,
-                                        priority: {
-                                            guard thread.shouldBeVisible else { return LibSession.hiddenPriority }
-                                            
-                                            return thread.pinnedPriority
-                                                .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
-                                                .defaulting(to: LibSession.visiblePriority)
-                                        }()
-                                    )
-                                },
-                            in: config
-                        )
-                    }
+                    )
                     
                 case .community:
-                    try LibSession.performAndPushChange(
-                        db,
-                        for: .userGroups,
-                        sessionId: userSessionId,
+                    try LibSession.upsert(
+                        communities: threads
+                            .compactMap { thread -> CommunityInfo? in
+                                openGroupUrlInfo[thread.id].map { urlInfo in
+                                    CommunityInfo(
+                                        urlInfo: urlInfo,
+                                        priority: thread.pinnedPriority
+                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                            .defaulting(to: LibSession.visiblePriority)
+                                    )
+                                }
+                            },
+                        in: state,
                         using: dependencies
-                    ) { config in
-                        try LibSession.upsert(
-                            communities: threads
-                                .compactMap { thread -> CommunityInfo? in
-                                    urlInfo[thread.id].map { urlInfo in
-                                        CommunityInfo(
-                                            urlInfo: urlInfo,
-                                            priority: thread.pinnedPriority
-                                                .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
-                                                .defaulting(to: LibSession.visiblePriority)
-                                        )
-                                    }
-                                },
-                            in: config
-                        )
-                    }
+                    )
                     
                 case .legacyGroup:
-                    try LibSession.performAndPushChange(
-                        db,
-                        for: .userGroups,
-                        sessionId: userSessionId,
+                    try LibSession.upsert(
+                        legacyGroups: threads
+                            .map { thread in
+                                LegacyGroupInfo(
+                                    id: thread.id,
+                                    priority: thread.pinnedPriority
+                                        .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                        .defaulting(to: LibSession.visiblePriority)
+                                )
+                            },
+                        in: state,
                         using: dependencies
-                    ) { config in
-                        try LibSession.upsert(
-                            legacyGroups: threads
-                                .map { thread in
-                                    LegacyGroupInfo(
-                                        id: thread.id,
-                                        priority: thread.pinnedPriority
-                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
-                                            .defaulting(to: LibSession.visiblePriority)
-                                    )
-                                },
-                            in: config
-                        )
-                    }
-                
+                    )
+                    
                 case .group:
-                    try LibSession.performAndPushChange(
-                        db,
-                        for: .userGroups,
-                        sessionId: userSessionId,
+                    try LibSession.upsert(
+                        groups: threads
+                            .map { thread in
+                                GroupInfo(
+                                    groupSessionId: thread.id,
+                                    priority: thread.pinnedPriority
+                                        .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
+                                        .defaulting(to: LibSession.visiblePriority)
+                                )
+                            },
+                        in: state,
                         using: dependencies
-                    ) { config in
-                        try LibSession.upsert(
-                            groups: threads
-                                .map { thread in
-                                    GroupInfo(
-                                        groupSessionId: thread.id,
-                                        priority: thread.pinnedPriority
-                                            .map { Int32($0 == 0 ? LibSession.visiblePriority : max($0, 1)) }
-                                            .defaulting(to: LibSession.visiblePriority)
-                                    )
-                                },
-                            in: config
-                        )
-                    }
+                    )
             }
         }
-        
-        return updated
     }
     
     static func hasSetting(
@@ -263,43 +252,32 @@ internal extension LibSession {
         forKey key: String,
         using dependencies: Dependencies
     ) throws -> Bool {
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch key {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                return try dependencies[cache: .libSession]
-                    .config(for: .userProfile, sessionId: userSessionId)
-                    .wrappedValue
-                    .map { config -> Bool in (try LibSession.rawBlindedMessageRequestValue(in: config) >= 0) }
-                    .defaulting(to: false)
-                
+                return (dependencies[singleton: .libSession].rawBlindedMessageRequestValue >= 0)
+            
             default: return false
         }
     }
     
     static func updatingSetting(
-        _ db: Database,
         _ updated: Setting?,
         using dependencies: Dependencies
-    ) throws {
-        // Don't current support any nullable settings
-        guard let updatedSetting: Setting = updated else { return }
-        
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
+    ) {
+        // Ensure the setting is one which should be synced (we also don't currently support any nullable settings)
+        guard
+            let updatedSetting: Setting = updated,
+            LibSession.syncedSettings.contains(updatedSetting.id)
+        else { return }
         
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch updatedSetting.id {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                try LibSession.performAndPushChange(
-                    db,
-                    for: .userProfile,
-                    sessionId: userSessionId,
-                    using: dependencies
-                ) { config in
-                    try LibSession.updateSettings(
+                dependencies[singleton: .libSession].mutate { state in
+                    LibSession.updateSettings(
                         checkForCommunityMessageRequests: updatedSetting.unsafeValue(as: Bool.self),
-                        in: config
+                        in: state
                     )
                 }
                 
@@ -437,84 +415,53 @@ internal extension LibSession {
     }
 }
 
-// MARK: - External Outgoing Changes
+// MARK: - StateManager
 
-public extension LibSession {
-    static func conversationInConfig(
-        _ db: Database? = nil,
-        threadId: String,
-        threadVariant: SessionThread.Variant,
-        visibleOnly: Bool,
-        using dependencies: Dependencies = Dependencies()
-    ) -> Bool {
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let configVariant: ConfigDump.Variant = {
-            switch threadVariant {
-                case .contact: return (threadId == userSessionId.hexString ? .userProfile : .contacts)
-                case .legacyGroup, .group, .community: return .userGroups
-            }
-        }()
+public extension LibSession.StateManager {
+    func conversationInConfig(threadId: String, rawThreadVariant: Int, visibleOnly: Bool, using dependencies: Dependencies) -> Bool {
+        guard let threadVariant: SessionThread.Variant = SessionThread.Variant(rawValue: rawThreadVariant) else {
+            return false
+        }
         
-        return dependencies[cache: .libSession]
-            .config(for: configVariant, sessionId: userSessionId)
-            .wrappedValue
-            .map { config in
-                guard case .object(let conf) = config else { return false }
-                
-                var cThreadId: [CChar] = threadId.cArray.nullTerminated()
-                
-                switch threadVariant {
-                    case .contact:
-                        // The 'Note to Self' conversation is stored in the 'userProfile' config
-                        guard threadId != userSessionId.hexString else {
-                            return (
-                                !visibleOnly ||
-                                LibSession.shouldBeVisible(priority: user_profile_get_nts_priority(conf))
-                            )
-                        }
-                        
-                        var contact: contacts_contact = contacts_contact()
-                        
-                        guard contacts_get(conf, &contact, &cThreadId) else { return false }
-                        
-                        /// If the user opens a conversation with an existing contact but doesn't send them a message
-                        /// then the one-to-one conversation should remain hidden so we want to delete the `SessionThread`
-                        /// when leaving the conversation
-                        return (!visibleOnly || LibSession.shouldBeVisible(priority: contact.priority))
-                        
-                    case .community:
-                        let maybeUrlInfo: OpenGroupUrlInfo? = dependencies[singleton: .storage]
-                            .read { db in try OpenGroupUrlInfo.fetchAll(db, ids: [threadId]) }?
-                            .first
-                        
-                        guard let urlInfo: OpenGroupUrlInfo = maybeUrlInfo else { return false }
-                        
-                        var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()
-                        var cRoom: [CChar] = urlInfo.roomToken.cArray.nullTerminated()
-                        var community: ugroups_community_info = ugroups_community_info()
-                        
-                        /// Not handling the `hidden` behaviour for communities so just indicate the existence
-                        return user_groups_get_community(conf, &community, &cBaseUrl, &cRoom)
-                        
-                    case .legacyGroup:
-                        let groupInfo: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cThreadId)
-                        
-                        /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence
-                        if groupInfo != nil {
-                            ugroups_legacy_group_free(groupInfo)
-                            return true
-                        }
-                        
-                        return false
-                        
-                    case .group:
-                        var group: ugroups_group_info = ugroups_group_info()
-                        
-                        /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence
-                        return user_groups_get_group(conf, &group, &cThreadId)
+        let userSessionId: SessionId = getUserSessionId(using: dependencies)
+        
+        switch threadVariant {
+            case .contact:
+                // The 'Note to Self' conversation is stored in the 'userProfile' config
+                guard threadId != userSessionId.hexString else {
+                    return (
+                        !visibleOnly ||
+                        LibSession.shouldBeVisible(priority: state_get_profile_nts_priority(state))
+                    )
                 }
-            }
-            .defaulting(to: false)
+
+                guard let contact: CContact = contact(sessionId: threadId) else { return false }
+
+                /// If the user opens a conversation with an existing contact but doesn't send them a message
+                /// then the one-to-one conversation should remain hidden so we want to delete the `SessionThread`
+                /// when leaving the conversation
+                return (!visibleOnly || LibSession.shouldBeVisible(priority: contact.priority))
+                
+            case .community:
+                guard
+                    let urlInfo: LibSession.OpenGroupUrlInfo = dependencies[singleton: .storage]
+                        .read({ db in try LibSession.OpenGroupUrlInfo.fetchAll(db, ids: [threadId]) })?
+                        .first
+                else { return false }
+
+                /// Not handling the `hidden` behaviour for communities so just indicate the existence
+                return (community(server: urlInfo.server, roomToken: urlInfo.roomToken) != nil)
+                
+            case .legacyGroup:
+                guard var groupInfo: CLegacyGroup = legacyGroup(legacyGroupId: threadId) else { return false }
+
+                /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence (also need to explicitly free the legacy group object)
+                ugroups_legacy_group_free(groupInfo)
+                return true
+                
+            /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence
+            case .group: return (group(groupSessionId: threadId) != nil)
+        }
     }
 }
 

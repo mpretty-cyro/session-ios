@@ -34,13 +34,12 @@ extension MessageReceiver {
                 }
             }(),
             timestampMs: timestampMs,
-            wasRead: LibSession.timestampAlreadyRead(
+            wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                 threadId: threadId,
-                threadVariant: threadVariant,
+                rawThreadVariant: threadVariant.rawValue,
                 timestampMs: (timestampMs * 1000),
-                userSessionId: getUserSessionId(db, using: dependencies),
-                openGroup: nil,
-                using: dependencies
+                openGroupServer: nil,
+                openGroupRoomToken: nil
             ),
             expiresInSeconds: message.expiresInSeconds,
             expiresStartedAtMs: message.expiresStartedAtMs

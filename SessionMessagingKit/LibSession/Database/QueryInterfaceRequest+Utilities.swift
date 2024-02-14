@@ -144,17 +144,15 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
             case is QueryInterfaceRequest<ClosedGroup>:
                 // Group data is stored both in the `USER_GROUPS` config and it's own `GROUP_INFO` config so we
                 // need to update both
-                try LibSession.updatingGroups(db, updatedData, using: dependencies)
+                try LibSession.updatingGroups(updatedData, using: dependencies)
                 return try LibSession.updatingGroupInfo(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<GroupMember>:
                 return try LibSession.updatingGroupMembers(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<DisappearingMessagesConfiguration>:
-                let oneToOneUpdates: [RowDecoder] = try LibSession.updatingDisappearingConfigsOneToOne(db, updatedData, using: dependencies)
-                let groupUpdates: [RowDecoder] = try LibSession.updatingDisappearingConfigsGroups(db, updatedData, using: dependencies)
-                
-                return (oneToOneUpdates + groupUpdates)
+                try LibSession.updatingDisappearingConfigsOneToOne(db, updatedData, using: dependencies)
+                return try LibSession.updatingDisappearingConfigsGroups(db, updatedData, using: dependencies)
                 
             default: return updatedData
         }

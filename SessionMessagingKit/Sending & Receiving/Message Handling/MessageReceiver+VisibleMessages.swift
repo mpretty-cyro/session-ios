@@ -147,13 +147,12 @@ extension MessageReceiver {
                 wasRead: (
                     // Auto-mark sent messages or messages older than the 'lastReadTimestampMs' as read
                     variant == .standardOutgoing ||
-                    LibSession.timestampAlreadyRead(
+                    dependencies[singleton: .libSession].timestampAlreadyRead(
                         threadId: thread.id,
-                        threadVariant: thread.variant,
+                        rawThreadVariant: thread.variant.rawValue,
                         timestampMs: Int64(messageSentTimestamp * 1000),
-                        userSessionId: userSessionId,
-                        openGroup: maybeOpenGroup,
-                        using: dependencies
+                        openGroupServer: maybeOpenGroup?.server,
+                        openGroupRoomToken: maybeOpenGroup?.roomToken
                     )
                 ),
                 hasMention: Interaction.isUserMentioned(
@@ -419,13 +418,12 @@ extension MessageReceiver {
                     count: 1,
                     sortId: sortId
                 ).inserted(db)
-                let timestampAlreadyRead: Bool = LibSession.timestampAlreadyRead(
+                let timestampAlreadyRead: Bool = dependencies[singleton: .libSession].timestampAlreadyRead(
                     threadId: thread.id,
-                    threadVariant: thread.variant,
+                    rawThreadVariant: thread.variant.rawValue,
                     timestampMs: timestampMs,
-                    userSessionId: userSessionId,
-                    openGroup: openGroup,
-                    using: dependencies
+                    openGroupServer: openGroup?.server,
+                    openGroupRoomToken: openGroup?.roomToken
                 )
                 
                 // Don't notify if the reaction was added before the lastest read timestamp for

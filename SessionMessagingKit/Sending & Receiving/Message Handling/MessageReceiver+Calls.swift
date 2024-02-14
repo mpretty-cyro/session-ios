@@ -238,13 +238,12 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: messageSentTimestamp,
-            wasRead: LibSession.timestampAlreadyRead(
+            wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                 threadId: thread.id,
-                threadVariant: thread.variant,
+                rawThreadVariant: thread.variant.rawValue,
                 timestampMs: (messageSentTimestamp * 1000),
-                userSessionId: getUserSessionId(db, using: dependencies),
-                openGroup: nil,
-                using: dependencies
+                openGroupServer: nil,
+                openGroupRoomToken: nil
             )
         )
         .inserted(db)
@@ -314,13 +313,12 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: timestampMs,
-            wasRead: LibSession.timestampAlreadyRead(
+            wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                 threadId: thread.id,
-                threadVariant: thread.variant,
+                rawThreadVariant: thread.variant.rawValue,
                 timestampMs: (timestampMs * 1000),
-                userSessionId: userSessionId,
-                openGroup: nil,
-                using: dependencies
+                openGroupServer: nil,
+                openGroupRoomToken: nil
             ),
             expiresInSeconds: message.expiresInSeconds,
             expiresStartedAtMs: message.expiresStartedAtMs

@@ -83,7 +83,6 @@ extension MessageSender {
                 
                 // Update libSession
                 try LibSession.add(
-                    db,
                     legacyGroupSessionId: legacyGroupSessionId,
                     name: name,
                     latestKeyPairPublicKey: Data(encryptionKeyPair.publicKey),
@@ -252,7 +251,6 @@ extension MessageSender {
                         
                         // Update libSession
                         try? LibSession.update(
-                            db,
                             legacyGroupSessionId: closedGroup.threadId,
                             latestKeyPair: newKeyPair,
                             members: allGroupMembers
@@ -330,7 +328,6 @@ extension MessageSender {
                     
                     // Update libSession
                     try? LibSession.update(
-                        db,
                         legacyGroupSessionId: closedGroup.threadId,
                         name: name,
                         using: dependencies
@@ -435,7 +432,6 @@ extension MessageSender {
         
         // Update libSession
         try? LibSession.update(
-            db,
             legacyGroupSessionId: closedGroup.threadId,
             members: allGroupMembers
                 .filter { $0.role == .standard || $0.role == .zombie }

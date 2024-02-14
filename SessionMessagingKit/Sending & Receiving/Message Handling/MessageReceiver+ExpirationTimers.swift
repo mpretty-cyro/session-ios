@@ -81,22 +81,18 @@ extension MessageReceiver {
             // Contacts & legacy closed groups need to update libSession
             switch threadVariant {
                 case .contact:
-                    try LibSession
-                        .update(
-                            db,
-                            sessionId: threadId,
-                            disappearingMessagesConfig: remoteConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        sessionId: threadId,
+                        disappearingMessagesConfig: remoteConfig,
+                        using: dependencies
+                    )
                 
                 case .legacyGroup:
-                    try LibSession
-                        .update(
-                            db,
-                            legacyGroupSessionId: threadId,
-                            disappearingConfig: remoteConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        legacyGroupSessionId: threadId,
+                        disappearingConfig: remoteConfig,
+                        using: dependencies
+                    )
                     
                 default: break
             }
@@ -130,13 +126,12 @@ extension MessageReceiver {
                 using: dependencies
             ),
             timestampMs: timestampMs,
-            wasRead: LibSession.timestampAlreadyRead(
+            wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                 threadId: threadId,
-                threadVariant: threadVariant,
-                timestampMs: (timestampMs * 1000),
-                userSessionId: userSessionId,
-                openGroup: nil,
-                using: dependencies
+                rawThreadVariant: threadVariant.rawValue,
+                timestampMs: timestampMs,
+                openGroupServer: nil,
+                openGroupRoomToken: nil
             ),
             expiresInSeconds: (remoteConfig.isEnabled ? nil : localConfig.durationSeconds)
         ).inserted(db)
@@ -232,22 +227,18 @@ extension MessageReceiver {
             // Contacts & legacy closed groups need to update libSession
             switch threadVariant {
                 case .contact:
-                    try LibSession
-                        .update(
-                            db,
-                            sessionId: threadId,
-                            disappearingMessagesConfig: remoteConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        sessionId: threadId,
+                        disappearingMessagesConfig: remoteConfig,
+                        using: dependencies
+                    )
                 
                 case .legacyGroup:
-                    try LibSession
-                        .update(
-                            db,
-                            legacyGroupSessionId: threadId,
-                            disappearingConfig: remoteConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        legacyGroupSessionId: threadId,
+                        disappearingConfig: remoteConfig,
+                        using: dependencies
+                    )
                 
                 // For updated groups we want to only rely on the `GROUP_INFO` config message to
                 // control the disappearing messages setting

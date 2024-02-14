@@ -394,6 +394,24 @@ public final class SnodeAPI {
             )
     }
     
+    public static func preparedRawSequenceRequest(
+        publicKey: String,
+        payload: Data,
+        using dependencies: Dependencies
+    ) throws -> HTTP.PreparedRequest<Data> {
+        return try SnodeAPI
+            .prepareRequest(
+                request: Request(
+                    method: .post,
+                    endpoint: .sequence,
+                    publicKey: publicKey,
+                    body: Array(payload)    // As bytes so `Request` doesn't transform it in any way
+                ),
+                responseType: Data.self,
+                using: dependencies
+            )
+    }
+    
     // MARK: - Retrieve
     
     public typealias PreparedGetMessagesResponse = (messages: [SnodeReceivedMessage], lastHash: String?)
@@ -849,6 +867,7 @@ public final class SnodeAPI {
                 // which case we want to update the 'clockOffsetMs' value for subsequent requests
                 let offset = (Int64(response.timestamp) - Int64(floor(dependencies.dateNow.timeIntervalSince1970 * 1000)))
                 dependencies.mutate(cache: .snodeAPI) { $0.clockOffsetMs = offset }
+                dependencies[singleton: .libSession].setServiceNodeOffset(offset)
 
                 return response.timestamp
             }
@@ -1234,7 +1253,7 @@ public extension Publisher where Output == Set<Snode> {
                             
                             // Select the next snode
                             return try dependencies.popRandomElement(&remainingSnodes) ?? {
-                                throw SnodeAPIError.generic
+                                throw SnodeAPIError.ranOutOfRandomSnodes
                             }()
                         }()
                         drainBehaviour.mutate { $0 = $0.use(snode: snode, from: swarm) }

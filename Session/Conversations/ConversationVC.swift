@@ -287,7 +287,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }()
     
     private lazy var emptyStateLabel: UILabel = {
-        let text: String = viewModel.threadData.emptyStateText
+        let text: String = viewModel.threadData.emptyStateText(using: viewModel.dependencies)
         let result: UILabel = UILabel()
         result.isAccessibilityElement = true
         result.accessibilityIdentifier = "Empty state label"
@@ -674,10 +674,11 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             ) &&
             viewModel.threadData.threadIsNoteToSelf == false &&
             viewModel.threadData.threadShouldBeVisible == false &&
-            !LibSession.conversationInConfig(
+            !viewModel.dependencies[singleton: .libSession].conversationInConfig(
                 threadId: threadId,
-                threadVariant: viewModel.threadData.threadVariant,
-                visibleOnly: false
+                rawThreadVariant: viewModel.threadData.threadVariant.rawValue,
+                visibleOnly: false,
+                using: viewModel.dependencies
             )
         {
             viewModel.dependencies[singleton: .storage].writeAsync { db in
@@ -835,7 +836,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             )
             
             // Update the empty state
-            let text: String = updatedThreadData.emptyStateText
+            let text: String = updatedThreadData.emptyStateText(using: viewModel.dependencies)
             emptyStateLabel.attributedText = NSAttributedString(string: text)
                 .adding(
                     attributes: [.font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize)],

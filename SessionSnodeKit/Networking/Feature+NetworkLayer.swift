@@ -255,6 +255,7 @@ fileprivate extension Publishers.MergeMany where Upstream.Output == Result<(Resp
                 
                 let offset: Int64 = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
                 dependencies.mutate(cache: .snodeAPI) { $0.clockOffsetMs = offset }
+                dependencies[singleton: .libSession].setServiceNodeOffset(offset)
 
                 return response
             }

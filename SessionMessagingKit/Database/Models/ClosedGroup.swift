@@ -216,7 +216,6 @@ public extension ClosedGroup {
         /// Update the `USER_GROUPS` config
         if !calledFromConfigHandling {
             try? LibSession.update(
-                db,
                 groupSessionId: group.id,
                 invited: false,
                 using: dependencies
@@ -343,8 +342,7 @@ public extension ClosedGroup {
                     ClosedGroup.Columns.authData.set(to: nil)
                 )
             
-            try LibSession.markAsKicked(
-                db,
+            LibSession.markAsKicked(
                 groupSessionIds: threadIds,
                 using: dependencies
             )
@@ -409,16 +407,14 @@ public extension ClosedGroup {
         
         // Ignore if called from the config handling
         if dataToRemove.contains(.userGroup) && !calledFromConfigHandling {
-            try LibSession.remove(
-                db,
+            LibSession.remove(
                 legacyGroupIds: threadVariants
                     .filter { $0.variant == .legacyGroup }
                     .map { $0.id },
                 using: dependencies
             )
             
-            try LibSession.remove(
-                db,
+            LibSession.remove(
                 groupSessionIds: threadVariants
                     .filter { $0.variant == .group }
                     .map { $0.id },

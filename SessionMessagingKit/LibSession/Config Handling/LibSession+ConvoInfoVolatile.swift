@@ -5,6 +5,149 @@ import GRDB
 import SessionUtil
 import SessionUtilitiesKit
 
+// MARK: - ConvoInfoVolatile Wrapper
+
+public extension LibSession.StateManager {
+    func volatileContact(sessionId: String) -> CVolatileContact? {
+        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        var result: CVolatileContact = CVolatileContact()
+        
+        guard state_get_convo_info_volatile_1to1(state, &result, &cSessionId, nil) else { return nil }
+        
+        return result
+    }
+    
+    func volatileGroup(groupSessionId: String) -> CVolatileGroup? {
+        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        var result: CVolatileGroup = CVolatileGroup()
+        
+        guard state_get_convo_info_volatile_group(state, &result, &cGroupId, nil) else { return nil }
+        
+        return result
+    }
+    
+    func volatileCommunity(server: String, roomToken: String) -> CVolatileCommunity? {
+        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        var result: CVolatileCommunity = CVolatileCommunity()
+        
+        guard state_get_convo_info_volatile_community(state, &result, &cBaseUrl, &cRoom, nil) else { return nil }
+        
+        return result
+    }
+    
+    func volatileLegacyGroup(legacyGroupId: String) -> CVolatileLegacyGroup? {
+        var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        var result: CVolatileLegacyGroup = CVolatileLegacyGroup()
+        
+        guard state_get_convo_info_volatile_legacy_group(state, &result, &cLegacyGroupId, nil) else { return nil }
+        
+        return result
+    }
+    
+    func volatileContactOrConstruct(sessionId: String) throws -> CVolatileContact {
+        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        var result: CVolatileContact = CVolatileContact()
+        var error: [CChar] = [CChar](repeating: 0, count: 256)
+        
+        guard state_get_or_construct_convo_info_volatile_1to1(state, &result, &cSessionId, &error) else {
+            /// It looks like there are some situations where this object might not get created correctly (and
+            /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+            SNLog("[LibSession] Unable to getOrConstruct volatile contact: \(LibSessionError(error))")
+            throw LibSessionError.getOrConstructFailedUnexpectedly
+        }
+        
+        return result
+    }
+    
+    func volatileGroupOrConstruct(groupSessionId: String) throws -> CVolatileGroup {
+        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        var result: CVolatileGroup = CVolatileGroup()
+        var error: [CChar] = [CChar](repeating: 0, count: 256)
+        
+        guard state_get_or_construct_convo_info_volatile_group(state, &result, &cGroupId, &error) else {
+            /// It looks like there are some situations where this object might not get created correctly (and
+            /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+            SNLog("[LibSession] Unable to getOrConstruct volatile group: \(LibSessionError(error))")
+            throw LibSessionError.getOrConstructFailedUnexpectedly
+        }
+        
+        return result
+    }
+    
+    func volatileCommunityOrConstruct(server: String, roomToken: String, publicKey: String) throws -> CVolatileCommunity {
+        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        var cPubkey: [UInt8] = Data(hex: publicKey).cArray
+        var result: CVolatileCommunity = CVolatileCommunity()
+        var error: [CChar] = [CChar](repeating: 0, count: 256)
+        
+        guard state_get_or_construct_convo_info_volatile_community(state, &result, &cBaseUrl, &cRoom, &cPubkey, &error) else {
+            /// It looks like there are some situations where this object might not get created correctly (and
+            /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+            SNLog("[LibSession] Unable to getOrConstruct volatile community: \(LibSessionError(error))")
+            throw LibSessionError.getOrConstructFailedUnexpectedly
+        }
+        
+        return result
+    }
+    
+    func volatileLegacyGroupOrConstruct(legacyGroupId: String) throws -> CVolatileLegacyGroup {
+        var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        var result: CVolatileLegacyGroup = CVolatileLegacyGroup()
+        var error: [CChar] = [CChar](repeating: 0, count: 256)
+        
+        guard state_get_or_construct_convo_info_volatile_legacy_group(state, &result, &cLegacyGroupId, &error) else {
+            /// It looks like there are some situations where this object might not get created correctly (and
+            /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+            SNLog("[LibSession] Unable to getOrConstruct volatile legacy group: \(LibSessionError(error))")
+            throw LibSessionError.getOrConstructFailedUnexpectedly
+        }
+        
+        return result
+    }
+    
+    func timestampAlreadyRead(
+        threadId: String,
+        rawThreadVariant: Int,
+        timestampMs: Int64,
+        openGroupServer: String?,
+        openGroupRoomToken: String?
+    ) -> Bool {
+        guard let threadVariant: SessionThread.Variant = SessionThread.Variant(rawValue: rawThreadVariant) else {
+            return false
+        }
+        
+        switch threadVariant {
+            case .contact:
+                guard let info: CVolatileContact = volatileContact(sessionId: threadId) else { return false }
+                
+                return (info.last_read >= timestampMs)
+                
+            case .legacyGroup:
+                guard let info: CVolatileLegacyGroup = volatileLegacyGroup(legacyGroupId: threadId) else { return false }
+                
+                return (info.last_read >= timestampMs)
+                
+            case .community:
+                guard
+                    let server: String = openGroupServer,
+                    let roomToken: String = openGroupRoomToken,
+                    let info: CVolatileCommunity = volatileCommunity(server: server, roomToken: roomToken)
+                else { return false }
+                
+                return (info.last_read >= timestampMs)
+                
+            case .group:
+                guard let info: CVolatileGroup = volatileGroup(groupSessionId: threadId) else { return false }
+
+                return (info.last_read >= timestampMs)
+        }
+    }
+}
+
+// MARK: - ConvoInfoVolatile Handling
+
 internal extension LibSession {
     static let columnsRelatedToConvoInfoVolatile: [ColumnExpression] = [
         // Note: We intentionally exclude 'Interaction.Columns.wasRead' from here as we want to
@@ -16,14 +159,11 @@ internal extension LibSession {
     
     static func handleConvoInfoVolatileUpdate(
         _ db: Database,
-        in config: Config?,
+        in state: UnsafeMutablePointer<state_object>,
         using dependencies: Dependencies
     ) throws {
-        guard config.needsDump(using: dependencies) else { return }
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
         // Get the volatile thread info from the conf and local conversations
-        let volatileThreadInfo: [VolatileThreadInfo] = try extractConvoVolatileInfo(from: conf)
+        let volatileThreadInfo: [VolatileThreadInfo] = try extractConvoVolatileInfo(from: state)
         let localVolatileThreadInfo: [String: VolatileThreadInfo] = VolatileThreadInfo.fetchAll(db)
             .reduce(into: [:]) { result, next in result[next.threadId] = next }
         
@@ -106,18 +246,20 @@ internal extension LibSession {
         // If there are no newer local last read timestamps then just return the mergeResult
         guard !newerLocalChanges.isEmpty else { return }
         
-        try upsert(
-            convoInfoVolatileChanges: newerLocalChanges,
-            in: config
-        )
+        try dependencies[singleton: .libSession].mutate { state in
+            try upsert(
+                convoInfoVolatileChanges: newerLocalChanges,
+                in: state,
+                using: dependencies
+            )
+        }
     }
     
     static func upsert(
         convoInfoVolatileChanges: [VolatileThreadInfo],
-        in config: Config?
+        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        using dependencies: Dependencies
     ) throws {
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
         // Exclude any invalid thread info
         let validChanges: [VolatileThreadInfo] = convoInfoVolatileChanges
             .filter { info in
@@ -133,18 +275,11 @@ internal extension LibSession {
             }
         
         try validChanges.forEach { threadInfo in
-            var cThreadId: [CChar] = threadInfo.threadId.cArray.nullTerminated()
-            
             switch threadInfo.variant {
                 case .contact:
-                    var oneToOne: convo_info_volatile_1to1 = convo_info_volatile_1to1()
-                    
-                    guard convo_info_volatile_get_or_construct_1to1(conf, &oneToOne, &cThreadId) else {
-                        /// It looks like there are some situations where this object might not get created correctly (and
-                        /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert contact volatile info to LibSession: \(config.lastError)")
-                        throw LibSessionError.getOrConstructFailedUnexpectedly
-                    }
+                    var oneToOne: CVolatileContact = try dependencies[singleton: .libSession].volatileContactOrConstruct(
+                        sessionId: threadInfo.threadId
+                    )
                     
                     threadInfo.changes.forEach { change in
                         switch change {
@@ -155,17 +290,12 @@ internal extension LibSession {
                                 oneToOne.unread = unread
                         }
                     }
-                    convo_info_volatile_set_1to1(conf, &oneToOne)
+                    state_set_convo_info_volatile_1to1(state, &oneToOne)
                     
                 case .legacyGroup:
-                    var legacyGroup: convo_info_volatile_legacy_group = convo_info_volatile_legacy_group()
-                    
-                    guard convo_info_volatile_get_or_construct_legacy_group(conf, &legacyGroup, &cThreadId) else {
-                        /// It looks like there are some situations where this object might not get created correctly (and
-                        /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert legacy group volatile info to LibSession: \(config.lastError)")
-                        throw LibSessionError.getOrConstructFailedUnexpectedly
-                    }
+                    var legacyGroup: CVolatileLegacyGroup = try dependencies[singleton: .libSession].volatileLegacyGroupOrConstruct(
+                        legacyGroupId: threadInfo.threadId
+                    )
                     
                     threadInfo.changes.forEach { change in
                         switch change {
@@ -176,26 +306,19 @@ internal extension LibSession {
                                 legacyGroup.unread = unread
                         }
                     }
-                    convo_info_volatile_set_legacy_group(conf, &legacyGroup)
+                    state_set_convo_info_volatile_legacy_group(state, &legacyGroup)
                     
                 case .community:
-                    guard
-                        var cBaseUrl: [CChar] = threadInfo.openGroupUrlInfo?.server.cArray.nullTerminated(),
-                        var cRoomToken: [CChar] = threadInfo.openGroupUrlInfo?.roomToken.cArray.nullTerminated(),
-                        var cPubkey: [UInt8] = threadInfo.openGroupUrlInfo?.publicKey.bytes
-                    else {
+                    guard let openGroupUrlInfo: LibSession.OpenGroupUrlInfo = threadInfo.openGroupUrlInfo else {
                         SNLog("Unable to create community conversation when updating last read timestamp due to missing URL info")
                         return
                     }
                     
-                    var community: convo_info_volatile_community = convo_info_volatile_community()
-                    
-                    guard convo_info_volatile_get_or_construct_community(conf, &community, &cBaseUrl, &cRoomToken, &cPubkey) else {
-                        /// It looks like there are some situations where this object might not get created correctly (and
-                        /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert community volatile info to LibSession: \(config.lastError)")
-                        throw LibSessionError.getOrConstructFailedUnexpectedly
-                    }
+                    var community: CVolatileCommunity = try dependencies[singleton: .libSession].volatileCommunityOrConstruct(
+                        server: openGroupUrlInfo.server,
+                        roomToken: openGroupUrlInfo.roomToken,
+                        publicKey: openGroupUrlInfo.publicKey
+                    )
                     
                     threadInfo.changes.forEach { change in
                         switch change {
@@ -206,17 +329,12 @@ internal extension LibSession {
                                 community.unread = unread
                         }
                     }
-                    convo_info_volatile_set_community(conf, &community)
+                    state_set_convo_info_volatile_community(state, &community)
                     
                 case .group:
-                    var group: convo_info_volatile_group = convo_info_volatile_group()
-
-                    guard convo_info_volatile_get_or_construct_group(conf, &group, &cThreadId) else {
-                        /// It looks like there are some situations where this object might not get created correctly (and
-                        /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert group volatile info to LibSession: \(config.lastError)")
-                        throw LibSessionError.getOrConstructFailedUnexpectedly
-                    }
+                    var group: CVolatileGroup = try dependencies[singleton: .libSession].volatileGroupOrConstruct(
+                        groupSessionId: threadInfo.threadId
+                    )
 
                     threadInfo.changes.forEach { change in
                         switch change {
@@ -227,129 +345,84 @@ internal extension LibSession {
                                 group.unread = unread
                         }
                     }
-                    convo_info_volatile_set_group(conf, &group)
+                    state_set_convo_info_volatile_group(state, &group)
             }
         }
     }
     
     static func updateMarkedAsUnreadState(
-        _ db: Database,
         threads: [SessionThread],
+        openGroupUrlInfo: [String: OpenGroupUrlInfo],
+        in state: UnsafeMutablePointer<mutable_state_user_object>,
         using dependencies: Dependencies
     ) throws {
         // If we have no updated threads then no need to continue
         guard !threads.isEmpty else { return }
 
-        let changes: [VolatileThreadInfo] = try threads.map { thread in
+        let changes: [VolatileThreadInfo] = threads.map { thread in
             VolatileThreadInfo(
                 threadId: thread.id,
                 variant: thread.variant,
-                openGroupUrlInfo: (thread.variant != .community ? nil :
-                    try OpenGroupUrlInfo.fetchOne(db, id: thread.id)
-                ),
+                openGroupUrlInfo: openGroupUrlInfo[thread.id],
                 changes: [.markedAsUnread(thread.markedAsUnread ?? false)]
             )
         }
-
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
+        
+        try upsert(
+            convoInfoVolatileChanges: changes,
+            in: state,
             using: dependencies
-        ) { config in
-            try upsert(
-                convoInfoVolatileChanges: changes,
-                in: config
-            )
-        }
+        )
     }
     
     static func remove(
-        _ db: Database,
         volatileContactIds: [String],
         using dependencies: Dependencies
-    ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
-            using: dependencies
-        ) { config in
-            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-            
+    ) {
+        dependencies[singleton: .libSession].mutate { state in
             volatileContactIds.forEach { contactId in
                 var cSessionId: [CChar] = contactId.cArray.nullTerminated()
                 
                 // Don't care if the data doesn't exist
-                convo_info_volatile_erase_1to1(conf, &cSessionId)
+                state_erase_convo_info_volatile_1to1(state, &cSessionId)
             }
         }
     }
     
     static func remove(
-        _ db: Database,
         volatileLegacyGroupIds: [String],
-        using dependencies: Dependencies
-    ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
-            using: dependencies
-        ) { config in
-            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
+        volatileLegacyGroupIds.forEach { legacyGroupId in
+            var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
             
-            volatileLegacyGroupIds.forEach { legacyGroupId in
-                var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
-                
-                // Don't care if the data doesn't exist
-                convo_info_volatile_erase_legacy_group(conf, &cLegacyGroupId)
-            }
+            // Don't care if the data doesn't exist
+            state_erase_convo_info_volatile_legacy_group(state, &cLegacyGroupId)
         }
     }
     
     static func remove(
-        _ db: Database,
         volatileGroupSessionIds: [String],
-        using dependencies: Dependencies
-    ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
-            using: dependencies
-        ) { config in
-            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-            
-            volatileGroupSessionIds.forEach { groupSessionId in
-                var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
+        volatileGroupSessionIds.forEach { groupSessionId in
+            var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
 
-                // Don't care if the data doesn't exist
-                convo_info_volatile_erase_group(conf, &cGroupSessionId)
-            }
+            // Don't care if the data doesn't exist
+            state_erase_ugroups_group(state, &cGroupSessionId)
         }
     }
     
     static func remove(
-        _ db: Database,
         volatileCommunityInfo: [OpenGroupUrlInfo],
-        using dependencies: Dependencies
-    ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
-            using: dependencies
-        ) { config in
-            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
+        volatileCommunityInfo.forEach { urlInfo in
+            var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()
+            var cRoom: [CChar] = urlInfo.roomToken.cArray.nullTerminated()
             
-            volatileCommunityInfo.forEach { urlInfo in
-                var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()
-                var cRoom: [CChar] = urlInfo.roomToken.cArray.nullTerminated()
-                
-                // Don't care if the data doesn't exist
-                convo_info_volatile_erase_community(conf, &cBaseUrl, &cRoom)
-            }
+            // Don't care if the data doesn't exist
+            state_erase_convo_info_volatile_community(state, &cBaseUrl, &cRoom)
         }
     }
 }
@@ -364,12 +437,7 @@ public extension LibSession {
         lastReadTimestampMs: Int64,
         using dependencies: Dependencies
     ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .convoInfoVolatile,
-            sessionId: getUserSessionId(db, using: dependencies),
-            using: dependencies
-        ) { config in
+        try dependencies[singleton: .libSession].mutate { state in
             try upsert(
                 convoInfoVolatileChanges: [
                     VolatileThreadInfo(
@@ -381,70 +449,10 @@ public extension LibSession {
                         changes: [.lastReadTimestampMs(lastReadTimestampMs)]
                     )
                 ],
-                in: config
+                in: state,
+                using: dependencies
             )
         }
-    }
-    
-    static func timestampAlreadyRead(
-        threadId: String,
-        threadVariant: SessionThread.Variant,
-        timestampMs: Int64,
-        userSessionId: SessionId,
-        openGroup: OpenGroup?,
-        using dependencies: Dependencies
-    ) -> Bool {
-        return dependencies[cache: .libSession]
-            .config(for: .convoInfoVolatile, sessionId: userSessionId)
-            .wrappedValue
-            .map { config in
-                guard case .object(let conf) = config else { return false }
-                
-                switch threadVariant {
-                    case .contact:
-                        var cThreadId: [CChar] = threadId.cArray.nullTerminated()
-                        var oneToOne: convo_info_volatile_1to1 = convo_info_volatile_1to1()
-                        guard convo_info_volatile_get_1to1(conf, &oneToOne, &cThreadId) else {
-                            return false
-                        }
-                        
-                        return (oneToOne.last_read >= timestampMs)
-                        
-                    case .legacyGroup:
-                        var cThreadId: [CChar] = threadId.cArray.nullTerminated()
-                        var legacyGroup: convo_info_volatile_legacy_group = convo_info_volatile_legacy_group()
-                        
-                        guard convo_info_volatile_get_legacy_group(conf, &legacyGroup, &cThreadId) else {
-                            return false
-                        }
-                        
-                        return (legacyGroup.last_read >= timestampMs)
-                        
-                    case .community:
-                        guard let openGroup: OpenGroup = openGroup else { return false }
-                        
-                        var cBaseUrl: [CChar] = openGroup.server.cArray.nullTerminated()
-                        var cRoomToken: [CChar] = openGroup.roomToken.cArray.nullTerminated()
-                        var convoCommunity: convo_info_volatile_community = convo_info_volatile_community()
-                        
-                        guard convo_info_volatile_get_community(conf, &convoCommunity, &cBaseUrl, &cRoomToken) else {
-                            return false
-                        }
-                        
-                        return (convoCommunity.last_read >= timestampMs)
-                        
-                    case .group:
-                        var cThreadId: [CChar] = threadId.cArray.nullTerminated()
-                        var group: convo_info_volatile_group = convo_info_volatile_group()
-
-                        guard convo_info_volatile_get_group(conf, &group, &cThreadId) else {
-                            return false
-                        }
-
-                        return (group.last_read >= timestampMs)
-                }
-            }
-            .defaulting(to: false) // If we don't have a config then just assume it's unread
     }
 }
 
@@ -593,7 +601,7 @@ public extension LibSession {
     }
     
     internal static func extractConvoVolatileInfo(
-        from conf: UnsafeMutablePointer<config_object>?
+        from state: UnsafeMutablePointer<state_object>
     ) throws -> [VolatileThreadInfo] {
         var infiniteLoopGuard: Int = 0
         var result: [VolatileThreadInfo] = []
@@ -601,7 +609,7 @@ public extension LibSession {
         var community: convo_info_volatile_community = convo_info_volatile_community()
         var legacyGroup: convo_info_volatile_legacy_group = convo_info_volatile_legacy_group()
         var group: convo_info_volatile_group = convo_info_volatile_group()
-        let convoIterator: OpaquePointer = convo_info_volatile_iterator_new(conf)
+        let convoIterator: OpaquePointer = convo_info_volatile_iterator_new(state)
 
         while !convo_info_volatile_iterator_done(convoIterator) {
             try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .convoInfoVolatile)

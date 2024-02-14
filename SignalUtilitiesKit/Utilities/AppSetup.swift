@@ -111,9 +111,15 @@ public enum AppSetup {
                 }
             },
             onComplete: { result, needsConfigSync in
-                // The 'needsConfigSync' flag should be based on whether either a migration or the
-                // configs need to be sync'ed
-                migrationsCompletion(result, (needsConfigSync || dependencies[cache: .libSession].needsSync))
+                do {
+                    /// Once the migrations have completed we need register for the libSession hooks to ensure changes get sent and stored
+                    try dependencies[singleton: .libSession].registerHooks()
+                    
+                    // The 'needsConfigSync' flag should be based on whether either a migration or the
+                    // configs need to be sync'ed
+                    migrationsCompletion(result, (needsConfigSync || dependencies[cache: .libSession].needsSync))
+                }
+                catch { migrationsCompletion(.failure(error), false) }
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }

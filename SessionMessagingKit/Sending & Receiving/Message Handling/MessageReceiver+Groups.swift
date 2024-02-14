@@ -129,9 +129,8 @@ extension MessageReceiver {
             return ((try? Contact.fetchOne(db, id: sender))?.isApproved == true)
         }()
         let threadAlreadyExisted: Bool = ((try? SessionThread.exists(db, id: message.groupSessionId.hexString)) ?? false)
-        let wasKickedFromGroup: Bool = LibSession.wasKickedFromGroup(
-            groupSessionId: message.groupSessionId,
-            using: dependencies
+        let wasKickedFromGroup: Bool = dependencies[singleton: .libSession].wasKickedFromGroup(
+            groupSessionId: message.groupSessionId
         )
         
         try MessageReceiver.handleNewGroup(
@@ -178,13 +177,12 @@ extension MessageReceiver {
                 )
                 .infoString(using: dependencies),
             timestampMs: Int64(sentTimestampMs),
-            wasRead: LibSession.timestampAlreadyRead(
+            wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                 threadId: message.groupSessionId.hexString,
-                threadVariant: .group,
+                rawThreadVariant: SessionThread.Variant.group.rawValue,
                 timestampMs: Int64(sentTimestampMs),
-                userSessionId: userSessionId,
-                openGroup: nil,
-                using: dependencies
+                openGroupServer: nil,
+                openGroupRoomToken: nil
             )
         ).inserted(db)
         
@@ -241,7 +239,6 @@ extension MessageReceiver {
         if !calledFromConfigHandling {
             // Update libSession
             try? LibSession.add(
-                db,
                 groupSessionId: groupSessionId,
                 groupIdentityPrivateKey: groupIdentityPrivateKey,
                 name: name,
@@ -416,13 +413,12 @@ extension MessageReceiver {
                         using: dependencies
                     ),
                     timestampMs: Int64(sentTimestampMs),
-                    wasRead: LibSession.timestampAlreadyRead(
+                    wasRead: dependencies[singleton: .libSession].timestampAlreadyRead(
                         threadId: groupSessionId.hexString,
-                        threadVariant: .group,
+                        rawThreadVariant: SessionThread.Variant.group.rawValue,
                         timestampMs: Int64(sentTimestampMs),
-                        userSessionId: userSessionId,
-                        openGroup: nil,
-                        using: dependencies
+                        openGroupServer: nil,
+                        openGroupRoomToken: nil
                     ),
                     expiresInSeconds: (relevantConfig.isEnabled ? nil : localConfig.durationSeconds)
                 ).inserted(db)

@@ -80,6 +80,10 @@ public extension String {
 // MARK: - Formatting
 
 extension String.StringInterpolation {
+    public mutating func appendInterpolation(plural value: Int) {
+        appendInterpolation(value == 1 ? "" : "s")
+    }
+    
     mutating func appendInterpolation(_ value: Int, format: String) {
         let result: String = String(format: "%\(format)d", value)
         appendLiteral(result)

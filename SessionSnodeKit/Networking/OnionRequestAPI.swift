@@ -704,6 +704,7 @@ public enum OnionRequestAPI {
                         if let timestamp = body["t"] as? Int64 {
                             let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
                             dependencies.mutate(cache: .snodeAPI) { $0.clockOffsetMs = offset }
+                            dependencies[singleton: .libSession].setServiceNodeOffset(offset)
                         }
                         
                         guard 200...299 ~= statusCode else {

@@ -178,7 +178,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
     
     // UI specific logic
     
-    public var emptyStateText: String {
+    public func emptyStateText(using dependencies: Dependencies) -> String {
         return String(
             format: {
                 switch (threadVariant, threadIsNoteToSelf, canWrite, profile?.blocksCommunityMessageRequests) {
@@ -187,7 +187,7 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
                         return "COMMUNITY_MESSAGE_REQUEST_DISABLED_EMPTY_STATE".localized()
                     
                     case (.group, _, false, _):
-                        guard LibSession.wasKickedFromGroup(groupSessionId: SessionId(.group, hex: threadId)) else {
+                        guard dependencies[singleton: .libSession].wasKickedFromGroup(groupSessionId: SessionId(.group, hex: threadId)) else {
                             return "CONVERSATION_EMPTY_STATE_READ_ONLY".localized()
                         }
                         

@@ -165,7 +165,6 @@ internal extension LibSession {
         
         // Add the new group to the USER_GROUPS config message
         try LibSession.add(
-            db,
             groupSessionId: group.id,
             groupIdentityPrivateKey: group.groupIdentityPrivateKey,
             name: group.name,

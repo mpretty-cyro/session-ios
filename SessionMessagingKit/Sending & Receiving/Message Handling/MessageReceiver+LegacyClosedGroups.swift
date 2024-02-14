@@ -230,7 +230,6 @@ extension MessageReceiver {
         if !calledFromConfigHandling {
             // Update libSession
             try? LibSession.add(
-                db,
                 legacyGroupSessionId: legacyGroupSessionId,
                 name: name,
                 latestKeyPairPublicKey: Data(encryptionKeyPair.publicKey),
@@ -337,7 +336,6 @@ extension MessageReceiver {
             
             // Update libSession
             try? LibSession.update(
-                db,
                 legacyGroupSessionId: legacyGroupId,
                 latestKeyPair: keyPair,
                 using: dependencies
@@ -376,7 +374,6 @@ extension MessageReceiver {
             legacyGroupChanges: { sender, closedGroup, allMembers in
                 // Update libSession
                 try? LibSession.update(
-                    db,
                     legacyGroupSessionId: threadId,
                     name: name,
                     using: dependencies
@@ -421,7 +418,6 @@ extension MessageReceiver {
                 
                 // Update libSession
                 try? LibSession.update(
-                    db,
                     legacyGroupSessionId: threadId,
                     members: allMembers
                         .filter { $0.role == .standard || $0.role == .zombie }
@@ -531,7 +527,6 @@ extension MessageReceiver {
                 
                 // Update libSession
                 try? LibSession.update(
-                    db,
                     legacyGroupSessionId: threadId,
                     members: allMembers
                         .filter { $0.role == .standard || $0.role == .zombie }
@@ -611,7 +606,6 @@ extension MessageReceiver {
                 
                 // Update libSession
                 try? LibSession.update(
-                    db,
                     legacyGroupSessionId: threadId,
                     members: allMembers
                         .filter { $0.role == .standard || $0.role == .zombie }

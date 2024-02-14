@@ -22,6 +22,7 @@ public protocol JobRunnerType {
     func setExecutor(_ executor: JobExecutor.Type, for variant: Job.Variant)
     func canStart(queue: JobQueue?) -> Bool
     func afterBlockingQueue(callback: @escaping () -> ())
+    func queue(for variant: Job.Variant) -> DispatchQueue?
         
     // MARK: - State Management
     
@@ -394,6 +395,10 @@ public final class JobRunner: JobRunnerType {
         else { return callback() }
     
         blockingQueueDrainCallback.mutate { $0.append(callback) }
+    }
+    
+    public func queue(for variant: Job.Variant) -> DispatchQueue? {
+        return queues.wrappedValue[variant]?.targetQueue()
     }
 
     // MARK: - State Management
@@ -1043,6 +1048,24 @@ public final class JobQueue: Hashable {
     
     // MARK: - Execution
     
+    fileprivate func targetQueue() -> DispatchQueue {
+        /// As it turns out Combine doesn't play too nicely with concurrent Dispatch Queues, in Combine events are dispatched asynchronously to
+        /// the queue which means an odd situation can occasionally occur where the `finished` event can actually run before the `output`
+        /// event - this can result in unexpected behaviours (for more information see https://github.com/groue/GRDB.swift/issues/1334)
+        ///
+        /// Due to this if a job is meant to run on a concurrent queue then we actually want to create a temporary serial queue just for the execution
+        /// of that job
+        guard executionType == .concurrent else { return internalQueue }
+        
+        return DispatchQueue(
+            label: "\(self.queueContext)-serial",
+            qos: self.qosClass,
+            attributes: [],
+            autoreleaseFrequency: .inherit,
+            target: nil
+        )
+    }
+    
     fileprivate func add(
         _ db: Database,
         job: Job,
@@ -1459,27 +1482,9 @@ public final class JobQueue: Hashable {
         }
         SNLog("[JobRunner] \(queueContext) started \(nextJob.variant) job (\(executionType == .concurrent ? "\(numJobsRunning) currently running, " : "")\(numJobsRemaining) remaining)")
         
-        /// As it turns out Combine doesn't plat too nicely with concurrent Dispatch Queues, in Combine events are dispatched asynchronously to
-        /// the queue which means an odd situation can occasionally occur where the `finished` event can actually run before the `output`
-        /// event - this can result in unexpected behaviours (for more information see https://github.com/groue/GRDB.swift/issues/1334)
-        ///
-        /// Due to this if a job is meant to run on a concurrent queue then we actually want to create a temporary serial queue just for the execution
-        /// of that job
-        let targetQueue: DispatchQueue = {
-            guard executionType == .concurrent else { return internalQueue }
-            
-            return DispatchQueue(
-                label: "\(self.queueContext)-serial",
-                qos: self.qosClass,
-                attributes: [],
-                autoreleaseFrequency: .inherit,
-                target: nil
-            )
-        }()
-        
         jobExecutor.run(
             nextJob,
-            queue: targetQueue,
+            queue: targetQueue(),
             success: handleJobSucceeded,
             failure: handleJobFailed,
             deferred: handleJobDeferred,

@@ -252,7 +252,7 @@ public enum MessageReceiver {
         // the config then the message will be dropped)
         guard
             !Message.requiresExistingConversation(message: message, threadVariant: threadVariant) ||
-            LibSession.conversationInConfig(db, threadId: threadId, threadVariant: threadVariant, visibleOnly: false, using: dependencies)
+            dependencies[singleton: .libSession].conversationInConfig(threadId: threadId, rawThreadVariant: threadVariant.rawValue, visibleOnly: false, using: dependencies)
         else { throw MessageReceiverError.requiredThreadNotInConfig }
         
         // Throw if the message is outdated and shouldn't be processed
@@ -500,10 +500,9 @@ public enum MessageReceiver {
         
         // Determine the state of the conversation and the validity of the message
         let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let conversationVisibleInConfig: Bool = LibSession.conversationInConfig(
-            db,
+        let conversationVisibleInConfig: Bool = dependencies[singleton: .libSession].conversationInConfig(
             threadId: threadId,
-            threadVariant: threadVariant,
+            rawThreadVariant: threadVariant.rawValue,
             visibleOnly: true,
             using: dependencies
         )

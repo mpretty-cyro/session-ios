@@ -20,21 +20,16 @@ internal extension LibSession {
     
     static func handleUserProfileUpdate(
         _ db: Database,
-        in config: Config?,
+        in state: UnsafeMutablePointer<state_object>,
         serverTimestampMs: Int64,
         using dependencies: Dependencies
     ) throws {
-        typealias ProfileData = (profileName: String, profilePictureUrl: String?, profilePictureKey: Data?)
-        
-        guard config.needsDump(using: dependencies) else { return }
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
         // A profile must have a name so if this is null then it's invalid and can be ignored
-        guard let profileNamePtr: UnsafePointer<CChar> = user_profile_get_name(conf) else { return }
+        guard let profileNamePtr: UnsafePointer<CChar> = state_get_profile_name(state) else { return }
         
         let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         let profileName: String = String(cString: profileNamePtr)
-        let profilePic: user_profile_pic = user_profile_get_pic(conf)
+        let profilePic: user_profile_pic = state_get_profile_pic(state)
         let profilePictureUrl: String? = String(libSessionVal: profilePic.url, nullIfEmpty: true)
         
         // Handle user profile changes
@@ -65,7 +60,7 @@ internal extension LibSession {
             .select(.id, .variant, .pinnedPriority, .shouldBeVisible)
             .asRequest(of: PriorityVisibilityInfo.self)
             .fetchOne(db)
-        let targetPriority: Int32 = user_profile_get_nts_priority(conf)
+        let targetPriority: Int32 = state_get_profile_nts_priority(state)
         
         // Create the 'Note to Self' thread if it doesn't exist
         if let threadInfo: PriorityVisibilityInfo = threadInfo {
@@ -121,7 +116,7 @@ internal extension LibSession {
         }
         
         // Update the 'Note to Self' disappearing messages configuration
-        let targetExpiry: Int32 = user_profile_get_nts_expiry(conf)
+        let targetExpiry: Int32 = state_get_profile_nts_expiry(state)
         let targetIsEnable: Bool = targetExpiry > 0
         let targetConfig: DisappearingMessagesConfiguration = DisappearingMessagesConfiguration(
             threadId: userSessionId.hexString,
@@ -148,7 +143,7 @@ internal extension LibSession {
         }
 
         // Update settings if needed
-        let updatedAllowBlindedMessageRequests: Int32 = user_profile_get_blinded_msgreqs(conf)
+        let updatedAllowBlindedMessageRequests: Int32 = state_get_profile_blinded_msgreqs(state)
         let updatedAllowBlindedMessageRequestsBoolValue: Bool = (updatedAllowBlindedMessageRequests >= 1)
         
         if
@@ -179,55 +174,47 @@ internal extension LibSession {
     
     static func update(
         profile: Profile,
-        in config: Config?
-    ) throws {
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
         // Update the name
         var updatedName: [CChar] = profile.name.cArray.nullTerminated()
-        user_profile_set_name(conf, &updatedName)
+        state_set_profile_name(state, &updatedName)
         
         // Either assign the updated profile pic, or sent a blank profile pic (to remove the current one)
         var profilePic: user_profile_pic = user_profile_pic()
         profilePic.url = profile.profilePictureUrl.toLibSession()
         profilePic.key = profile.profileEncryptionKey.toLibSession()
-        user_profile_set_pic(conf, profilePic)
+        state_set_profile_pic(state, profilePic)
     }
     
     static func updateNoteToSelf(
         priority: Int32? = nil,
         disappearingMessagesConfig: DisappearingMessagesConfiguration? = nil,
-        in config: Config?
-    ) throws {
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
         if let priority: Int32 = priority {
-            user_profile_set_nts_priority(conf, priority)
+            state_set_profile_nts_priority(state, priority)
         }
         
         if let config: DisappearingMessagesConfiguration = disappearingMessagesConfig {
-            user_profile_set_nts_expiry(conf, Int32(config.durationSeconds))
+            state_set_profile_nts_expiry(state, Int32(config.durationSeconds))
         }
     }
     
     static func updateSettings(
         checkForCommunityMessageRequests: Bool? = nil,
-        in config: Config?
-    ) throws {
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-        
+        in state: UnsafeMutablePointer<mutable_state_user_object>
+    ) {
         if let blindedMessageRequests: Bool = checkForCommunityMessageRequests {
-            user_profile_set_blinded_msgreqs(conf, (blindedMessageRequests ? 1 : 0))
+            state_set_profile_blinded_msgreqs(state, (blindedMessageRequests ? 1 : 0))
         }
     }
 }
 
 // MARK: - Direct Values
 
-extension LibSession {
-    static func rawBlindedMessageRequestValue(in config: Config?) throws -> Int32 {
-        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
-    
-        return user_profile_get_blinded_msgreqs(conf)
+public extension LibSession.StateManager {
+    var rawBlindedMessageRequestValue: Int32 {
+        state_get_profile_blinded_msgreqs(state)
     }
 }
