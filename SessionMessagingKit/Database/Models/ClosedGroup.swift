@@ -187,10 +187,6 @@ public extension ClosedGroup {
         calledFromConfigHandling: Bool,
         using dependencies: Dependencies
     ) throws {
-        guard let userED25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies) else {
-            throw MessageReceiverError.noUserED25519KeyPair
-        }
-        
         /// Update the database state
         if group.invited == true || group.shouldPoll != true {
             try ClosedGroup
@@ -205,22 +201,10 @@ public extension ClosedGroup {
         }
         
         /// Create the libSession state for the group
-        try LibSession.createGroupState(
-            groupSessionId: SessionId(.group, hex: group.id),
-            userED25519KeyPair: userED25519KeyPair,
-            groupIdentityPrivateKey: group.groupIdentityPrivateKey,
-            shouldLoadState: true,
-            using: dependencies
+        dependencies[singleton: .libSession].approveGroup(
+            groupSessionId: group.id,
+            groupIdentityPrivateKey: group.groupIdentityPrivateKey
         )
-        
-        /// Update the `USER_GROUPS` config
-        if !calledFromConfigHandling {
-            try? LibSession.update(
-                groupSessionId: group.id,
-                invited: false,
-                using: dependencies
-            )
-        }
         
         /// Start polling
         dependencies[singleton: .groupsPoller].startIfNeeded(for: group.id, using: dependencies)

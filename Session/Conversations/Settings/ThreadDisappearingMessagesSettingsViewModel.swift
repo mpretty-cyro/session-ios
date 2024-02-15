@@ -640,31 +640,25 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
         dependencies[singleton: .storage].writeAsync(using: dependencies) { [threadId, threadVariant, dependencies] db in
             switch threadVariant {
                 case .contact:
-                    try LibSession
-                        .update(
-                            db,
-                            sessionId: threadId,
-                            disappearingMessagesConfig: updatedConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        sessionId: threadId,
+                        disappearingMessagesConfig: updatedConfig,
+                        using: dependencies
+                    )
                 
                 case .legacyGroup:
-                    try LibSession
-                        .update(
-                            db,
-                            legacyGroupSessionId: threadId,
-                            disappearingConfig: updatedConfig,
-                            using: dependencies
-                        )
+                    try LibSession.update(
+                        legacyGroupSessionId: threadId,
+                        disappearingConfig: updatedConfig,
+                        using: dependencies
+                    )
                     
                 case .group:
-                    try LibSession
-                        .update(
-                            db,
-                            groupSessionId: SessionId(.group, hex: threadId),
-                            disappearingConfig: updatedConfig,
-                            using: dependencies
-                        )
+                    LibSession.update(
+                        groupSessionId: SessionId(.group, hex: threadId),
+                        disappearingConfig: updatedConfig,
+                        using: dependencies
+                    )
                     
                 default: break
             }

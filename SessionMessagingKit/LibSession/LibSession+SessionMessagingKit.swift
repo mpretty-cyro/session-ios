@@ -11,10 +11,10 @@ import SessionUtilitiesKit
 
 public extension LibSession {
     class StateManager: StateManagerType {
-        private let dependencies: Dependencies
         let state: UnsafeMutablePointer<state_object>
+        private let dependencies: Dependencies
         
-        var lastError: LibSessionError? {
+        public var lastError: LibSessionError? {
             guard state.pointee.last_error != nil else { return nil }
             
             let errorString = String(cString: state.pointee.last_error)
@@ -134,6 +134,15 @@ public extension LibSession {
                                     serverTimestampMs: Int64(timestamp_ms),
                                     using: dependencies
                                 )
+    
+                            case .groupInfo:
+                                try LibSession.handleGroupInfoUpdate(
+                                    db,
+                                    in: state,
+                                    groupSessionId: SessionId(.group, hex: sessionIdHex),
+                                    serverTimestampMs: Int64(timestamp_ms),
+                                    using: dependencies
+                                )
                             case .invalid: SNLog("[libSession] Failed to process merge of invalid config namespace")
                             
                         default:
@@ -154,15 +163,13 @@ public extension LibSession {
             _ pubkey: UnsafePointer<CChar>?,
             _ dataPtr: UnsafePointer<UInt8>?,
             _ dataLen: Int,
-            _ requestCtxPtr: UnsafePointer<UInt8>?,
-            _ requestCtxLen: Int
         ) {// TODO: Determine why this is called twice on a name change
+            _ responseCallback: ((Bool, Int16, UnsafePointer<UInt8>?, Int, UnsafeMutableRawPointer?) -> Bool)?,
+            _ callbackCtx: UnsafeMutableRawPointer?
             guard
                 dataLen > 0,
-                let publicKeyPtr: UnsafePointer<CChar> = pubkey,
                 let publicKey: String = pubkey.map({ String(cString: $0) }),
-                let payloadData: Data = dataPtr.map({ Data(bytes: $0, count: dataLen) }),
-                let requestCtx: Data = requestCtxPtr.map({ Data(bytes: $0, count: requestCtxLen) })
+                let payloadData: Data = dataPtr.map({ Data(bytes: $0, count: dataLen) })
             else { return SNLog("[LibSession] Failed to send due to invalid parameters") }
             
             guard
@@ -178,11 +185,10 @@ public extension LibSession {
                 .send(using: dependencies)
                 .subscribe(on: targetQueue, using: dependencies)
                 .receive(on: targetQueue, using: dependencies)
-                .tryMap { [weak self, state] info, data in
-                    var cResponseData: [UInt8] = Array(data)
-                    var cRequestCtx: [UInt8] = Array(requestCtx)
+                .tryMap { [weak self] info, data in
+                    var cData: [UInt8] = Array(data)
                     
-                    guard state_received_send_response(state, publicKeyPtr, &cResponseData, cResponseData.count, &cRequestCtx, cRequestCtx.count) else {
+                    guard responseCallback?(true, Int16(info.code), &cData, cData.count, callbackCtx) == true else {
                         throw (self?.lastError ?? LibSessionError.unknown)
                     }
                     
@@ -195,6 +201,8 @@ public extension LibSession {
                         switch result {
                             case .finished: SNLog("[LibSession - Send] Completed for \(publicKey) (reqId: \(requestId))")
                             case .failure(let error):
+                                // MUST call the 'responseCallback' with the failure as well
+                                _ = responseCallback?(false, -1, nil, 0, callbackCtx)
                                 SNLog("[LibSession - Send] For \(publicKey) (reqId: \(requestId)) failed due to error: \(error)")
                         }
                     }
@@ -242,8 +250,8 @@ public extension LibSession {
             // Register a hook to be called when libSession decides it needs to send config data
             let sendResult: Bool = state_set_send_callback(
                 state,
-                { pubkey, dataPtr, dataLen, requestCtxPtr, requestCtxLen, context in
-                    manager(context, "send")?.send(pubkey, dataPtr, dataLen, requestCtxPtr, requestCtxLen)
+                { pubkey, dataPtr, dataLen, responseCallback, appCtx, callbackCtx in
+                    manager(appCtx, "send")?.send(pubkey, dataPtr, dataLen, responseCallback, callbackCtx)
                 },
                 Unmanaged.passUnretained(self).toOpaque()
             )

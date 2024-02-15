@@ -46,32 +46,42 @@ extension MessageSender {
                     }
                 }.eraseToAnyPublisher()
             }
-            .flatMap { displayPictureInfo -> AnyPublisher<PreparedGroupData, Error> in
+            .flatMap { displayPictureInfo -> AnyPublisher<(String, [UInt8]), Error> in
+                Deferred {
+                    Future<(String, [UInt8]), Error> { resolver in
+                        dependencies[singleton: .libSession].createGroup(
+                            name: name,
+                            description: description,
+                            displayPictureUrl: displayPictureInfo?.downloadUrl,
+                            displayPictureEncryptionKey: displayPictureInfo?.encryptionKey,
+                            members: members.map { ($0.0, $0.1?.name, $0.1?.profilePictureUrl, $0.1?.profileEncryptionKey) }
+                        ) { [dependencies] success, groupId, groupIdentityPrivateKey in
+                            guard success else {
+                                let error: LibSessionError = (dependencies[singleton: .libSession].lastError ?? .unknown)
+                                SNLog("Failed to create group due to error: \(error)")
+                                return resolver(Result.failure(error))
+                            }
+                            
+                            resolver(Result.success((groupId, groupIdentityPrivateKey)))
+                        }
+                    }
+                }.eraseToAnyPublisher()
+            }
+            .flatMap { groupId, groupIdentityPrivateKey -> AnyPublisher<PreparedGroupData, Error> in
                 dependencies[singleton: .storage].writePublisher(using: dependencies) { db -> PreparedGroupData in
-                    // Create and cache the libSession entries
-                    let createdInfo: LibSession.CreatedGroupInfo = try LibSession.createGroup(
-                        db,
-                        name: name,
-                        description: description,
-                        displayPictureUrl: displayPictureInfo?.downloadUrl,
-                        displayPictureFilename: displayPictureInfo?.fileName,
-                        displayPictureEncryptionKey: displayPictureInfo?.encryptionKey,
-                        members: members,
-                        using: dependencies
-                    )
                     
-                    // Save the relevant objects to the database
                     let thread: SessionThread = try SessionThread
                         .fetchOrCreate(
                             db,
-                            id: createdInfo.group.id,
+                            id: groupId,
                             variant: .group,
                             shouldBeVisible: true,
                             calledFromConfigHandling: false,
                             using: dependencies
                         )
-                    try createdInfo.group.insert(db)
-                    try createdInfo.members.forEach { try $0.insert(db) }
+                    let members: [GroupMember] = try GroupMember
+                        .filter(GroupMember.Columns.groupId == groupId)
+                        .fetchAll(db)
                     
                     // Prepare the notification subscription
                     var preparedNotificationSubscription: HTTP.PreparedRequest<PushNotificationAPI.SubscribeResponse>?
@@ -81,58 +91,26 @@ extension MessageSender {
                             .preparedSubscribe(
                                 db,
                                 token: Data(hex: token),
-                                sessionIds: [createdInfo.groupSessionId],
+                                sessionIds: [SessionId(.group, hex: groupId)],
                                 using: dependencies
                             )
                     }
                     
                     return (
-                        createdInfo.groupSessionId,
-                        createdInfo.groupState,
+                        SessionId(.group, hex: groupId),
+                        [:],    // TODO: Remove this
                         thread,
-                        createdInfo.group,
-                        createdInfo.members,
+                        ClosedGroup(
+                            threadId: "",
+                            name: "",
+                            formationTimestamp: 0,
+                            shouldPoll: nil,
+                            invited: nil
+                        ),  // TODO: Remove this
+                        members,
                         preparedNotificationSubscription
                     )
                 }
-            }
-            .flatMap { preparedGroupData -> AnyPublisher<PreparedGroupData, Error> in
-                ConfigurationSyncJob
-                    .run(sessionIdHexString: preparedGroupData.groupSessionId.hexString, using: dependencies)
-                    .flatMap { _ in
-                        dependencies[singleton: .storage].writePublisher(using: dependencies) { db in
-                            // Save the successfully created group and add to the user config
-                            try LibSession.saveCreatedGroup(
-                                db,
-                                group: preparedGroupData.group,
-                                groupState: preparedGroupData.groupState,
-                                using: dependencies
-                            )
-                            
-                            return preparedGroupData
-                        }
-                    }
-                    .handleEvents(
-                        receiveCompletion: { result in
-                            switch result {
-                                case .finished: break
-                                case .failure:
-                                    // Remove the config and database states
-                                    dependencies[singleton: .storage].writeAsync(using: dependencies) { db in
-                                        LibSession.removeGroupStateIfNeeded(
-                                            db,
-                                            groupSessionId: preparedGroupData.groupSessionId,
-                                            using: dependencies
-                                        )
-                                        
-                                        _ = try? preparedGroupData.thread.delete(db)
-                                        _ = try? preparedGroupData.group.delete(db)
-                                        try? preparedGroupData.members.forEach { try $0.delete(db) }
-                                    }
-                            }
-                        }
-                    )
-                    .eraseToAnyPublisher()
             }
             .handleEvents(
                 receiveOutput: { _, _, thread, _, members, preparedNotificationSubscription in

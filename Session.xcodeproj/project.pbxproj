@@ -731,7 +731,6 @@
 		FD8ECF7B29340FFD00C0D1BB /* LibSession+SessionMessagingKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF7A29340FFD00C0D1BB /* LibSession+SessionMessagingKit.swift */; };
 		FD8ECF7D2934293A00C0D1BB /* _013_SessionUtilChanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF7C2934293A00C0D1BB /* _013_SessionUtilChanges.swift */; };
 		FD8ECF7F2934298100C0D1BB /* ConfigDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF7E2934298100C0D1BB /* ConfigDump.swift */; };
-		FD8ECF892935AB7200C0D1BB /* LibSessionError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF882935AB7200C0D1BB /* LibSessionError.swift */; };
 		FD8ECF9029381FC200C0D1BB /* LibSession+UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF8F29381FC200C0D1BB /* LibSession+UserProfile.swift */; };
 		FD8ECF922938552800C0D1BB /* Threading.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF912938552800C0D1BB /* Threading.swift */; };
 		FD9004122818ABDC00ABAAF6 /* Job.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF0B73F280402C4004C14C5 /* Job.swift */; };
@@ -807,6 +806,7 @@
 		FDB9471B2A9D70A6001F271A /* CommonSMKMockExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB9471A2A9D70A6001F271A /* CommonSMKMockExtensions.swift */; };
 		FDBB25E32988B13800F1508E /* _004_AddJobPriority.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBB25E22988B13800F1508E /* _004_AddJobPriority.swift */; };
 		FDBB25E72988BBBE00F1508E /* UIContextualAction+Theming.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBB25E62988BBBD00F1508E /* UIContextualAction+Theming.swift */; };
+		FDBEE52F2B7DAB3200C143A0 /* LibSessionError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8ECF882935AB7200C0D1BB /* LibSessionError.swift */; };
 		FDC13D472A16E4CA007267C7 /* SubscribeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC13D462A16E4CA007267C7 /* SubscribeRequest.swift */; };
 		FDC13D492A16EC20007267C7 /* Service.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC13D482A16EC20007267C7 /* Service.swift */; };
 		FDC13D4B2A16ECBA007267C7 /* SubscribeResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC13D4A2A16ECBA007267C7 /* SubscribeResponse.swift */; };
@@ -4389,7 +4389,6 @@
 				FD2B4B022949886900AB4848 /* Database */,
 				FD8ECF8E29381FB200C0D1BB /* Config Handling */,
 				FDB947132A9C23A3001F271A /* Types */,
-				FD8ECF882935AB7200C0D1BB /* LibSessionError.swift */,
 				FD8ECF7A29340FFD00C0D1BB /* LibSession+SessionMessagingKit.swift */,
 			);
 			path = LibSession;
@@ -4666,6 +4665,7 @@
 			children = (
 				FD62A3E72B10442C006C9D1D /* Utilities */,
 				FDD897DB2B0ED78600ABA2EF /* LibSession.swift */,
+				FD8ECF882935AB7200C0D1BB /* LibSessionError.swift */,
 			);
 			path = LibSession;
 			sourceTree = "<group>";
@@ -6257,6 +6257,7 @@
 				FD17D7C327F5204C00122BE0 /* Database+Utilities.swift in Sources */,
 				FD17D7C527F5206300122BE0 /* ColumnDefinition+Utilities.swift in Sources */,
 				FDC438CD27BC641200C60D73 /* Set+Utilities.swift in Sources */,
+				FDBEE52F2B7DAB3200C143A0 /* LibSessionError.swift in Sources */,
 				FDF00D2C2B4FB787000F0C00 /* UserDefaultsConfig.swift in Sources */,
 				B8856DE6256F15F2001CE70E /* String+SSK.swift in Sources */,
 				FDF2220F281B55E6000A4995 /* QueryInterfaceRequest+Utilities.swift in Sources */,
@@ -6427,7 +6428,6 @@
 				FD6E4C8A2A1AEE4700C7C243 /* LegacyUnsubscribeRequest.swift in Sources */,
 				B8DE1FB626C22FCB0079C9CE /* CallMessage.swift in Sources */,
 				FD245C50285065C700B966DD /* VisibleMessage+Quote.swift in Sources */,
-				FD8ECF892935AB7200C0D1BB /* LibSessionError.swift in Sources */,
 				FDF00D3D2B54D700000F0C00 /* UIWindowLevel+Utilities.swift in Sources */,
 				FD4C4E9C2B02E2A300C72199 /* DisplayPictureError.swift in Sources */,
 				FD5C7307284F103B0029977D /* MessageReceiver+MessageRequests.swift in Sources */,

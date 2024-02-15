@@ -15,121 +15,96 @@ public extension LibSession.Crypto.Domain {
 
 // MARK: - Convenience
 
-internal extension LibSession {
-    typealias CreatedGroupInfo = (
-        groupSessionId: SessionId,
-        identityKeyPair: KeyPair,
-        groupState: [ConfigDump.Variant: Config],
-        group: ClosedGroup,
-        members: [GroupMember]
-    )
-    
-    static func createGroup(
-        _ db: Database,
+public extension LibSession.StateManager {
+    func createGroup(
         name: String,
         description: String?,
         displayPictureUrl: String?,
-        displayPictureFilename: String?,
         displayPictureEncryptionKey: Data?,
-        members: [(id: String, profile: Profile?)],
-        using dependencies: Dependencies
-    ) throws -> CreatedGroupInfo {
-        guard
-            let groupIdentityKeyPair: KeyPair = dependencies[singleton: .crypto].generate(.ed25519KeyPair()),
-            let userED25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db, using: dependencies)
-        else { throw MessageSenderError.noKeyPair }
-        
-        // Prep the relevant details (reduce the members to ensure we don't accidentally insert duplicates)
-        let groupSessionId: SessionId = SessionId(.group, publicKey: groupIdentityKeyPair.publicKey)
-        let creationTimestamp: TimeInterval = TimeInterval(
-            Double(SnodeAPI.currentOffsetTimestampMs(using: dependencies)) / 1000
-        )
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let currentUserProfile: Profile? = Profile.fetchOrCreateCurrentUser(db, using: dependencies)
-        
-        // Create the new config objects
-        let groupState: [ConfigDump.Variant: Config] = try createGroupState(
-            groupSessionId: groupSessionId,
-            userED25519KeyPair: userED25519KeyPair,
-            groupIdentityPrivateKey: Data(groupIdentityKeyPair.secretKey),
-            initialMembers: members.filter { $0.id != userSessionId.hexString },
-            initialAdmin: (userSessionId.hexString, currentUserProfile),
-            shouldLoadState: false, // We manually load the state after populating the configs
-            using: dependencies
-        )
-        
-        // Extract the conf objects from the state to load in the initial data
-        guard case .groupKeys(_, let groupInfoConf, _) = groupState[.groupKeys] else {
-            SNLog("[LibSession Error] Group config objects were null")
-            throw LibSessionError.unableToCreateConfigObject
-        }
-        
-        // Set the initial values in the confs
-        var cGroupName: [CChar] = name.cArray.nullTerminated()
-        groups_info_set_name(groupInfoConf, &cGroupName)
-        groups_info_set_created(groupInfoConf, Int64(floor(creationTimestamp)))
-        
-        if let groupDescription: String = description {
-            var cGroupDescription: [CChar] = groupDescription.cArray.nullTerminated()
-            groups_info_set_description(groupInfoConf, &cGroupDescription)
-        }
-        
-        if
-            let displayPictureUrl: String = displayPictureUrl,
-            let displayPictureEncryptionKey: Data = displayPictureEncryptionKey
-        {
-            var displayPic: user_profile_pic = user_profile_pic()
-            displayPic.url = displayPictureUrl.toLibSession()
-            displayPic.key = displayPictureEncryptionKey.toLibSession()
-            groups_info_set_pic(groupInfoConf, displayPic)
-        }
-        
-        // Now that everything has been populated correctly we can load the state into memory
-        dependencies.mutate(cache: .libSession) { cache in
-            groupState.forEach { variant, config in
-                cache.setConfig(for: variant, sessionId: groupSessionId, to: config)
+        members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+        callback: @escaping (Bool, String, [UInt8]) -> Void
+    ) {
+        class CWrapper {
+            let callback: (Bool, String, [UInt8]) -> Void
+            
+            public init(_ callback: @escaping (Bool, String, [UInt8]) -> Void) {
+                self.callback = callback
             }
         }
         
-        return (
-            groupSessionId,
-            groupIdentityKeyPair,
-            groupState,
-            ClosedGroup(
-                threadId: groupSessionId.hexString,
-                name: name,
-                formationTimestamp: creationTimestamp,
-                displayPictureUrl: displayPictureUrl,
-                displayPictureFilename: displayPictureFilename,
-                displayPictureEncryptionKey: displayPictureEncryptionKey,
-                lastDisplayPictureUpdate: creationTimestamp,
-                shouldPoll: true,
-                groupIdentityPrivateKey: Data(groupIdentityKeyPair.secretKey),
-                invited: false
-            ),
-            members
-                .filter { $0.id != userSessionId.hexString }
-                .map { memberId, info -> GroupMember in
-                    GroupMember(
-                        groupId: groupSessionId.hexString,
-                        profileId: memberId,
-                        role: .standard,
-                        roleStatus: .pending,
-                        isHidden: false
-                    )
-                }
-                .appending(
-                    GroupMember(
-                        groupId: groupSessionId.hexString,
-                        profileId: userSessionId.hexString,
-                        role: .admin,
-                        roleStatus: .accepted,
-                        isHidden: false
-                    )
-                )
+        let callbackWrapper: CWrapper = CWrapper(callback)
+        let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(callbackWrapper).toOpaque()
+        var cName: [CChar] = name.cArray.nullTerminated()
+        var cDescrption: [CChar] = (description ?? "").cArray.nullTerminated()
+        var cDisplayPic: user_profile_pic = user_profile_pic()
+        var cMembers: [config_group_member] = members.map { id, name, picUrl, picEncKey in
+            var profilePic: user_profile_pic = user_profile_pic()
+            
+            if
+                let picUrl: String = picUrl,
+                let picKey: Data = picEncKey,
+                !picUrl.isEmpty,
+                picKey.count == DisplayPictureManager.aes256KeyByteLength
+            {
+                profilePic.url = picUrl.toLibSession()
+                profilePic.key = picKey.toLibSession()
+            }
+            
+            return config_group_member(
+                session_id: id.toLibSession(),
+                name: (name ?? "").toLibSession(),
+                profile_pic: profilePic,
+                admin: false,   // The current user will be added as an admin by libSession automatically
+                invited: 0,
+                promoted: 0,
+                removed: 0,
+                supplement: false
+            )
+        }
+        
+        if let picUrl: String = displayPictureUrl, let picEncKey: Data = displayPictureEncryptionKey {
+            cDisplayPic.url = picUrl.toLibSession()
+            cDisplayPic.key = picEncKey.toLibSession()
+        }
+        
+        state_create_group(
+            state,
+            &cName,
+            &cDescrption,
+            cDisplayPic,
+            &cMembers,
+            cMembers.count,
+            { success, groupIdPtr, groupIdentityPrivateKeyPtr, maybeCtx in
+                // If we have no context then we can't do anything
+                guard
+                    let cWrapper: CWrapper = maybeCtx.map({ Unmanaged<CWrapper>.fromOpaque($0).takeRetainedValue() })
+                else { return }
+                guard
+                    success,
+                    let groupId: String = groupIdPtr.map({ String(libSessionVal: $0, fixedLength: 66) }),
+                    let groupIdentityPrivateKey: [UInt8] = groupIdentityPrivateKeyPtr
+                        .map({ Array(Data(bytes: $0, count: 64)) })
+                else { return cWrapper.callback(false, "", []) }
+                
+                cWrapper.callback(success, groupId, groupIdentityPrivateKey)
+            },
+            cWrapperPtr
         )
     }
     
+    func approveGroup(groupSessionId: String, groupIdentityPrivateKey: Data?) {
+        var cGroupId: [CChar] = groupSessionId.cArray
+        
+        // It looks like C doesn't deal will passing pointers to null variables well so we need
+        // to explicitly pass 'nil' for the admin key in this case
+        switch groupIdentityPrivateKey {
+            case .none: state_approve_group(state, &cGroupId, nil)
+            case .some(let groupIdentityPrivateKey):
+                var cGroupIdentityPrivateKey: [UInt8] = Array(groupIdentityPrivateKey)
+                state_approve_group(state, &cGroupId, &cGroupIdentityPrivateKey)
+        }
+    }
+}
     static func removeGroupStateIfNeeded(
         _ db: Database,
         groupSessionId: SessionId,

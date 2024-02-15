@@ -33,6 +33,7 @@ public enum LibSession {
 // MARK: - StateManagerType
 
 public protocol StateManagerType {
+    var lastError: LibSessionError? { get }
     var rawBlindedMessageRequestValue: Int32 { get }
     
     func registerHooks() throws
@@ -50,6 +51,18 @@ public protocol StateManagerType {
     func timestampAlreadyRead(threadId: String, rawThreadVariant: Int, timestampMs: Int64, openGroupServer: String?, openGroupRoomToken: String?) -> Bool
     func wasKickedFromGroup(groupSessionId: SessionId) -> Bool
     
+    // MARK: -- Creation
+    
+    func createGroup(
+        name: String,
+        description: String?,
+        displayPictureUrl: String?,
+        displayPictureEncryptionKey: Data?,
+        members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+        callback: @escaping (Bool, String, [UInt8]) -> Void
+    )
+    func approveGroup(groupSessionId: String, groupIdentityPrivateKey: Data?)
+    
     // MARK: -- Retrieval
     
     func contact(sessionId: String) -> CContact?
@@ -66,6 +79,9 @@ public protocol StateManagerType {
     /// When using this method the caller needs to ensure they call `ugroups_legacy_group_free` with the returned value
     func legacyGroupOrConstruct(legacyGroupId: String) throws -> CLegacyGroup
     
+    func groupDeleteBefore(groupId: SessionId) -> Int64
+    func groupAttachDeleteBefore(groupId: SessionId) -> Int64
+    
     func volatileContact(sessionId: String) -> CVolatileContact?
     func volatileGroup(groupSessionId: String) -> CVolatileGroup?
     func volatileCommunity(server: String, roomToken: String) -> CVolatileCommunity?
@@ -80,6 +96,7 @@ public protocol StateManagerType {
 
 public extension LibSession {
     class NoopStateManager: StateManagerType {
+        public var lastError: LibSessionError? { return nil }
         public var rawBlindedMessageRequestValue: Int32 { 0 }
         
         public init() {}
@@ -103,6 +120,18 @@ public extension LibSession {
         }
         public func wasKickedFromGroup(groupSessionId: SessionId) -> Bool { return true }
         
+        // MARK: -- Creation
+        
+        public func createGroup(
+            name: String,
+            description: String?,
+            displayPictureUrl: String?,
+            displayPictureEncryptionKey: Data?,
+            members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+            callback: @escaping (Bool, String, [UInt8]) -> Void
+        ) {}
+        public func approveGroup(groupSessionId: String, groupIdentityPrivateKey: Data?) {}
+        
         // MARK: -- Conversation Retrieval
         
         public func contact(sessionId: String) -> CContact? { return nil }
@@ -116,6 +145,9 @@ public extension LibSession {
             throw StorageError.objectNotFound
         }
         public func legacyGroupOrConstruct(legacyGroupId: String) throws -> CLegacyGroup { throw StorageError.objectNotFound }
+        
+        public func groupDeleteBefore(groupId: SessionId) -> Int64 { return 0 }
+        public func groupAttachDeleteBefore(groupId: SessionId) -> Int64 { return 0 }
         
         public func volatileContact(sessionId: String) -> CVolatileContact? { return nil }
         public func volatileGroup(groupSessionId: String) -> CVolatileGroup? { return nil }
