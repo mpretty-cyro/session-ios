@@ -351,7 +351,6 @@ extension MessageSender {
             
             /// Add the members to the `GROUP_MEMBERS` config
             try LibSession.addMembers(
-                db,
                 groupSessionId: sessionId,
                 members: members,
                 allowAccessToHistoricMessages: allowAccessToHistoricMessages,
@@ -546,8 +545,7 @@ extension MessageSender {
                 .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
                 .sinkUntilComplete()
             
-            try LibSession.updateMemberStatus(
-                db,
+            LibSession.updateMemberStatus(
                 groupSessionId: SessionId(.group, hex: groupSessionId),
                 memberId: memberId,
                 role: .standard,
@@ -617,8 +615,7 @@ extension MessageSender {
                 else { throw MessageSenderError.invalidClosedGroupUpdate }
                 
                 /// Flag the members for removal
-                try LibSession.flagMembersForRemoval(
-                    db,
+                LibSession.flagMembersForRemoval(
                     groupSessionId: sessionId,
                     memberIds: memberIds,
                     removeMessages: removeTheirMessages,
@@ -707,8 +704,7 @@ extension MessageSender {
             // Update the libSession status for each member and schedule a job to send
             // the promotion message
             try members.forEach { memberId, _ in
-                try LibSession.updateMemberStatus(
-                    db,
+                LibSession.updateMemberStatus(
                     groupSessionId: groupSessionId,
                     memberId: memberId,
                     role: .admin,

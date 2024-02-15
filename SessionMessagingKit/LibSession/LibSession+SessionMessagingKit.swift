@@ -143,6 +143,15 @@ public extension LibSession {
                                     serverTimestampMs: Int64(timestamp_ms),
                                     using: dependencies
                                 )
+    
+                                case .groupMembers:
+                                    try LibSession.handleGroupMembersUpdate(
+                                        db,
+                                        in: state,
+                                        groupSessionId: SessionId(.group, hex: sessionIdHex),
+                                        serverTimestampMs: Int64(timestamp_ms),
+                                        using: dependencies
+                                    )
                             case .invalid: SNLog("[libSession] Failed to process merge of invalid config namespace")
                             
                         default:

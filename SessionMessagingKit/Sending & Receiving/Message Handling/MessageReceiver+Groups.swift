@@ -324,8 +324,7 @@ extension MessageReceiver {
                 // If there is no value in the database then just update libSession directly (this
                 // will trigger an updated `GROUP_MEMBERS` message if there are changes which will
                 // result in the database getting updated to the correct state)
-                try LibSession.updateMemberStatus(
-                    db,
+                LibSession.updateMemberStatus(
                     groupSessionId: groupSessionId,
                     memberId: userSessionId.hexString,
                     role: .admin,
@@ -760,8 +759,7 @@ extension MessageReceiver {
                 // don't change the database as we assume it's state is correct, just update `libSession`
                 // in case it didn't have the correct `invited` state (if this triggers a GROUP_MEMBERS
                 // update then the database will eventually get back to a valid state)
-                try LibSession.updateMemberStatus(
-                    db,
+                LibSession.updateMemberStatus(
                     groupSessionId: groupSessionId,
                     memberId: senderSessionId,
                     role: .standard,

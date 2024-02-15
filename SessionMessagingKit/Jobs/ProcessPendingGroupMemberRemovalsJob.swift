@@ -167,8 +167,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                                     using: dependencies,
                                     updates: { db in
                                         /// Remove the members from the `GROUP_MEMBERS` config
-                                        try LibSession.removeMembers(
-                                            db,
+                                        LibSession.removeMembers(
                                             groupSessionId: groupSessionId,
                                             memberIds: Set(pendingRemovals.keys),
                                             using: dependencies
