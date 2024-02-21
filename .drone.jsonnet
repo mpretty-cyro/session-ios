@@ -1,4 +1,4 @@
-// This build configuration requires the following to be installed: 1
+// This build configuration requires the following to be installed:
 // Git, Xcode, XCode Command-line Tools, Cocoapods, Xcodebuild, Xcresultparser
 
 // Log a bunch of version information to make it easier for debugging
@@ -93,7 +93,7 @@ local update_cocoapods_cache(depends_on) = {
 local run_tests(testName, testBuildStepName) = {
   name: 'Run ' + testName,
   commands: [
-    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test-without-building -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath './build/artifacts/' + testName + '.xcresult' -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -only-testing ' + testName + ' -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test-without-building -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/' + testName + '.xcresult -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -only-testing ' + testName + ' -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
   ],
   depends_on: [
     testBuildStepName
@@ -304,25 +304,15 @@ local run_tests(testName, testBuildStepName) = {
           commands: [
             'xcresultparser --output-format cobertura ./build/artifacts/merged.xcresult > ./build/artifacts/coverage.xml',
           ],
-          depends_on: [
-          'Build For Testing',
-            'Run SessionTests',
-            'Run SessionMessagingKitTests',
-            'Run SessionUtilitiesKitTests'
-          ]
+          depends_on: ['Merge test results']
         },
         {
           name: 'Upload coverage to Codecov',
           environment: { CODECOV_TOKEN: { from_secret: 'CODECOV_TOKEN' } },
           commands: [
-            './codecov --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n 'service'-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
+            './codecov --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n service-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
           ],
-          depends_on: [
-            'Build For Testing',
-            'Run SessionTests',
-            'Run SessionMessagingKitTests',
-            'Run SessionUtilitiesKitTests'
-          ]
+          depends_on: ['Convert xcresult to xml']
         },
       ],
     },
