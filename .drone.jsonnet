@@ -229,7 +229,7 @@ local run_tests(testName, testBuildStepName) = {
     type: 'exec',
     name: 'Unit Tests and Code Coverage',
     platform: { os: 'darwin', arch: 'amd64' },
-    trigger: { event: { exclude: [ 'push' ] } },
+    trigger: { event: { exclude: [ 'pull_request' ] } },
     steps: [
       version_info,
       clone_submodules,
