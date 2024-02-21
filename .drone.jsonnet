@@ -1,3 +1,6 @@
+// This build configuration requires the following to be installed:
+// Git, Xcode, XCode Command-line Tools, Cocoapods, Xcodebuild, Xcresultparser
+
 // Log a bunch of version information to make it easier for debugging
 local version_info = {
   name: 'Version Information',
@@ -90,7 +93,7 @@ local update_cocoapods_cache(depends_on) = {
 local run_tests(testName, testBuildStepName) = {
   name: 'Run ' + testName,
   commands: [
-    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test-without-building -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -only-testing ' + testName + ' -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test-without-building -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath './build/artifacts/' + testName + '.xcresult' -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -only-testing ' + testName + ' -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
   ],
   depends_on: [
     testBuildStepName
@@ -147,6 +150,25 @@ local run_tests(testName, testBuildStepName) = {
           status: ['failure', 'success']
         }
       },
+      {
+        name: 'Merge test results',
+        commands: [
+          'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
+        ],
+        depends_on: [
+        'Build For Testing',
+          'Run SessionTests',
+          'Run SessionMessagingKitTests',
+          'Run SessionUtilitiesKitTests'
+        ]
+      },
+      {
+        name: 'Unit test summary',
+        commands: [
+          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/merged.xcresult',
+        ],
+        depends_on: ['Merge test results']
+      },
       update_cocoapods_cache(['Build For Testing'])
     ],
   },
@@ -200,5 +222,109 @@ local run_tests(testName, testBuildStepName) = {
         ]
       },
     ],
+    // Unit tests and Codecov upload (non-PRs only)
+    {
+      kind: 'pipeline',
+      type: 'exec',
+      name: 'Unit Tests and Code Coverage',
+      platform: { os: 'darwin', arch: 'amd64' },
+      trigger: { event: { exclude: [ 'push' ] } },
+      steps: [
+        version_info,
+        clone_submodules,
+        load_cocoapods_cache,
+        install_cocoapods,
+        {
+          name: 'Reset Simulators',
+          commands: [
+            'xcrun simctl shutdown all',
+            'xcrun simctl erase all'
+          ],
+          depends_on: [
+            'Install CocoaPods'
+          ]
+        },
+        {
+          name: 'Build For Testing',
+          commands: [
+            'mkdir build',
+            'xcodebuild build-for-testing -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -destination "platform=iOS Simulator,name=iPhone 14" | xcbeautify --is-ci',
+          ],
+          depends_on: [
+            'Install CocoaPods'
+          ],
+        },
+        run_tests('SessionTests', 'Build For Testing'),
+        run_tests('SessionMessagingKitTests', 'Build For Testing'),
+        run_tests('SessionUtilitiesKitTests', 'Build For Testing'),
+        {
+          name: 'Shutdown Simulators',
+          commands: [ 'xcrun simctl shutdown all' ],
+          depends_on: [
+            'Build For Testing',
+            'Run SessionTests',
+            'Run SessionMessagingKitTests',
+            'Run SessionUtilitiesKitTests'
+          ],
+          when: {
+            status: ['failure', 'success']
+          }
+        },
+        update_cocoapods_cache(['Build For Testing']),
+        {
+          name: 'Download Codecov CLI',
+          commands: [
+            // Download Codecov CLI
+            'curl -Os https://cli.codecov.io/latest/macos/codecov',
+            // Integrity check
+            'curl https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import', // One-time step
+            'curl -Os https://cli.codecov.io/latest/macos/codecov',
+            'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM',
+            'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM.sig',
+            'gpgv codecov.SHA256SUM.sig codecov.SHA256SUM',
+            'shasum -a 256 -c codecov.SHA256SUM ',
+            'sudo chmod +x codecov',
+            './codecov --help',
+          ],
+        },
+        {
+          name: 'Merge test results',
+          commands: [
+            'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
+          ],
+          depends_on: [
+          'Build For Testing',
+            'Run SessionTests',
+            'Run SessionMessagingKitTests',
+            'Run SessionUtilitiesKitTests'
+          ]
+        },
+        {
+          name: 'Convert xcresult to xml',
+          commands: [
+            'xcresultparser --output-format cobertura ./build/artifacts/merged.xcresult > ./build/artifacts/coverage.xml',
+          ],
+          depends_on: [
+          'Build For Testing',
+            'Run SessionTests',
+            'Run SessionMessagingKitTests',
+            'Run SessionUtilitiesKitTests'
+          ]
+        },
+        {
+          name: 'Upload coverage to Codecov',
+          environment: { CODECOV_TOKEN: { from_secret: 'CODECOV_TOKEN' } },
+          commands: [
+            './codecov --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n 'service'-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
+          ],
+          depends_on: [
+            'Build For Testing',
+            'Run SessionTests',
+            'Run SessionMessagingKitTests',
+            'Run SessionUtilitiesKitTests'
+          ]
+        },
+      ],
+    },
   }
 ]
