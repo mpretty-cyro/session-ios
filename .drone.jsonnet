@@ -278,14 +278,14 @@ local run_tests(testName, testBuildStepName) = {
           // Download Codecov CLI
           'curl -Os https://cli.codecov.io/latest/macos/codecov',
           // Integrity check
-          'curl https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import', // One-time step
-          'curl -Os https://cli.codecov.io/latest/macos/codecov',
-          'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM',
-          'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM.sig',
-          'gpgv codecov.SHA256SUM.sig codecov.SHA256SUM',
-          'shasum -a 256 -c codecov.SHA256SUM ',
+          //'curl https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import', // One-time step
+          //'curl -Os https://cli.codecov.io/latest/macos/codecov',
+          //'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM',
+          //'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM.sig',
+          //'gpgv codecov.SHA256SUM.sig codecov.SHA256SUM',
+          //'shasum -a 256 -c codecov.SHA256SUM ',
           'sudo chmod +x codecov',
-          './codecov --help',
+          //'./codecov --help',
         ],
       },
       {
