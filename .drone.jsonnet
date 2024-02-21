@@ -276,7 +276,7 @@ local run_tests(testName, testBuildStepName) = {
         name: 'Install Codecov CLI',
         commands: [
           'pip3 install codecov-cli',
-          '~/Library/Python/3.9/bin/codecovcliTEST --version'
+          '~/Library/Python/3.9/bin/codecovcli --version'
         ],
       },
       {
