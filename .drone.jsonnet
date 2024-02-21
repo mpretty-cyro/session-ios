@@ -1,4 +1,4 @@
-// This build configuration requires the following to be installed:
+// This build configuration requires the following to be installed: 1
 // Git, Xcode, XCode Command-line Tools, Cocoapods, Xcodebuild, Xcresultparser
 
 // Log a bunch of version information to make it easier for debugging
