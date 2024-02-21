@@ -1,5 +1,5 @@
 // This build configuration requires the following to be installed:
-// Git, Xcode, XCode Command-line Tools, Cocoapods, Xcodebuild, Xcresultparser, gnupg (gpg)
+// Git, Xcode, XCode Command-line Tools, Cocoapods, Xcodebuild, Xcresultparser, pip
 
 // Log a bunch of version information to make it easier for debugging
 local version_info = {
@@ -273,19 +273,10 @@ local run_tests(testName, testBuildStepName) = {
       },
       update_cocoapods_cache(['Build For Testing']),
       {
-        name: 'Download Codecov CLI',
+        name: 'Install Codecov CLI',
         commands: [
-          // Download Codecov CLI
-          'curl -Os https://cli.codecov.io/latest/macos/codecov',
-          // Integrity check
-          //'curl https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import', // One-time step
-          //'curl -Os https://cli.codecov.io/latest/macos/codecov',
-          //'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM',
-          //'curl -Os https://cli.codecov.io/latest/macos/codecov.SHA256SUM.sig',
-          //'gpgv codecov.SHA256SUM.sig codecov.SHA256SUM',
-          //'shasum -a 256 -c codecov.SHA256SUM ',
-          'sudo chmod +x codecov',
-          //'./codecov --help',
+          'pip3 install codecov-cli',
+          '~/Library/Python/3.9/bin/codecovcliTEST --version'
         ],
       },
       {
@@ -311,9 +302,12 @@ local run_tests(testName, testBuildStepName) = {
         name: 'Upload coverage to Codecov',
         environment: { CODECOV_TOKEN: { from_secret: 'CODECOV_TOKEN' } },
         commands: [
-          './codecov --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n service-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
+          '~/Library/Python/3.9/bin/codecovcli --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n service-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
         ],
-        depends_on: ['Convert xcresult to xml']
+        depends_on: [
+          'Convert xcresult to xml',
+          'Install Codecov CLI'
+        ]
       },
     ],
   },
