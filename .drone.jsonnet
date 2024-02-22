@@ -223,7 +223,7 @@ local update_cocoapods_cache(depends_on) = {
         name: 'Build and Run Tests',
         commands: [
           'echo "Test |$(cat ./build/artifacts/device_name), $(cat ./build/artifacts/sim_uuid)"|',
-          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -disable-concurrent-destination-testing -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -parallelizeTargets -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
         depends_on: [
           'Pre-Boot Test Simulator',
