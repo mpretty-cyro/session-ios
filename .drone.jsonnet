@@ -103,126 +103,126 @@ local run_tests(testName, testBuildStepName) = {
 
 [
   // Unit tests (PRs only)
-  {
-    kind: 'pipeline',
-    type: 'exec',
-    name: 'Unit Tests',
-    platform: { os: 'darwin', arch: 'amd64' },
-    trigger: { event: { exclude: [ 'push' ] } },
-    steps: [
-      version_info,
-      clone_submodules,
-      load_cocoapods_cache,
-      install_cocoapods,
-      {
-        name: 'Reset Simulators',
-        commands: [
-          'xcrun simctl shutdown all',
-          'xcrun simctl erase all'
-        ],
-        depends_on: [
-          'Install CocoaPods'
-        ]
-      },
-      {
-        name: 'Build For Testing',
-        commands: [
-          'mkdir build',
-          'xcodebuild build-for-testing -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -destination "platform=iOS Simulator,name=iPhone 14" | xcbeautify --is-ci',
-        ],
-        depends_on: [
-          'Install CocoaPods'
-        ],
-      },
-      run_tests('SessionTests', 'Build For Testing'),
-      run_tests('SessionMessagingKitTests', 'Build For Testing'),
-      run_tests('SessionUtilitiesKitTests', 'Build For Testing'),
-      {
-        name: 'Shutdown Simulators',
-        commands: [ 'xcrun simctl shutdown all' ],
-        depends_on: [
-          'Build For Testing',
-          'Run SessionTests',
-          'Run SessionMessagingKitTests',
-          'Run SessionUtilitiesKitTests'
-        ],
-        when: {
-          status: ['failure', 'success']
-        }
-      },
-      {
-        name: 'Merge test results',
-        commands: [
-          'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
-        ],
-        depends_on: [
-        'Build For Testing',
-          'Run SessionTests',
-          'Run SessionMessagingKitTests',
-          'Run SessionUtilitiesKitTests'
-        ]
-      },
-      {
-        name: 'Unit test summary',
-        commands: [
-          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/merged.xcresult',
-        ],
-        depends_on: ['Merge test results']
-      },
-      update_cocoapods_cache(['Build For Testing'])
-    ],
-  },
-  // Validate build artifact was created by the direct branch push (PRs only)
-  {
-    kind: 'pipeline',
-    type: 'exec',
-    name: 'Check Build Artifact Existence',
-    platform: { os: 'darwin', arch: 'amd64' },
-    trigger: { event: { exclude: [ 'push' ] } },
-    steps: [
-      {
-        name: 'Poll for build artifact existence',
-        commands: [
-          './Scripts/drone-upload-exists.sh'
-        ]
-      }
-    ]
-  },
-  // Simulator build (non-PRs only)
-  {
-    kind: 'pipeline',
-    type: 'exec',
-    name: 'Simulator Build',
-    platform: { os: 'darwin', arch: 'amd64' },
-    trigger: { event: { exclude: [ 'pull_request' ] } },
-    steps: [
-      version_info,
-      clone_submodules,
-      load_cocoapods_cache,
-      install_cocoapods,
-      {
-        name: 'Build',
-        commands: [
-          'mkdir build',
-          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS Simulator" | xcbeautify --is-ci'
-        ],
-        depends_on: [
-          'Install CocoaPods'
-        ],
-      },
-      update_cocoapods_cache(['Build']),
-      {
-        name: 'Upload artifacts',
-        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
-        commands: [
-          './Scripts/drone-static-upload.sh'
-        ],
-        depends_on: [
-          'Build'
-        ]
-      },
-    ],
-  },
+//  {
+//    kind: 'pipeline',
+//    type: 'exec',
+//    name: 'Unit Tests',
+//    platform: { os: 'darwin', arch: 'amd64' },
+//    trigger: { event: { exclude: [ 'push' ] } },
+//    steps: [
+//      version_info,
+//      clone_submodules,
+//      load_cocoapods_cache,
+//      install_cocoapods,
+//      {
+//        name: 'Reset Simulators',
+//        commands: [
+//          'xcrun simctl shutdown all',
+//          'xcrun simctl erase all'
+//        ],
+//        depends_on: [
+//          'Install CocoaPods'
+//        ]
+//      },
+//      {
+//        name: 'Build For Testing',
+//        commands: [
+//          'mkdir build',
+//          'xcodebuild build-for-testing -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -destination "platform=iOS Simulator,name=iPhone 14" | xcbeautify --is-ci',
+//        ],
+//        depends_on: [
+//          'Install CocoaPods'
+//        ],
+//      },
+//      run_tests('SessionTests', 'Build For Testing'),
+//      run_tests('SessionMessagingKitTests', 'Build For Testing'),
+//      run_tests('SessionUtilitiesKitTests', 'Build For Testing'),
+//      {
+//        name: 'Shutdown Simulators',
+//        commands: [ 'xcrun simctl shutdown all' ],
+//        depends_on: [
+//          'Build For Testing',
+//          'Run SessionTests',
+//          'Run SessionMessagingKitTests',
+//          'Run SessionUtilitiesKitTests'
+//        ],
+//        when: {
+//          status: ['failure', 'success']
+//        }
+//      },
+//      {
+//        name: 'Merge test results',
+//        commands: [
+//          'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
+//        ],
+//        depends_on: [
+//        'Build For Testing',
+//          'Run SessionTests',
+//          'Run SessionMessagingKitTests',
+//          'Run SessionUtilitiesKitTests'
+//        ]
+//      },
+//      {
+//        name: 'Unit test summary',
+//        commands: [
+//          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/merged.xcresult',
+//        ],
+//        depends_on: ['Merge test results']
+//      },
+//      update_cocoapods_cache(['Build For Testing'])
+//    ],
+//  },
+//  // Validate build artifact was created by the direct branch push (PRs only)
+//  {
+//    kind: 'pipeline',
+//    type: 'exec',
+//    name: 'Check Build Artifact Existence',
+//    platform: { os: 'darwin', arch: 'amd64' },
+//    trigger: { event: { exclude: [ 'push' ] } },
+//    steps: [
+//      {
+//        name: 'Poll for build artifact existence',
+//        commands: [
+//          './Scripts/drone-upload-exists.sh'
+//        ]
+//      }
+//    ]
+//  },
+//  // Simulator build (non-PRs only)
+//  {
+//    kind: 'pipeline',
+//    type: 'exec',
+//    name: 'Simulator Build',
+//    platform: { os: 'darwin', arch: 'amd64' },
+//    trigger: { event: { exclude: [ 'pull_request' ] } },
+//    steps: [
+//      version_info,
+//      clone_submodules,
+//      load_cocoapods_cache,
+//      install_cocoapods,
+//      {
+//        name: 'Build',
+//        commands: [
+//          'mkdir build',
+//          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS Simulator" | xcbeautify --is-ci'
+//        ],
+//        depends_on: [
+//          'Install CocoaPods'
+//        ],
+//      },
+//      update_cocoapods_cache(['Build']),
+//      {
+//        name: 'Upload artifacts',
+//        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
+//        commands: [
+//          './Scripts/drone-static-upload.sh'
+//        ],
+//        depends_on: [
+//          'Build'
+//        ]
+//      },
+//    ],
+//  },
   // Unit tests and Codecov upload (non-PRs only)
   {
     kind: 'pipeline',
