@@ -243,7 +243,6 @@ local update_cocoapods_cache(depends_on) = {
       {
         name: 'Delete Test Simulator',
         commands: [
-          'xcrun simctl list',
           'xcrun simctl delete $(cat ./build/artifacts/sim_uuid)'
         ],
         depends_on: [
@@ -272,7 +271,7 @@ local update_cocoapods_cache(depends_on) = {
         name: 'Upload coverage to Codecov',
         environment: { CODECOV_TOKEN: { from_secret: 'CODECOV_TOKEN' } },
         commands: [
-          '~/Library/Python/3.9/bin/codecovcli --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n "service-${DRONE_BUILD_NUMBER}" -F service -f ./build/artifacts/coverage.xml',
+          '~/Library/Python/3.9/bin/codecovcli --verbose upload-process --fail-on-error -n "service-${DRONE_BUILD_NUMBER}" -F service -f ./build/artifacts/coverage.xml',
         ],
         depends_on: [
           'Convert xcresult to xml',
