@@ -261,7 +261,7 @@ local run_tests(testName, testBuildStepName) = {
         commands: [
           'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
         ],
-        depends_on: ['Merge test results'],
+        depends_on: ['Build and Run Tests'],
         when: {
           status: ['failure', 'success']
         }
