@@ -246,57 +246,47 @@ local run_tests(testName, testBuildStepName) = {
         ]
       },
       {
-        name: 'Build For Testing',
+        name: 'Build and Run Tests',
         commands: [
           'mkdir build',
-          'xcodebuild build-for-testing -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -destination "platform=iOS Simulator,name=iPhone 14" | xcbeautify --is-ci',
+          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
         depends_on: [
           'Install CocoaPods'
         ],
       },
-      run_tests('SessionTests', 'Build For Testing'),
-      run_tests('SessionMessagingKitTests', 'Build For Testing'),
-      run_tests('SessionUtilitiesKitTests', 'Build For Testing'),
+      update_cocoapods_cache(['Build and Run Tests']),
       {
-        name: 'Shutdown Simulators',
-        commands: [ 'xcrun simctl shutdown all' ],
-        depends_on: [
-          'Build For Testing',
-          'Run SessionTests',
-          'Run SessionMessagingKitTests',
-          'Run SessionUtilitiesKitTests'
+        name: 'Unit test summary',
+        commands: [
+          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
         ],
+        depends_on: ['Merge test results'],
         when: {
           status: ['failure', 'success']
         }
       },
-      update_cocoapods_cache(['Build For Testing']),
+      {
+        name: 'Shutdown Simulators',
+        commands: [ 'xcrun simctl shutdown all' ],
+        depends_on: [ 'Build and Run Tests' ],
+        when: {
+          status: ['failure', 'success']
+        }
+      },
+      {
+        name: 'Convert xcresult to xml',
+        commands: [
+          'xcresultparser --output-format cobertura ./build/artifacts/testResults.xcresult > ./build/artifacts/coverage.xml',
+        ],
+        depends_on: ['Build and Run Tests']
+      },
       {
         name: 'Install Codecov CLI',
         commands: [
           'pip3 install codecov-cli',
           '~/Library/Python/3.9/bin/codecovcli --version'
         ],
-      },
-      {
-        name: 'Merge test results',
-        commands: [
-          'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
-        ],
-        depends_on: [
-        'Build For Testing',
-          'Run SessionTests',
-          'Run SessionMessagingKitTests',
-          'Run SessionUtilitiesKitTests'
-        ]
-      },
-      {
-        name: 'Convert xcresult to xml',
-        commands: [
-          'xcresultparser --output-format cobertura ./build/artifacts/merged.xcresult > ./build/artifacts/coverage.xml',
-        ],
-        depends_on: ['Merge test results']
       },
       {
         name: 'Upload coverage to Codecov',
