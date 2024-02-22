@@ -211,6 +211,7 @@ local update_cocoapods_cache(depends_on) = {
       {
         name: 'Pre-Boot Test Simulator',
         commands: [
+          'mkdir -p build/artifacts',
           'echo "Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}" > ./build/artifacts/device_name',
           'xcrun simctl create "${DEVICE_NAME}" com.apple.CoreSimulator.SimDeviceType.iPhone-14',
           'echo $(xcrun simctl list devices | grep -m 1 $(cat ./build/artifacts/device_name) | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})") > ./build/artifacts/sim_uuid',
@@ -221,7 +222,6 @@ local update_cocoapods_cache(depends_on) = {
       {
         name: 'Build and Run Tests',
         commands: [
-          'mkdir build',
           'echo "Test |$(cat ./build/artifacts/device_name), $(cat ./build/artifacts/sim_uuid)"|',
           'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
