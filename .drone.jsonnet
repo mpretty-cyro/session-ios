@@ -89,18 +89,6 @@ local update_cocoapods_cache(depends_on) = {
   depends_on: depends_on,
 };
 
-// Run specified unit tests
-local run_tests(testName, testBuildStepName) = {
-  name: 'Run ' + testName,
-  commands: [
-    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test-without-building -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/' + testName + '.xcresult -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -only-testing ' + testName + ' -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
-  ],
-  depends_on: [
-    testBuildStepName
-  ],
-};
-
-
 [
   // Unit tests (PRs only)
 //  {
@@ -125,49 +113,34 @@ local run_tests(testName, testBuildStepName) = {
 //        ]
 //      },
 //      {
-//        name: 'Build For Testing',
+//        name: 'Build and Run Tests',
 //        commands: [
 //          'mkdir build',
-//          'xcodebuild build-for-testing -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -destination "platform=iOS Simulator,name=iPhone 14" | xcbeautify --is-ci',
+//          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
 //        ],
 //        depends_on: [
 //          'Install CocoaPods'
 //        ],
 //      },
-//      run_tests('SessionTests', 'Build For Testing'),
-//      run_tests('SessionMessagingKitTests', 'Build For Testing'),
-//      run_tests('SessionUtilitiesKitTests', 'Build For Testing'),
 //      {
-//        name: 'Shutdown Simulators',
-//        commands: [ 'xcrun simctl shutdown all' ],
-//        depends_on: [
-//          'Build For Testing',
-//          'Run SessionTests',
-//          'Run SessionMessagingKitTests',
-//          'Run SessionUtilitiesKitTests'
+//        name: 'Unit Test Summary',
+//        commands: [
+//          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
 //        ],
+//        depends_on: ['Build and Run Tests'],
 //        when: {
 //          status: ['failure', 'success']
 //        }
 //      },
 //      {
-//        name: 'Merge test results',
-//        commands: [
-//          'xcrun xcresulttool merge ./build/artifacts/SessionTests.xcresult ./build/artifacts/SessionMessagingKitTests.xcresult ./build/artifacts/SessionUtilitiesKitTests.xcresult --output-path=./build/artifacts/merged.xcresult',
-//        ],
+//        name: 'Shutdown Simulators',
+//        commands: [ 'xcrun simctl shutdown all' ],
 //        depends_on: [
-//        'Build For Testing',
-//          'Run SessionTests',
-//          'Run SessionMessagingKitTests',
-//          'Run SessionUtilitiesKitTests'
-//        ]
-//      },
-//      {
-//        name: 'Unit test summary',
-//        commands: [
-//          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/merged.xcresult',
+//          'Build and Run Tests',
 //        ],
-//        depends_on: ['Merge test results']
+//        when: {
+//          status: ['failure', 'success']
+//        }
 //      },
 //      update_cocoapods_cache(['Build For Testing'])
 //    ],
@@ -188,7 +161,7 @@ local run_tests(testName, testBuildStepName) = {
 //      }
 //    ]
 //  },
-//  // Simulator build (non-PRs only)
+  // Simulator build (non-PRs only)
 //  {
 //    kind: 'pipeline',
 //    type: 'exec',
@@ -204,7 +177,7 @@ local run_tests(testName, testBuildStepName) = {
 //        name: 'Build',
 //        commands: [
 //          'mkdir build',
-//          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS Simulator" | xcbeautify --is-ci'
+//          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS mulator" | xcbeautify --is-ci'
 //        ],
 //        depends_on: [
 //          'Install CocoaPods'
@@ -255,9 +228,8 @@ local run_tests(testName, testBuildStepName) = {
           'Install CocoaPods'
         ],
       },
-      update_cocoapods_cache(['Build and Run Tests']),
       {
-        name: 'Unit test summary',
+        name: 'Unit Test Summary',
         commands: [
           'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
         ],
@@ -266,20 +238,16 @@ local run_tests(testName, testBuildStepName) = {
           status: ['failure', 'success']
         }
       },
+      update_cocoapods_cache(['Build and Run Tests']),
       {
         name: 'Shutdown Simulators',
         commands: [ 'xcrun simctl shutdown all' ],
-        depends_on: [ 'Build and Run Tests' ],
+        depends_on: [
+          'Build and Run Tests',
+        ],
         when: {
           status: ['failure', 'success']
         }
-      },
-      {
-        name: 'Convert xcresult to xml',
-        commands: [
-          'xcresultparser --output-format cobertura ./build/artifacts/testResults.xcresult > ./build/artifacts/coverage.xml',
-        ],
-        depends_on: ['Build and Run Tests']
       },
       {
         name: 'Install Codecov CLI',
@@ -289,10 +257,17 @@ local run_tests(testName, testBuildStepName) = {
         ],
       },
       {
+        name: 'Convert xcresult to xml',
+        commands: [
+          'xcresultparser --output-format cobertura ./build/artifacts/testResults.xcresult > ./build/artifacts/coverage.xml',
+        ],
+        depends_on: ['Build and Run Tests']
+      },
+      {
         name: 'Upload coverage to Codecov',
         environment: { CODECOV_TOKEN: { from_secret: 'CODECOV_TOKEN' } },
         commands: [
-          '~/Library/Python/3.9/bin/codecovcli --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n service-${DRONE_BUILD_NUMBER} -F service -f ./build/artifacts/merged.xcresult',
+          '~/Library/Python/3.9/bin/codecovcli --verbose upload-process --fail-on-error -t ${CODECOV_TOKEN} -n "service-${DRONE_BUILD_NUMBER}" -F service -f ./build/artifacts/coverage.xml',
         ],
         depends_on: [
           'Convert xcresult to xml',
