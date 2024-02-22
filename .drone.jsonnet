@@ -209,28 +209,21 @@ local update_cocoapods_cache(depends_on) = {
       load_cocoapods_cache,
       install_cocoapods,
       {
-        name: 'Shutdown Simulators (Remove Me ASAP)', // Needed due to old configs starting arbitrary sims
-        commands: [
-          'echo "Test |${DEVICE_NAME}, ${SIM_UUID}"|',
-          'xcrun simctl shutdown all'
-        ]
-      },
-      {
         name: 'Pre-Boot Test Simulator',
         commands: [
-          'export DEVICE_NAME="Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}"',
+          'echo "Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}" > ./build/artifacts/device_name',
           'xcrun simctl create "${DEVICE_NAME}" com.apple.CoreSimulator.SimDeviceType.iPhone-14',
-          'export SIM_UUID=$(xcrun simctl list devices | grep -m 1 "${DEVICE_NAME}" | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})")',
-          'xcrun simctl boot ${SIM_UUID}',
-          'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*${SIM_UUID}.*")[0m"',
+          'echo $(xcrun simctl list devices | grep -m 1 $(cat ./build/artifacts/device_name) | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})") > ./build/artifacts/sim_uuid',
+          'xcrun simctl boot $(cat ./build/artifacts/sim_uuid)',
+          'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*$(cat ./build/artifacts/sim_uuid).*")[0m"',
         ]
       },
       {
         name: 'Build and Run Tests',
         commands: [
           'mkdir build',
-          'echo "Test |${DEVICE_NAME}, ${SIM_UUID}"|',
-          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,id=${SIM_UUID}" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+          'echo "Test |$(cat ./build/artifacts/device_name), $(cat ./build/artifacts/sim_uuid)"|',
+          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
         depends_on: [
           'Pre-Boot Test Simulator',
@@ -249,7 +242,7 @@ local update_cocoapods_cache(depends_on) = {
       },
       {
         name: 'Delete Test Simulator',
-        commands: [ 'xcrun simctl delete ${SIM_UUID}' ],
+        commands: [ 'xcrun simctl delete $(cat ./build/artifacts/sim_uuid)' ],
         depends_on: [
           'Build and Run Tests',
         ],
