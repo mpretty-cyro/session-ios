@@ -213,8 +213,8 @@ local update_cocoapods_cache(depends_on) = {
         commands: [
           |||
             DEVICE_NAME="Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}"
-            xcrun simctl create $DEVICE_NAME com.apple.CoreSimulator.SimDeviceType.iPhone-14
-            SIM_UUID=$(xcrun simctl list devices | grep -m 1 $DEVICE_NAME | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})")
+            xcrun simctl create "${DEVICE_NAME}" com.apple.CoreSimulator.SimDeviceType.iPhone-14
+            SIM_UUID=$(xcrun simctl list devices | grep -m 1 "${DEVICE_NAME}" | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})")
             xcrun simctl boot ${SIM_UUID}
           |||,
           'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*${SIM_UUID}.*")[0m"',
