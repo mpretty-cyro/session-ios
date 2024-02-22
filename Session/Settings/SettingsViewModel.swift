@@ -491,8 +491,8 @@ class SettingsViewModel: SessionTableViewModel, NavigationItemSource, Navigatabl
                         ),
                         title: "vc_settings_clear_all_data_button_title".localized(),
                         styling: SessionCell.StyleInfo(tintColor: .danger),
-                        onTap: { [weak self] in
-                            self?.transitionToScreen(NukeDataModal(), transitionType: .present)
+                        onTap: { [weak self, dependencies] in
+                            self?.transitionToScreen(NukeDataModal(using: dependencies), transitionType: .present)
                         }
                     )
                 ].compactMap { $0 }

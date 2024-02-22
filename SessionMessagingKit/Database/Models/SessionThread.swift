@@ -371,8 +371,8 @@ public extension SessionThread {
                 )
                 
             case (.community, _):
-                threadIds.forEach { threadId in
-                    OpenGroupManager.shared.delete(
+                try threadIds.forEach { threadId in
+                    try OpenGroupManager.shared.delete(
                         db,
                         openGroupId: threadId,
                         calledFromConfigHandling: calledFromConfigHandling,

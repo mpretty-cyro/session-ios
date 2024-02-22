@@ -262,89 +262,59 @@ public extension Crypto.Generator {
 
 public extension Crypto.Generator {
     static func tokenSubaccount(
-        config: LibSession.Config?,
         groupSessionId: SessionId,
-        memberId: String
+        memberId: String,
+        using dependencies: Dependencies
     ) -> Crypto.Generator<[UInt8]> {
         return Crypto.Generator(
             id: "tokenSubaccount",
-            args: [config, groupSessionId, memberId]
+            args: [groupSessionId, memberId]
         ) {
-            guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
-            
-            var cMemberId: [CChar] = memberId.cArray
-            var tokenData: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeSubaccountBytes)
-            
-            guard groups_keys_swarm_subaccount_token(
-                conf,
-                &cMemberId,
-                &tokenData
-            ) else { throw LibSessionError.failedToMakeSubAccountInGroup }
-            
-            return tokenData
+            return try dependencies[singleton: .libSession]
+                .tokenSubaccount(groupSessionId: groupSessionId, memberId: memberId)
         }
     }
     
     static func memberAuthData(
-        config: LibSession.Config?,
         groupSessionId: SessionId,
-        memberId: String
+        memberId: String,
+        using dependencies: Dependencies
     ) -> Crypto.Generator<Authentication.Info> {
         return Crypto.Generator(
             id: "memberAuthData",
-            args: [config, groupSessionId, memberId]
+            args: [groupSessionId, memberId]
         ) {
-            guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
-            
-            var cMemberId: [CChar] = memberId.cArray
-            var authData: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeAuthDataBytes)
-            
-            guard groups_keys_swarm_make_subaccount(
-                conf,
-                &cMemberId,
-                &authData
-            ) else { throw LibSessionError.failedToMakeSubAccountInGroup }
+            let authData: [UInt8] = try dependencies[singleton: .libSession]
+                .memberAuthData(groupSessionId: groupSessionId, memberId: memberId)
             
             return .groupMember(groupSessionId: groupSessionId, authData: Data(authData))
         }
     }
     
     static func signatureSubaccount(
-        config: LibSession.Config?,
+        groupSessionId: SessionId,
         verificationBytes: [UInt8],
-        memberAuthData: Data
+        memberAuthData: Data,
+        using dependencies: Dependencies
     ) -> Crypto.Generator<Authentication.Signature> {
         return Crypto.Generator(
             id: "signatureSubaccount",
-            args: [config, verificationBytes, memberAuthData]
+            args: [verificationBytes, memberAuthData]
         ) {
-            guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
-            
-            var verificationBytes: [UInt8] = verificationBytes
-            var memberAuthData: [UInt8] = Array(memberAuthData)
-            var subaccount: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeSubaccountBytes)
-            var subaccountSig: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeSubaccountSigBytes)
-            var signature: [UInt8] = [UInt8](repeating: 0, count: LibSession.sizeSubaccountSignatureBytes)
-            
-            guard groups_keys_swarm_subaccount_sign_binary(
-                conf,
-                &verificationBytes,
-                verificationBytes.count,
-                &memberAuthData,
-                &subaccount,
-                &subaccountSig,
-                &signature
-            ) else { throw MessageSenderError.signingFailed }
+            let signData = try dependencies[singleton: .libSession].signatureSubaccount(
+                groupSessionId: groupSessionId,
+                verificationBytes: verificationBytes,
+                memberAuthData: memberAuthData
+            )
             
             return Authentication.Signature.subaccount(
-                subaccount: subaccount,
-                subaccountSig: subaccountSig,
-                signature: signature
+                subaccount: signData.subaccount,
+                subaccountSig: signData.subaccountSig,
+                signature: signData.signature
             )
         }
     }
 }
-
 
 // MARK: - DisplayPicture
 

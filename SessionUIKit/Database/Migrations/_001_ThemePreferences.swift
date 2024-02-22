@@ -9,7 +9,6 @@ import SessionUtilitiesKit
 enum _001_ThemePreferences: Migration {
     static let target: TargetMigrations.Identifier = .uiKit
     static let identifier: String = "ThemePreferences" // stringlint:disable
-    static let needsConfigSync: Bool = false
     static let minExpectedRunDuration: TimeInterval = 0.1
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [Identity.self]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []

@@ -17,20 +17,20 @@ public extension LibSession {
 
 public extension LibSession.StateManager {
     func contact(sessionId: String) -> CContact? {
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CContact = CContact()
         
-        guard state_get_contact(state, &result, &cSessionId, nil) else { return nil }
+        guard state_get_contact(state, &result, cSessionId, nil) else { return nil }
         
         return result
     }
     
     func contactOrConstruct(sessionId: String) throws -> CContact {
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CContact = CContact()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_contact(state, &result, &cSessionId, &error) else {
+        guard state_get_or_construct_contact(state, &result, cSessionId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct contact: \(LibSessionError(error))")
@@ -290,7 +290,7 @@ internal extension LibSession {
                     using: dependencies
                 )
             
-            LibSession.remove(volatileContactIds: combinedIds, using: dependencies)
+            try LibSession.remove(volatileContactIds: combinedIds, using: dependencies)
         }
     }
     
@@ -298,7 +298,7 @@ internal extension LibSession {
     
     static func upsert(
         contactData: [SyncedContactInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         // The current users contact data doesn't need to sync so exclude it, we also don't want to sync
@@ -569,10 +569,10 @@ public extension LibSession {
     static func remove(
         contactIds: [String],
         using dependencies: Dependencies
-    ) {
+    ) throws {
         guard !contactIds.isEmpty else { return }
         
-        dependencies[singleton: .libSession].mutate { state in
+        try dependencies[singleton: .libSession].mutate { state in
             contactIds.forEach { sessionId in
                 var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
                 

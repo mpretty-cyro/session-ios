@@ -203,7 +203,7 @@ public extension ClosedGroup {
         /// Create the libSession state for the group
         dependencies[singleton: .libSession].approveGroup(
             groupSessionId: group.id,
-            groupIdentityPrivateKey: group.groupIdentityPrivateKey
+            groupIdentityPrivateKey: group.groupIdentityPrivateKey.map { Array($0) }
         )
         
         /// Start polling
@@ -293,13 +293,14 @@ public extension ClosedGroup {
                 }
                 
                 // Ignore if called from the config handling
-                if dataToRemove.contains(.libSessionState) && !calledFromConfigHandling {
+                if !calledFromConfigHandling && (dataToRemove.contains(.libSessionState) || dataToRemove.contains(.userGroup)) {
                     threadVariants
                         .filter { $0.variant == .group }
                         .forEach { threadIdVariant in
                             LibSession.removeGroupStateIfNeeded(
                                 db,
                                 groupSessionId: SessionId(.group, hex: threadIdVariant.id),
+                                removeUserState: dataToRemove.contains(.userGroup),
                                 using: dependencies
                             )
                         }
@@ -326,7 +327,7 @@ public extension ClosedGroup {
                     ClosedGroup.Columns.authData.set(to: nil)
                 )
             
-            LibSession.markAsKicked(
+            try LibSession.markAsKicked(
                 groupSessionIds: threadIds,
                 using: dependencies
             )
@@ -391,16 +392,9 @@ public extension ClosedGroup {
         
         // Ignore if called from the config handling
         if dataToRemove.contains(.userGroup) && !calledFromConfigHandling {
-            LibSession.remove(
+            try LibSession.remove(
                 legacyGroupIds: threadVariants
                     .filter { $0.variant == .legacyGroup }
-                    .map { $0.id },
-                using: dependencies
-            )
-            
-            LibSession.remove(
-                groupSessionIds: threadVariants
-                    .filter { $0.variant == .group }
                     .map { $0.id },
                 using: dependencies
             )

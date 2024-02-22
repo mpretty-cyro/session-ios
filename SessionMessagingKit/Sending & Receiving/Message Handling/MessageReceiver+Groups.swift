@@ -275,15 +275,12 @@ extension MessageReceiver {
         let groupSessionId: SessionId = SessionId(.group, publicKey: groupIdentityKeyPair.publicKey)
         
         // Load the admin key into libSession
-        try LibSession
-            .loadAdminKey(
-                db,
-                groupIdentitySeed: message.groupIdentitySeed,
-                groupSessionId: groupSessionId,
-                using: dependencies
-            )
+        try dependencies[singleton: .libSession].loadGroupAdminKey(
+            groupSessionId: groupSessionId,
+            groupIdentitySeed: Array(message.groupIdentitySeed)
+        )
         
-        // Replace the member key with the admin key in the database
+        // Now that libSession is up-to-date we need to update the database state to match
         try ClosedGroup
             .filter(id: groupSessionId.hexString)
             .updateAllAndConfig(
@@ -320,17 +317,7 @@ extension MessageReceiver {
                         using: dependencies
                     )
                 
-            default:
-                // If there is no value in the database then just update libSession directly (this
-                // will trigger an updated `GROUP_MEMBERS` message if there are changes which will
-                // result in the database getting updated to the correct state)
-                LibSession.updateMemberStatus(
-                    groupSessionId: groupSessionId,
-                    memberId: userSessionId.hexString,
-                    role: .admin,
-                    status: .accepted,
-                    using: dependencies
-                )
+            default: break
         }
     }
     
@@ -658,7 +645,7 @@ extension MessageReceiver {
         /// messages from the swarm as well
         guard
             !messageHashesToDeleteFromServer.isEmpty,
-            LibSession.isAdmin(groupSessionId: groupSessionId, using: dependencies),
+            dependencies[singleton: .libSession].isAdmin(groupSessionId: groupSessionId),
             let authMethod: AuthenticationMethod = try? Authentication.with(
                 db,
                 sessionIdHexString: groupSessionId.hexString,
@@ -697,12 +684,8 @@ extension MessageReceiver {
         /// it was sent before the user joined the group or if the `adminSignature` isn't valid
         guard
             let (memberId, keysGen): (SessionId, Int) = try? LibSessionMessage.groupKicked(plaintext: plaintext),
-            let currentKeysGen: Int = try? LibSession.currentGeneration(
-                groupSessionId: groupSessionId,
-                using: dependencies
-            ),
             memberId == userSessionId,
-            keysGen >= currentKeysGen
+            keysGen >= dependencies[singleton: .libSession].currentGeneration(groupSessionId: groupSessionId)
         else { throw MessageReceiverError.invalidMessage }
         
         /// Delete the group data (if the group is a message request then delete it entirely, otherwise we want to keep a shell of group around because
@@ -759,7 +742,7 @@ extension MessageReceiver {
                 // don't change the database as we assume it's state is correct, just update `libSession`
                 // in case it didn't have the correct `invited` state (if this triggers a GROUP_MEMBERS
                 // update then the database will eventually get back to a valid state)
-                LibSession.updateMemberStatus(
+                try LibSession.updateMemberStatus(
                     groupSessionId: groupSessionId,
                     memberId: senderSessionId,
                     role: .standard,

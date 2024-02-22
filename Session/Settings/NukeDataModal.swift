@@ -10,9 +10,14 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class NukeDataModal: Modal {
+    private let dependencies: Dependencies
+    private var hasDeletedState: Bool = false
+    
     // MARK: - Initialization
     
-    override init(targetView: UIView? = nil, dismissType: DismissType = .recursive, afterClosed: (() -> ())? = nil) {
+    init(targetView: UIView? = nil, dismissType: DismissType = .recursive, using dependencies: Dependencies, afterClosed: (() -> ())? = nil) {
+        self.dependencies = dependencies
+        
         super.init(targetView: targetView, dismissType: dismissType, afterClosed: afterClosed)
         
         self.modalPresentationStyle = .overFullScreen
@@ -151,16 +156,28 @@ final class NukeDataModal: Modal {
     }
     
     private func clearDeviceOnly() {
-        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self] _ in
-            ConfigurationSyncJob.run(sessionIdHexString: getUserSessionId().hexString)
-                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                .receive(on: DispatchQueue.main)
-                .sinkUntilComplete(
-                    receiveCompletion: { _ in
-                        self?.deleteAllLocalData()
-                        self?.dismiss(animated: true, completion: nil) // Dismiss the loader
-                    }
-                )
+        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self, dependencies] _ in
+            // If there is a pending send then schedule a callback to occur after the send
+            guard dependencies[singleton: .libSession].hasPendingSend else {
+                self?.deleteAllLocalData()
+                self?.dismiss(animated: true, completion: nil) // Dismiss the loader
+                return
+            }
+            
+            dependencies[singleton: .libSession].afterNextSend { _ in
+                guard self?.hasDeletedState == false else { return }
+                
+                self?.deleteAllLocalData()
+                self?.dismiss(animated: true, completion: nil) // Dismiss the loader
+            }
+            
+            // If it takes longer than 15 seconds then something is wrong so just delete the local state and be done
+            Timer.scheduledTimerOnMainThread(withTimeInterval: 15) { _ in
+                guard self?.hasDeletedState == false else { return }
+                
+                self?.deleteAllLocalData()
+                self?.dismiss(animated: true, completion: nil) // Dismiss the loader
+            }
         }
     }
     
@@ -313,5 +330,7 @@ final class NukeDataModal: Modal {
             // Resetting the data clears the old user defaults. We need to restore the unlink default.
             dependencies[defaults: .standard, key: .wasUnlinked] = wasUnlinked
         }
+        
+        hasDeletedState = true
     }
 }

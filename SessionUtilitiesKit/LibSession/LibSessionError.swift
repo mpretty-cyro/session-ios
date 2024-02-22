@@ -5,8 +5,7 @@
 import Foundation
 
 public enum LibSessionError: LocalizedError {
-    case unableToCreateConfigObject
-    case invalidConfigObject
+    case invalidState
     case userDoesNotExist
     case getOrConstructFailedUnexpectedly
     case processingLoopLimitReached
@@ -17,8 +16,7 @@ public enum LibSessionError: LocalizedError {
     case failedToKeySupplementGroup
     case failedToMakeSubAccountInGroup
     
-    case failedToStartSuppressingHooks(String?)
-    case failedToStopSuppressingHooks(String?)
+    case cannotMutateReadOnlyConfigObject
     
     case libSessionError(String)
     case unknown
@@ -27,10 +25,16 @@ public enum LibSessionError: LocalizedError {
         self = LibSessionError.libSessionError(String(cString: cError))
     }
     
+    public init(_ errorString: String) {
+        switch errorString {
+            case "Unable to make changes to a read-only config object": self = .cannotMutateReadOnlyConfigObject
+            default: self = LibSessionError.libSessionError(errorString)
+        }
+    }
+    
     public var errorDescription: String? {
         switch self {
-            case .unableToCreateConfigObject: return "Unable to create config object."
-            case .invalidConfigObject: return "Invalid config object."
+            case .invalidState: return "Invalid state."
             case .userDoesNotExist: return "User does not exist."
             case .getOrConstructFailedUnexpectedly: return "'getOrConstruct' failed unexpectedly."
             case .processingLoopLimitReached: return "Processing loop limit reached."
@@ -41,11 +45,8 @@ public enum LibSessionError: LocalizedError {
             case .failedToKeySupplementGroup: return "Failed to key supplement group."
             case .failedToMakeSubAccountInGroup: return "Failed to make subaccount in group."
                 
-            case .failedToStartSuppressingHooks(let error):
-                return "Failed to start suppressing hooks with error: \(error ?? "unknown error")\(error?.hasSuffix(".") == true ? "" : ".")"
-                
-            case .failedToStopSuppressingHooks(let error):
-                return "Failed to stop suppressing hooks with error: \(error ?? "unknown error")\(error?.hasSuffix(".") == true ? "" : ".")"
+            case .cannotMutateReadOnlyConfigObject:
+                return "Unable to make changes to a read-only config object"
             
             case .libSessionError(let error): return "\(error)\(error.hasSuffix(".") ? "" : ".")"
             case .unknown: return "An unknown error occurred."

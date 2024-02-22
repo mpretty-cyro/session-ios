@@ -532,7 +532,6 @@
 		FD2AAAF128ED57B500A49611 /* SynchronousStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2AAAEF28ED57B500A49611 /* SynchronousStorage.swift */; };
 		FD2AAAF228ED57B500A49611 /* SynchronousStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2AAAEF28ED57B500A49611 /* SynchronousStorage.swift */; };
 		FD2B4AFD294688D000AB4848 /* LibSession+Contacts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2B4AFC294688D000AB4848 /* LibSession+Contacts.swift */; };
-		FD2B4AFF2946C93200AB4848 /* ConfigurationSyncJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2B4AFE2946C93200AB4848 /* ConfigurationSyncJob.swift */; };
 		FD2B4B042949887A00AB4848 /* QueryInterfaceRequest+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2B4B032949887A00AB4848 /* QueryInterfaceRequest+Utilities.swift */; };
 		FD3003662A25D5B300B5A5FB /* ConfigMessageReceiveJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3003652A25D5B300B5A5FB /* ConfigMessageReceiveJob.swift */; };
 		FD30036E2A3AE26000B5A5FB /* CExceptionHelper.mm in Sources */ = {isa = PBXBuildFile; fileRef = FD30036D2A3AE26000B5A5FB /* CExceptionHelper.mm */; };
@@ -801,7 +800,6 @@
 		FDB7400D28EBEC240094D718 /* DateHeaderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB7400C28EBEC240094D718 /* DateHeaderCell.swift */; };
 		FDB947102A982EF2001F271A /* BatchRequestSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3C905B27E3FBEF00CD579F /* BatchRequestSpec.swift */; };
 		FDB947122A9831B5001F271A /* PreparedRequestSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB947112A9831B5001F271A /* PreparedRequestSpec.swift */; };
-		FDB947152A9C23AF001F271A /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB947142A9C23AF001F271A /* Config.swift */; };
 		FDB947172A9D69A8001F271A /* MockLibSessionCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB947162A9D69A8001F271A /* MockLibSessionCache.swift */; };
 		FDB9471B2A9D70A6001F271A /* CommonSMKMockExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB9471A2A9D70A6001F271A /* CommonSMKMockExtensions.swift */; };
 		FDBB25E32988B13800F1508E /* _004_AddJobPriority.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBB25E22988B13800F1508E /* _004_AddJobPriority.swift */; };
@@ -1782,7 +1780,6 @@
 		FD29598F2A43BE5F00888A17 /* VersionSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionSpec.swift; sourceTree = "<group>"; };
 		FD2AAAEF28ED57B500A49611 /* SynchronousStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynchronousStorage.swift; sourceTree = "<group>"; };
 		FD2B4AFC294688D000AB4848 /* LibSession+Contacts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibSession+Contacts.swift"; sourceTree = "<group>"; };
-		FD2B4AFE2946C93200AB4848 /* ConfigurationSyncJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationSyncJob.swift; sourceTree = "<group>"; };
 		FD2B4B032949887A00AB4848 /* QueryInterfaceRequest+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QueryInterfaceRequest+Utilities.swift"; sourceTree = "<group>"; };
 		FD3003652A25D5B300B5A5FB /* ConfigMessageReceiveJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigMessageReceiveJob.swift; sourceTree = "<group>"; };
 		FD3003692A3ADD6000B5A5FB /* CExceptionHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CExceptionHelper.h; sourceTree = "<group>"; };
@@ -2067,7 +2064,6 @@
 		FDB7400A28EB99A70094D718 /* TimeInterval+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TimeInterval+Utilities.swift"; sourceTree = "<group>"; };
 		FDB7400C28EBEC240094D718 /* DateHeaderCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateHeaderCell.swift; sourceTree = "<group>"; };
 		FDB947112A9831B5001F271A /* PreparedRequestSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparedRequestSpec.swift; sourceTree = "<group>"; };
-		FDB947142A9C23AF001F271A /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		FDB947162A9D69A8001F271A /* MockLibSessionCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLibSessionCache.swift; sourceTree = "<group>"; };
 		FDB9471A2A9D70A6001F271A /* CommonSMKMockExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonSMKMockExtensions.swift; sourceTree = "<group>"; };
 		FDBB25E22988B13800F1508E /* _004_AddJobPriority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _004_AddJobPriority.swift; sourceTree = "<group>"; };
@@ -3220,7 +3216,6 @@
 				C352A348255781F400338F3E /* AttachmentDownloadJob.swift */,
 				FD3765ED2ADE3A1200DC1489 /* AttachmentUploadJob.swift */,
 				7B521E0929BFF84400C3C36A /* GroupLeavingJob.swift */,
-				FD2B4AFE2946C93200AB4848 /* ConfigurationSyncJob.swift */,
 				FD3765EB2ADE3A0900DC1489 /* ExpirationUpdateJob.swift */,
 				7B7AD41E2A5512CA00469FB1 /* GetExpirationJob.swift */,
 				FD1936442ACE6B4D004BCF0F /* DisplayPictureDownloadJob.swift */,
@@ -4388,7 +4383,6 @@
 			children = (
 				FD2B4B022949886900AB4848 /* Database */,
 				FD8ECF8E29381FB200C0D1BB /* Config Handling */,
-				FDB947132A9C23A3001F271A /* Types */,
 				FD8ECF7A29340FFD00C0D1BB /* LibSession+SessionMessagingKit.swift */,
 			);
 			path = LibSession;
@@ -4497,14 +4491,6 @@
 				FDB5DB052A981C67002C8721 /* PreparedRequestOnionRequestsSpec.swift */,
 			);
 			path = Networking;
-			sourceTree = "<group>";
-		};
-		FDB947132A9C23A3001F271A /* Types */ = {
-			isa = PBXGroup;
-			children = (
-				FDB947142A9C23AF001F271A /* Config.swift */,
-			);
-			path = Types;
 			sourceTree = "<group>";
 		};
 		FDC13D4E2A16EE41007267C7 /* Types */ = {
@@ -6403,7 +6389,6 @@
 				FD2B4AFD294688D000AB4848 /* LibSession+Contacts.swift in Sources */,
 				7B81682328A4C1210069F315 /* UpdateTypes.swift in Sources */,
 				FDC13D472A16E4CA007267C7 /* SubscribeRequest.swift in Sources */,
-				FD2B4AFF2946C93200AB4848 /* ConfigurationSyncJob.swift in Sources */,
 				FDC438A627BB113A00C60D73 /* UserUnbanRequest.swift in Sources */,
 				FD5C72FB284F0EA10029977D /* MessageReceiver+DataExtractionNotification.swift in Sources */,
 				FDC4386727B4E10E00C60D73 /* Capabilities.swift in Sources */,
@@ -6449,7 +6434,6 @@
 				FDF0B74F28079E5E004C14C5 /* SendReadReceiptsJob.swift in Sources */,
 				FDF0B7422804EA4F004C14C5 /* _002_SetupStandardJobs.swift in Sources */,
 				FD43EE9F297E2EE0009C87C5 /* LibSession+ConvoInfoVolatile.swift in Sources */,
-				FDB947152A9C23AF001F271A /* Config.swift in Sources */,
 				B8EB20EE2640F28000773E52 /* VisibleMessage+OpenGroupInvitation.swift in Sources */,
 				FDF8487F29405994007DCAE5 /* HTTPHeader+OpenGroup.swift in Sources */,
 				FD8ECF7D2934293A00C0D1BB /* _013_SessionUtilChanges.swift in Sources */,

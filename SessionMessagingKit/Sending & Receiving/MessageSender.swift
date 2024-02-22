@@ -167,20 +167,21 @@ public final class MessageSender {
             switch (destination, namespace) {
                 // Updated group messages should be wrapped _before_ encrypting
                 case (.closedGroup(let groupId), .groupMessages) where (try? SessionId.Prefix(from: groupId)) == .group:
-                    return try LibSession
+                    let messageData: Data = try Result(
+                        MessageWrapper.wrap(
+                            type: .closedGroupMessage,
+                            timestamp: sentTimestamp,
+                            base64EncodedContent: plaintext.base64EncodedString(),
+                            wrapInWebSocketMessage: false
+                        )
+                    )
+                    .mapError { MessageSenderError.other("Couldn't wrap message", $0) }
+                    .successOrThrow()
+                    
+                    return try dependencies[singleton: .libSession]
                         .encrypt(
-                            message: try Result(
-                                MessageWrapper.wrap(
-                                    type: .closedGroupMessage,
-                                    timestamp: sentTimestamp,
-                                    base64EncodedContent: plaintext.base64EncodedString(),
-                                    wrapInWebSocketMessage: false
-                                )
-                            )
-                            .mapError { MessageSenderError.other("Couldn't wrap message", $0) }
-                            .successOrThrow(),
-                            groupSessionId: SessionId(.group, hex: groupId),
-                            using: dependencies
+                            message: messageData,
+                            groupSessionId: SessionId(.group, hex: groupId)
                         )
                         .base64EncodedString()
                     

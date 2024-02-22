@@ -1,6 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
 import SessionUtil
 import SessionUtilitiesKit
@@ -23,21 +24,17 @@ internal extension LibSession {
     // MARK: - Incoming Changes
     
     static func handleGroupKeysUpdate(
-        _ db: Database,
-        in config: Config?,
+        in state: UnsafeMutablePointer<state_object>,
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws {
-        guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray
         
         /// If two admins rekeyed for different member changes at the same time then there is a "key collision" and the "needs rekey" function
         /// will return true to indicate that a 3rd `rekey` needs to be made to have a final set of keys which includes all members
-        ///
-        /// **Note:** We don't check `needsDump` in this case because the local state _could_ be persisted yet still require a `rekey`
-        /// so we should rely solely on `groups_keys_needs_rekey`
-        guard groups_keys_needs_rekey(conf) else { return }
+        guard state_group_needs_rekey(state, cGroupId) else { return }
         
-        try rekey(db, groupSessionId: groupSessionId, using: dependencies)
+        try rekey(groupSessionId: groupSessionId, using: dependencies)
     }
 }
 
@@ -45,108 +42,66 @@ internal extension LibSession {
 
 internal extension LibSession {
     static func rekey(
-        _ db: Database,
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws {
-        try LibSession.performAndPushChange(
-            db,
-            for: .groupKeys,
-            sessionId: groupSessionId,
-            using: dependencies
-        ) { config in
-            guard case .groupKeys(let conf, let infoConf, let membersConf) = config else {
-                throw LibSessionError.invalidConfigObject
-            }
-            
-            // Performing a `rekey` returns the updated key data which we don't use directly, this updated
-            // key will now be returned by `groups_keys_pending_config` which the `ConfigurationSyncJob` uses
-            // when generating pending changes for group keys so we don't need to push it directly
-            var pushResult: UnsafePointer<UInt8>? = nil
-            var pushResultLen: Int = 0
-            guard groups_keys_rekey(conf, infoConf, membersConf, &pushResult, &pushResultLen) else {
-                throw LibSessionError.failedToRekeyGroup
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { [dependencies] state in
+            guard state_rekey_group(state) else {
+                throw dependencies[singleton: .libSession].lastError() ?? LibSessionError.failedToRekeyGroup
             }
         }
     }
     
     static func keySupplement(
-        _ db: Database,
         groupSessionId: SessionId,
         memberIds: Set<String>,
         using dependencies: Dependencies
-    ) throws -> Data {
-        try dependencies[cache: .libSession]
-            .config(for: .groupKeys, sessionId: groupSessionId)
-            .wrappedValue
-            .map { config -> Data in
-                guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
-                
-                var cMemberIds: [UnsafePointer<CChar>?] = memberIds
-                    .map { id in id.cArray.nullTerminated() }
-                    .unsafeCopy()
-                
-                defer { cMemberIds.forEach { $0?.deallocate() } }
-                
-                // Performing a `key_supplement` returns the supplemental key changes, since our state doesn't care
-                // about the `GROUP_KEYS` needed for other members this change won't result in the `GROUP_KEYS` config
-                // going into a pending state or the `ConfigurationSyncJob` getting triggered so return the data so that
-                // the caller can push it directly
-                var cSupplementData: UnsafeMutablePointer<UInt8>!
-                var cSupplementDataLen: Int = 0
-                
-                guard
-                    groups_keys_key_supplement(conf, &cMemberIds, cMemberIds.count, &cSupplementData, &cSupplementDataLen),
-                    let cSupplementData: UnsafeMutablePointer<UInt8> = cSupplementData
-                else { throw LibSessionError.failedToKeySupplementGroup }
-                
-                // Must deallocate on success
-                let supplementData: Data = Data(
-                    bytes: cSupplementData,
-                    count: cSupplementDataLen
-                )
-                cSupplementData.deallocate()
-                
-                return supplementData
-            } ?? { throw LibSessionError.invalidConfigObject }()
-    }
-    
-    static func loadAdminKey(
-        _ db: Database,
-        groupIdentitySeed: Data,
-        groupSessionId: SessionId,
-        using dependencies: Dependencies
-    ) throws {
-        try LibSession
-            .performAndPushChange(
-                db,
-                for: .groupKeys,
-                sessionId: groupSessionId,
-                using: dependencies
-            ) { config in
-                guard case .groupKeys(let conf, let infoConf, let membersConf) = config else {
-                    throw LibSessionError.invalidConfigObject
+    ) throws -> AnyPublisher<Void, Error> {
+        return Deferred {
+            Future { [dependencies] resolver in
+                do {
+                    try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+                        var cMemberIds: [UnsafePointer<CChar>?] = memberIds
+                            .map { id in id.cArray.nullTerminated() }
+                            .unsafeCopy()
+                        
+                        defer { cMemberIds.forEach { $0?.deallocate() } }
+                        
+                        // Performing a `key_supplement` generates the supplemental key changes, since our state doesn't care
+                        // about the `GROUP_KEYS` needed for other members this change won't result in the `GROUP_KEYS` config
+                        // going into a pending state so it gets sent directly via the '_send' hook and the callback below is
+                        // triggered if that request is completed successfully
+                        class CWrapper {
+                            let resolver: (Result<Void, Error>) -> Void
+                            
+                            public init(_ resolver: @escaping (Result<Void, Error>) -> Void) {
+                                self.resolver = resolver
+                            }
+                        }
+                        
+                        let resolverWrapper: CWrapper = CWrapper(resolver)
+                        let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(resolverWrapper).toOpaque()
+                        state_supplement_group_key(
+                            state,
+                            &cMemberIds,
+                            cMemberIds.count,
+                            { success, maybeCtx in
+                                guard let ctx: UnsafeMutableRawPointer = maybeCtx else { return }
+                                
+                                let wrapper: CWrapper = Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue()
+                                
+                                switch success {
+                                    case true: wrapper.resolver(Result.success(()))
+                                    case false: wrapper.resolver(Result.failure(LibSessionError.failedToKeySupplementGroup))
+                                }
+                            },
+                            cWrapperPtr
+                        )
+                    }
                 }
-                
-                var identitySeed: [UInt8] = Array(groupIdentitySeed)
-                try CExceptionHelper.performSafely {
-                    groups_keys_load_admin_key(conf, &identitySeed, infoConf, membersConf)
-                }
+                catch { resolver(Result.failure(error)) }
             }
-    }
-    
-    static func currentGeneration(
-        groupSessionId: SessionId,
-        using dependencies: Dependencies
-    ) throws -> Int {
-        try dependencies[cache: .libSession]
-            .config(for: .groupKeys, sessionId: groupSessionId)
-            .wrappedValue
-            .map { config -> Int in
-                guard case .groupKeys(let conf, _, _) = config else { throw LibSessionError.invalidConfigObject }
-                
-                return Int(groups_keys_current_generation(conf))
-            } ?? { throw LibSessionError.invalidConfigObject }()
+        }.eraseToAnyPublisher()
     }
     
     static func generateSubaccountToken(
@@ -156,11 +111,9 @@ internal extension LibSession {
     ) throws -> [UInt8] {
         try dependencies[singleton: .crypto].tryGenerate(
             .tokenSubaccount(
-                config: dependencies[cache: .libSession]
-                    .config(for: .groupKeys, sessionId: groupSessionId)
-                    .wrappedValue,
                 groupSessionId: groupSessionId,
-                memberId: memberId
+                memberId: memberId,
+                using: dependencies
             )
         )
     }
@@ -172,11 +125,9 @@ internal extension LibSession {
     ) throws -> Authentication.Info {
         try dependencies[singleton: .crypto].tryGenerate(
             .memberAuthData(
-                config: dependencies[cache: .libSession]
-                    .config(for: .groupKeys, sessionId: groupSessionId)
-                    .wrappedValue,
                 groupSessionId: groupSessionId,
-                memberId: memberId
+                memberId: memberId,
+                using: dependencies
             )
         )
     }
@@ -189,11 +140,10 @@ internal extension LibSession {
     ) throws -> Authentication.Signature {
         try dependencies[singleton: .crypto].tryGenerate(
             .signatureSubaccount(
-                config: dependencies[cache: .libSession]
-                    .config(for: .groupKeys, sessionId: groupSessionId)
-                    .wrappedValue,
+                groupSessionId: groupSessionId,
                 verificationBytes: verificationBytes,
-                memberAuthData: memberAuthData
+                memberAuthData: memberAuthData,
+                using: dependencies
             )
         )
     }

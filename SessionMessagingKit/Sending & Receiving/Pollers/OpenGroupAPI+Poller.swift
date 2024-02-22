@@ -260,7 +260,7 @@ extension OpenGroupAPI {
                                             .map { $0.id }
                                         
                                         prunedIds.forEach { id in
-                                            OpenGroupManager.shared.delete(
+                                            try? OpenGroupManager.shared.delete(
                                                 db,
                                                 openGroupId: id,
                                                 /// **Note:** We pass `calledFromConfigHandling` as `true`

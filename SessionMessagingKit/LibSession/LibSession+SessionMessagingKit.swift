@@ -11,14 +11,13 @@ import SessionUtilitiesKit
 
 public extension LibSession {
     class StateManager: StateManagerType {
-        let state: UnsafeMutablePointer<state_object>
         private let dependencies: Dependencies
+        internal let state: UnsafeMutablePointer<state_object>
+        private let userSessionId: SessionId
+        private var afterSendCallbacks: [String: [UUID: (Error?) -> ()]] = [:]
         
-        public var lastError: LibSessionError? {
-            guard state.pointee.last_error != nil else { return nil }
-            
-            let errorString = String(cString: state.pointee.last_error)
-            return LibSessionError.libSessionError(errorString)
+        public var hasPendingSend: Bool {
+            return state_has_pending_send(state)
         }
         
         // MARK: - Initialization
@@ -58,11 +57,12 @@ public extension LibSession {
             else {
                 cPubkeys.forEach { $0?.deallocate() }
                 cDumpData.forEach { $0?.deallocate() }
-                throw LibSessionError.libSessionError(String(cString: error))
+                throw LibSessionError(error)
             }
             
             self.dependencies = dependencies
             self.state = state
+            self.userSessionId = getUserSessionId(db, using: dependencies)
             cPubkeys.forEach { $0?.deallocate() }
             cDumpData.forEach { $0?.deallocate() }
             
@@ -70,10 +70,14 @@ public extension LibSession {
             setServiceNodeOffset(dependencies[cache: .snodeAPI].clockOffsetMs)
             
             // If an error occurred during any setup process then we want to throw it
-            switch self.lastError {
+            switch self.lastError() {
                 case .some(let error): throw error
                 case .none: SNLog("[LibSession] Completed loadState")
             }
+        }
+        
+        deinit {
+            state_free(state)
         }
         
         // MARK: - Internal Functions
@@ -152,10 +156,15 @@ public extension LibSession {
                                         serverTimestampMs: Int64(timestamp_ms),
                                         using: dependencies
                                     )
+    
+                                case .groupKeys:
+                                    try LibSession.handleGroupKeysUpdate(
+                                        in: state,
+                                        groupSessionId: SessionId(.group, hex: sessionIdHex),
+                                        using: dependencies
+                                    )
+    
                             case .invalid: SNLog("[libSession] Failed to process merge of invalid config namespace")
-                            
-                        default:
-                            break
                     }
                 },
                 completion: { _, result in
@@ -172,14 +181,18 @@ public extension LibSession {
             _ pubkey: UnsafePointer<CChar>?,
             _ dataPtr: UnsafePointer<UInt8>?,
             _ dataLen: Int,
-        ) {// TODO: Determine why this is called twice on a name change
             _ responseCallback: ((Bool, Int16, UnsafePointer<UInt8>?, Int, UnsafeMutableRawPointer?) -> Bool)?,
             _ callbackCtx: UnsafeMutableRawPointer?
+        ) {
             guard
                 dataLen > 0,
                 let publicKey: String = pubkey.map({ String(cString: $0) }),
                 let payloadData: Data = dataPtr.map({ Data(bytes: $0, count: dataLen) })
-            else { return SNLog("[LibSession] Failed to send due to invalid parameters") }
+            else {
+                // MUST always call the 'responseCallback' even if we don't sent
+                _ = responseCallback?(false, -1, nil, 0, callbackCtx)
+                return SNLog("[LibSession] Failed to send due to invalid parameters")
+            }
             
             guard
                 let preparedRequest = try? SnodeAPI.preparedRawSequenceRequest(
@@ -188,17 +201,29 @@ public extension LibSession {
                     using: dependencies
                 ),
                 let targetQueue: DispatchQueue = dependencies[singleton: .jobRunner].queue(for: .configurationSync)
-            else { return SNLog("[LibSession] Failed to send due to invalid prepared request") }
+            else {
+                // MUST always call the 'responseCallback' even if we don't sent
+                _ = responseCallback?(false, -1, nil, 0, callbackCtx)
+                return SNLog("[LibSession] Failed to send due to invalid prepared request")
+            }
             
+            let requestId: UUID = UUID()
+            SNLog("[LibSession - Send] Sending for \(publicKey) (reqId: \(requestId))")
             preparedRequest
                 .send(using: dependencies)
                 .subscribe(on: targetQueue, using: dependencies)
                 .receive(on: targetQueue, using: dependencies)
-                .tryMap { [weak self] info, data in
+                .catch { error in
+                    // MUST call the 'responseCallback' with the failure as well (need to do this here because
+                    // if 'responseCallback' throws in the next 'tryMap' it'd already be freed and crash)
+                    _ = responseCallback?(false, -1, nil, 0, callbackCtx)
+                    return Fail<(ResponseInfoType, Data), Error>(error: error).eraseToAnyPublisher()
+                }
+                .tryMap { [lastErrorForced] info, data in
                     var cData: [UInt8] = Array(data)
                     
                     guard responseCallback?(true, Int16(info.code), &cData, cData.count, callbackCtx) == true else {
-                        throw (self?.lastError ?? LibSessionError.unknown)
+                        throw lastErrorForced()
                     }
                     
                     return Just(())
@@ -206,19 +231,39 @@ public extension LibSession {
                         .eraseToAnyPublisher()
                 }
                 .sinkUntilComplete(
-                    receiveCompletion: { result in
+                    receiveCompletion: { [weak self] result in
+                        let afterSendCallbacks: [(Error?) -> ()] = (self?.afterSendCallbacks
+                            .removeValue(forKey: publicKey)?
+                            .values
+                            .asArray())
+                            .defaulting(to: [])
+                        
                         switch result {
-                            case .finished: SNLog("[LibSession - Send] Completed for \(publicKey) (reqId: \(requestId))")
+                            case .finished:
+                                SNLog("[LibSession - Send] Completed for \(publicKey) (reqId: \(requestId))")
+                                afterSendCallbacks.forEach { $0(nil) }
+                                
                             case .failure(let error):
-                                // MUST call the 'responseCallback' with the failure as well
-                                _ = responseCallback?(false, -1, nil, 0, callbackCtx)
                                 SNLog("[LibSession - Send] For \(publicKey) (reqId: \(requestId)) failed due to error: \(error)")
+                                afterSendCallbacks.forEach { $0(error) }
                         }
                     }
                 )
         }
         
         // MARK: - Functions
+        
+        public func lastError() -> LibSessionError? {
+            guard state.pointee.last_error != nil else { return nil }
+            
+            let errorString = String(cString: state.pointee.last_error)
+            state.pointee.last_error = nil // Clear the last error so subsequent calls don't get confused
+            return LibSessionError(errorString)
+        }
+        
+        public func lastErrorForced() -> LibSessionError {
+            return (lastError() ?? .unknown)
+        }
         
         /// Once the migrations have completed we need to inform libSession so it can register it's hooks and trigger any pending 'send' and 'store' calls
         public func registerHooks() throws {
@@ -266,18 +311,18 @@ public extension LibSession {
             )
             
             // Ensure the hooks were successfully set
-            guard storeResult && sendResult else { throw lastError ?? LibSessionError.unknown }
+            guard storeResult && sendResult else { throw lastErrorForced() }
         }
         
         public func setServiceNodeOffset(_ offset: Int64) {
             state_set_service_node_offset(state, offset)
         }
         
-        private func performMutation(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) throws {
+        public func mutate(mutation: @escaping (UnsafeMutablePointer<mutable_user_state_object>) throws -> Void) throws {
             class CWrapper {
-                let mutation: (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void
+                let mutation: (UnsafeMutablePointer<mutable_user_state_object>) throws -> Void
                 
-                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) {
+                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_user_state_object>) throws -> Void) {
                     self.mutation = mutation
                 }
             }
@@ -287,67 +332,68 @@ public extension LibSession {
             
             state_mutate_user(state, { maybe_mutable_state, maybeCtx in
                 guard
-                    let mutable_state: UnsafeMutablePointer<mutable_state_user_object> = maybe_mutable_state,
+                    let mutable_state: UnsafeMutablePointer<mutable_user_state_object> = maybe_mutable_state,
                     let ctx: UnsafeMutableRawPointer = maybeCtx
                 else { return }
                 
                 do { try Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue().mutation(mutable_state) }
                 catch {
                     var cError: [CChar] = error.localizedDescription.cArray
-                    mutable_state_user_set_error_if_empty(mutable_state, &cError, cError.count)
+                    mutable_user_state_set_error_if_empty(mutable_state, &cError, cError.count)
                 }
             }, cWrapperPtr)
             
-            if let lastError: LibSessionError = self.lastError {
+            if let lastError: LibSessionError = self.lastError() {
                 throw lastError
             }
         }
         
-        private func performMutation(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) throws {
+        public func mutate(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_group_state_object>) throws -> Void) throws {
             class CWrapper {
-                let mutation: (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void
+                let mutation: (UnsafeMutablePointer<mutable_group_state_object>) throws -> Void
                 
-                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) {
+                public init(_ mutation: @escaping (UnsafeMutablePointer<mutable_group_state_object>) throws -> Void) {
                     self.mutation = mutation
                 }
             }
             
-            var cPubkey: [CChar] = groupId.hexString.cArray
+            let cPubkey: [CChar] = groupId.hexString.cArray
             let mutationWrapper: CWrapper = CWrapper(mutation)
             let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(mutationWrapper).toOpaque()
             
-            state_mutate_group(state, &cPubkey, { maybe_mutable_state, maybeCtx in
+            state_mutate_group(state, cPubkey, { maybe_mutable_state, maybeCtx in
                 guard
-                    let mutable_state: UnsafeMutablePointer<mutable_state_group_object> = maybe_mutable_state,
+                    let mutable_state: UnsafeMutablePointer<mutable_group_state_object> = maybe_mutable_state,
                     let ctx: UnsafeMutableRawPointer = maybeCtx
                 else { return }
                 
                 do { try Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue().mutation(mutable_state) }
                 catch {
                     var cError: [CChar] = error.localizedDescription.cArray
-                    mutable_state_group_set_error_if_empty(mutable_state, &cError, cError.count)
+                    mutable_group_state_set_error_if_empty(mutable_state, &cError, cError.count)
                 }
             }, cWrapperPtr)
             
-            if let lastError: LibSessionError = self.lastError {
+            if let lastError: LibSessionError = self.lastError() {
                 throw lastError
             }
         }
         
-        public func mutate(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) -> Void) {
-            try? performMutation(mutation: mutation)
+        @discardableResult public func afterNextSend(groupId: SessionId?, closure: @escaping (Error?) -> ()) -> UUID {
+            let closureId: UUID = UUID()
+            let key: String = (groupId ?? userSessionId).hexString
+            afterSendCallbacks[key] = (afterSendCallbacks[key] ?? [:]).setting(closureId, closure)
+            
+            return closureId
         }
         
-        public func mutate(mutation: @escaping (UnsafeMutablePointer<mutable_state_user_object>) throws -> Void) throws {
-            try performMutation(mutation: mutation)
-        }
-        
-        public func mutate(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) -> Void) {
-            try? performMutation(groupId: groupId, mutation: mutation)
-        }
-        
-        public func mutate(groupId: SessionId, mutation: @escaping (UnsafeMutablePointer<mutable_state_group_object>) throws -> Void) throws {
-            try performMutation(groupId: groupId, mutation: mutation)
+        public func removeAfterNextSend(groupId: SessionId?, closureId: UUID) {
+            let key: String = (groupId ?? userSessionId).hexString
+            afterSendCallbacks[key]?.removeValue(forKey: closureId)
+            
+            if afterSendCallbacks[key]?.isEmpty != false {
+                afterSendCallbacks.removeValue(forKey: key)
+            }
         }
         
         public func merge<T>(sessionIdHexString: String, messages: [T]) throws {
@@ -356,13 +402,14 @@ public extension LibSession {
                 throw LibSessionError.cannotMergeInvalidMessageType
             }
             
+            let cPubkey: [CChar] = sessionIdHexString.cArray
             let cMessageHashes: [UnsafePointer<CChar>?] = messages
                 .map { message in message.serverHash.cArray }
                 .unsafeCopy()
             let cMessagesData: [UnsafePointer<UInt8>?] = messages
                 .map { message in Array(message.data) }
                 .unsafeCopy()
-            var configMessages: [state_config_message] = try messages.enumerated()
+            var cConfigMessages: [state_config_message] = try messages.enumerated()
                 .map { index, message in
                     state_config_message(
                         namespace_: try message.namespace.cNamespace,
@@ -372,37 +419,35 @@ public extension LibSession {
                         datalen: message.data.count
                     )
                 }
-            
-            var pubkeyHex: [CChar] = sessionIdHexString.cArray
-            var cMergedHashesPtr: UnsafeMutablePointer<config_string_list>?
-            
-            guard state_merge(state, &pubkeyHex, &configMessages, configMessages.count, &cMergedHashesPtr) else {
-                throw lastError ?? LibSessionError.unknown
+            defer {
+                cMessageHashes.forEach { $0?.deallocate() }
+                cMessagesData.forEach { $0?.deallocate() }
             }
             
-            let mergedHashes: [String] = cMergedHashesPtr
-                .map { ptr in
-                    [String](
-                        pointer: ptr.pointee.value,
-                        count: ptr.pointee.len,
-                        defaultValue: []
-                    )
-                }
+            guard state_merge(state, cPubkey, &cConfigMessages, cConfigMessages.count) else {
+                throw lastErrorForced()
+            }
+        }
+        
+        public func currentHashes(sessionId: String) -> [String] {
+            let cPubkey: [CChar] = sessionId.cArray
+            var cCurrentHashes: UnsafeMutablePointer<session_string_list>?
+            
+            guard state_current_hashes(state, cPubkey, &cCurrentHashes) else {
+                return []
+            }
+
+            let result: [String] = (cCurrentHashes
+                .map { [String](pointer: $0.pointee.value, count: $0.pointee.len, defaultValue: []) })
                 .defaulting(to: [])
-            cMessageHashes.forEach { $0?.deallocate() }
-            cMessagesData.forEach { $0?.deallocate() }
-            cMergedHashesPtr?.deallocate()
+            cCurrentHashes?.deallocate()
+            
+            return result
         }
     }
 }
 
 public extension LibSession {
-    // MARK: - Variables
-    
-    internal static func syncDedupeId(_ sessionIdHexString: String) -> String {
-        return "EnqueueConfigurationSyncJob-\(sessionIdHexString)"   // stringlint:disable
-    }    
-    
     // MARK: - Loading
     
     static func loadState(_ db: Database, using dependencies: Dependencies) {
@@ -412,148 +457,6 @@ public extension LibSession {
     
     static func clearMemoryState(using dependencies: Dependencies) {
         dependencies.set(singleton: .libSession, to: LibSession.NoopStateManager())
-    }
-    
-    internal static func createDump(
-        config: Config?,
-        for variant: ConfigDump.Variant,
-        sessionId: SessionId,
-        timestampMs: Int64,
-        using dependencies: Dependencies
-    ) throws -> ConfigDump? {
-        // If it doesn't need a dump then do nothing
-        guard
-            config.needsDump(using: dependencies),
-            let dumpData: Data = try config?.dump()
-        else { return nil }
-        
-        return ConfigDump(
-            variant: variant,
-            sessionId: sessionId.hexString,
-            data: dumpData,
-            timestampMs: timestampMs
-        )
-    }
-    
-    // MARK: - Pushes
-    
-    static func pendingChanges(
-        _ db: Database,
-        sessionIdHexString: String,
-        using dependencies: Dependencies
-    ) throws -> [PushData] {
-        guard Identity.userExists(db, using: dependencies) else { throw LibSessionError.userDoesNotExist }
-        
-        // Get a list of the different config variants for the provided publicKey
-        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-        let targetVariants: [(sessionId: SessionId, variant: ConfigDump.Variant)] = {
-            switch (sessionIdHexString, try? SessionId(from: sessionIdHexString)) {
-                case (userSessionId.hexString, _):
-                    return ConfigDump.Variant.userVariants.map { (userSessionId, $0) }
-                    
-                case (_, .some(let sessionId)) where sessionId.prefix == .group:
-                    return ConfigDump.Variant.groupVariants.map { (sessionId, $0) }
-                    
-                default: return []
-            }
-        }()
-        
-        // Extract any pending changes from the cached config entry for each variant
-        return try targetVariants
-            .sorted { (lhs: (SessionId, ConfigDump.Variant), rhs: (SessionId, ConfigDump.Variant)) in
-                lhs.1.sendOrder < rhs.1.sendOrder
-            }
-            .compactMap { sessionId, variant -> PushData? in
-                try dependencies[cache: .libSession]
-                    .config(for: variant, sessionId: sessionId)
-                    .wrappedValue
-                    .map { config -> PushData? in
-                        // Check if the config needs to be pushed
-                        guard config.needsPush else { return nil }
-                        
-                        return try Result(config.push(variant: variant))
-                            .onFailure { error in
-                                let configCountInfo: String = config.count(for: variant)
-                                
-                                SNLog("[LibSession] Failed to generate push data for \(variant) config data, size: \(configCountInfo), error: \(error)")
-                            }
-                            .successOrThrow()
-                    }
-            }
-    }
-    
-    static func markingAsPushed(
-        seqNo: Int64,
-        serverHash: String,
-        sentTimestamp: Int64,
-        variant: ConfigDump.Variant,
-        sessionIdHexString: String,
-        using dependencies: Dependencies
-    ) -> ConfigDump? {
-        let sessionId: SessionId = SessionId(hex: sessionIdHexString, dumpVariant: variant)
-        
-        return dependencies[cache: .libSession]
-            .config(for: variant, sessionId: sessionId)
-            .mutate { config -> ConfigDump? in
-                guard config != nil else { return nil }
-                
-                // Mark the config as pushed
-                config?.confirmPushed(seqNo: seqNo, hash: serverHash)
-                
-                // Update the result to indicate whether the config needs to be dumped
-                guard config.needsPush else { return nil }
-                
-                return try? LibSession.createDump(
-                    config: config,
-                    for: variant,
-                    sessionId: sessionId,
-                    timestampMs: sentTimestamp,
-                    using: dependencies
-                )
-            }
-    }
-    
-    static func configHashes(
-        for sessionIdHexString: String,
-        using dependencies: Dependencies
-    ) -> [String] {
-        return dependencies[singleton: .storage]
-            .read { db -> Set<ConfigDump.Variant> in
-                guard Identity.userExists(db) else { return [] }
-                
-                return try ConfigDump
-                    .select(.variant)
-                    .filter(ConfigDump.Columns.publicKey == sessionIdHexString)
-                    .asRequest(of: ConfigDump.Variant.self)
-                    .fetchSet(db)
-            }
-            .defaulting(to: [])
-            .map { variant -> [String] in
-                /// Extract all existing hashes for any dumps associated with the given `sessionIdHexString`
-                dependencies[cache: .libSession]
-                    .config(for: variant, sessionId: SessionId(hex: sessionIdHexString, dumpVariant: variant))
-                    .wrappedValue
-                    .map { $0.currentHashes() }
-                    .defaulting(to: [])
-            }
-            .reduce([], +)
-    }
-    
-    // MARK: - Receiving
-    
-    static func handleConfigMessages(
-        _ db: Database,
-        sessionIdHexString: String,
-        messages: [ConfigMessageReceiveJob.Details.MessageInfo],
-        using dependencies: Dependencies = Dependencies()
-    ) throws {
-        guard !messages.isEmpty else { return }
-        
-        do {
-            try dependencies[singleton: .libSession].merge(sessionIdHexString: sessionIdHexString, messages: messages)
-        }
-        catch {
-        }
     }
 }
 
@@ -596,47 +499,6 @@ public extension LibSession {
 
 // MARK: - Convenience
 
-private extension Optional where Wrapped == Int32 {
-    func toConfig(
-        _ maybeConf: UnsafeMutablePointer<config_object>?,
-        variant: ConfigDump.Variant,
-        error: [CChar]
-    ) throws -> LibSession.Config {
-        guard self == 0, let conf: UnsafeMutablePointer<config_object> = maybeConf else {
-            SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
-            throw LibSessionError.unableToCreateConfigObject
-        }
-        
-        switch variant {
-            case .userProfile, .contacts, .convoInfoVolatile,
-                .userGroups, .groupInfo, .groupMembers:
-                return .object(conf)
-            
-            case .groupKeys, .invalid: throw LibSessionError.unableToCreateConfigObject
-        }
-    }
-}
-
-private extension Int32 {
-    func toConfig(
-        _ maybeConf: UnsafeMutablePointer<config_group_keys>?,
-        info: UnsafeMutablePointer<config_object>,
-        members: UnsafeMutablePointer<config_object>,
-        variant: ConfigDump.Variant,
-        error: [CChar]
-    ) throws -> LibSession.Config {
-        guard self == 0, let conf: UnsafeMutablePointer<config_group_keys> = maybeConf else {
-            SNLog("[LibSession Error] Unable to create \(variant.rawValue) config object: \(String(cString: error))")
-            throw LibSessionError.unableToCreateConfigObject
-        }
-
-        switch variant {
-            case .groupKeys: return .groupKeys(conf, info: info, members: members)
-            default: throw LibSessionError.unableToCreateConfigObject
-        }
-    }
-}
-
 private extension SessionId {
     init(hex: String, dumpVariant: ConfigDump.Variant) {
         switch (try? SessionId(from: hex), dumpVariant) {
@@ -649,87 +511,6 @@ private extension SessionId {
                 
             case (_, .invalid): self = SessionId.invalid
         }
-    }
-}
-
-// MARK: - LibSession Cache
-
-public extension LibSession {
-    class Cache: LibSessionCacheType {
-        public struct Key: Hashable {
-            let variant: ConfigDump.Variant
-            let sessionId: SessionId
-        }
-        
-        private var configStore: [LibSession.Cache.Key: Atomic<LibSession.Config?>] = [:]
-        
-        public var isEmpty: Bool { configStore.isEmpty }
-        
-        /// Returns `true` if there is a config which needs to be pushed, but returns `false` if the configs are all up to date or haven't been
-        /// loaded yet (eg. fresh install)
-        public var needsSync: Bool { configStore.contains { _, atomicConf in atomicConf.needsPush } }
-        
-        // MARK: - Functions
-        
-        public func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?) {
-            configStore[Key(variant: variant, sessionId: sessionId)] = config.map { Atomic($0) }
-        }
-        
-        public func config(
-            for variant: ConfigDump.Variant,
-            sessionId: SessionId
-        ) -> Atomic<Config?> {
-            return (
-                configStore[Key(variant: variant, sessionId: sessionId)] ??
-                Atomic(nil)
-            )
-        }
-        
-        public func removeAll() {
-            configStore.removeAll()
-        }
-    }
-}
-
-public extension Cache {
-    static let libSession: CacheConfig<LibSessionCacheType, LibSessionImmutableCacheType> = Dependencies.create(
-        identifier: "libSession",
-        createInstance: { _ in LibSession.Cache() },
-        mutableInstance: { $0 },
-        immutableInstance: { $0 }
-    )
-}
-
-// MARK: - LibSessionCacheType
-
-/// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
-public protocol LibSessionImmutableCacheType: ImmutableCacheType {
-    var isEmpty: Bool { get }
-    var needsSync: Bool { get }
-    
-    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?>
-}
-
-public protocol LibSessionCacheType: LibSessionImmutableCacheType, MutableCacheType {
-    var isEmpty: Bool { get }
-    var needsSync: Bool { get }
-    
-    func setConfig(for variant: ConfigDump.Variant, sessionId: SessionId, to config: LibSession.Config?)
-    func config(for variant: ConfigDump.Variant, sessionId: SessionId) -> Atomic<LibSession.Config?>
-    func removeAll()
-}
-
-// MARK: - Convenience
-
-public extension LibSessionError {
-    init(_ state: UnsafeMutablePointer<state_object>) {
-        guard state.pointee.last_error != nil else {
-            self = .unknown
-            return
-        }
-        
-        let errorString = String(cString: state.pointee.last_error)
-        self = LibSessionError.libSessionError(errorString)
     }
 }
 
@@ -759,7 +540,7 @@ private extension ConfigDump.Variant {
                 case .groupInfo: return NAMESPACE_GROUP_INFO
                 case .groupMembers: return NAMESPACE_GROUP_MEMBERS
                 case .groupKeys: return NAMESPACE_GROUP_KEYS
-                default: throw LibSessionError.invalidConfigObject
+                default: throw LibSessionError.invalidState
             }
         }
     }

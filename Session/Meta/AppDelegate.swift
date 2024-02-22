@@ -80,13 +80,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                     minEstimatedTotalTime: minEstimatedTotalTime
                 )
             },
-            migrationsCompletion: { [weak self, dependencies] result, needsConfigSync in
+            migrationsCompletion: { [weak self, dependencies] result in
                 if case .failure(let error) = result {
                     DispatchQueue.main.async {
                         self?.initialLaunchFailed = true
                         self?.showFailedStartupAlert(
                             calledFrom: .finishLaunching,
-                            error: .databaseError(error),
+                            error: StartupError(error),
                             using: dependencies
                         )
                     }
@@ -100,7 +100,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 ThemeManager.mainWindow = mainWindow
                 self?.completePostMigrationSetup(
                     calledFrom: .finishLaunching,
-                    needsConfigSync: needsConfigSync,
                     using: dependencies
                 )
             }
@@ -178,12 +177,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                             minEstimatedTotalTime: minEstimatedTotalTime
                         )
                     },
-                    migrationsCompletion: { result, needsConfigSync in
+                    migrationsCompletion: { result in
                         if case .failure(let error) = result {
                             DispatchQueue.main.async {
                                 self?.showFailedStartupAlert(
                                     calledFrom: .enterForeground(initialLaunchFailed: initialLaunchFailed),
-                                    error: .databaseError(error),
+                                    error: StartupError(error),
                                     using: dependencies
                                 )
                             }
@@ -192,7 +191,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                         
                         self?.completePostMigrationSetup(
                             calledFrom: .enterForeground(initialLaunchFailed: initialLaunchFailed),
-                            needsConfigSync: needsConfigSync,
                             using: dependencies
                         )
                     },
@@ -336,7 +334,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     
     private func completePostMigrationSetup(
         calledFrom lifecycleMethod: LifecycleMethod,
-        needsConfigSync: Bool,
         using dependencies: Dependencies
     ) {
         SNLog("Migrations completed, performing setup and ensuring rootViewController")
@@ -386,21 +383,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 // Disable the SAE until the main app has successfully completed launch process
                 // at least once in the post-SAE world.
                 db[.isReadyForAppExtensions] = true
-                
-                if Identity.userCompletedRequiredOnboarding(db) {
-                    // If the device needs to sync config or the user updated to a new version
-                    if
-                        needsConfigSync || (
-                            (AppVersion.shared.lastAppVersion?.count ?? 0) > 0 &&
-                            AppVersion.shared.lastAppVersion != AppVersion.shared.currentAppVersion
-                        )
-                    {
-                        ConfigurationSyncJob.enqueue(
-                            db,
-                            sessionIdHexString: getUserSessionId(db, using: dependencies).hexString
-                        )
-                    }
-                }
             }
             
             // Add a log to track the proper startup time of the app so we know whether we need to
@@ -447,7 +429,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             case .databaseError(StorageError.startupFailed), .databaseError(DatabaseError.SQLITE_LOCKED): break
                 
             // Offer the 'Restore' option if it was a migration error
-            case .databaseError:
+            case .databaseError, .libSessionError:
                 alert.addAction(UIAlertAction(title: "vc_restore_title".localized(), style: .destructive) { _ in
                     // Reset the current database for a clean migration
                     Storage.resetForCleanMigration(using: dependencies)
@@ -463,7 +445,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                                 minEstimatedTotalTime: minEstimatedTotalTime
                             )
                         },
-                        migrationsCompletion: { [weak self] result, needsConfigSync in
+                        migrationsCompletion: { [weak self] result in
                             switch result {
                                 case .failure:
                                     DispatchQueue.main.async {
@@ -477,7 +459,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                                 case .success:
                                     self?.completePostMigrationSetup(
                                         calledFrom: lifecycleMethod,
-                                        needsConfigSync: needsConfigSync,
                                         using: dependencies
                                     )
                             }
@@ -936,6 +917,14 @@ private enum StartupError: Error {
     case databaseError(Error)
     case failedToRestore
     case startupTimeout
+    case libSessionError(LibSessionError)
+    
+    init(_ error: Error) {
+        switch error {
+            case let error as LibSessionError: self = .libSessionError(error)
+            default: self = .databaseError(error)
+        }
+    }
     
     var name: String {
         switch self {
@@ -946,6 +935,7 @@ private enum StartupError: Error {
             case .failedToRestore: return "Failed to restore"
             case .databaseError: return "Database error"
             case .startupTimeout: return "Startup timeout"
+            case .libSessionError: return "State error"
         }
     }
     
@@ -960,6 +950,7 @@ private enum StartupError: Error {
             case .failedToRestore: return "DATABASE_RESTORE_FAILED".localized()
             case .databaseError: return "DATABASE_MIGRATION_FAILED".localized()
             case .startupTimeout: return "APP_STARTUP_TIMEOUT".localized()
+            case .libSessionError(let error): return error.localizedDescription
         }
     }
 }

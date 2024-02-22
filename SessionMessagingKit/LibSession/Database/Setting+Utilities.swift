@@ -103,6 +103,6 @@ public extension Database {
         updatedSetting: Setting?,
         using dependencies: Dependencies
     ) throws {
-        LibSession.updatingSetting(updatedSetting, using: dependencies)
+        try LibSession.updatingSetting(updatedSetting, using: dependencies)
     }
 }

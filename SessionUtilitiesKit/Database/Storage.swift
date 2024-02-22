@@ -208,7 +208,7 @@ open class Storage {
         async: Bool = true,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
         onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
-        onComplete: @escaping (Result<Void, Error>, Bool) -> (),
+        onComplete: @escaping (Result<Void, Error>) -> (),
         using dependencies: Dependencies
     ) {
         perform(
@@ -226,13 +226,13 @@ open class Storage {
         async: Bool,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
         onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
-        onComplete: @escaping (Result<Void, Error>, Bool) -> (),
+        onComplete: @escaping (Result<Void, Error>) -> (),
         using dependencies: Dependencies
     ) {
         guard isValid, let dbWriter: DatabaseWriter = dbWriter else {
             let error: Error = (startupError ?? StorageError.startupFailed)
             SNLog("[Database Error] Statup failed with error: \(error)")
-            onComplete(.failure(error), false)
+            onComplete(.failure(error))
             return
         }
         
@@ -264,8 +264,6 @@ open class Storage {
         let unperformedMigrationDurations: [TimeInterval] = unperformedMigrations
             .map { _, _, migration in migration.minExpectedRunDuration }
         let totalMinExpectedDuration: TimeInterval = migrationToDurationMap.values.reduce(0, +)
-        let needsConfigSync: Bool = unperformedMigrations
-            .contains(where: { _, _, migration in migration.needsConfigSync })
         
         self.migrationProgressUpdater = Atomic({ targetKey, progress in
             guard let migrationIndex: Int = unperformedMigrations.firstIndex(where: { key, _, _ in key == targetKey }) else {
@@ -331,7 +329,7 @@ open class Storage {
                     SNLog("[Migration Error] Migration '\(failedMigrationName)' failed with error: \(error)")
             }
             
-            onComplete(result, needsConfigSync)
+            onComplete(result)
         }
         
         // if there aren't any migrations to run then just complete immediately (this way the migrator

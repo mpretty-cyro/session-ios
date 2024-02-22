@@ -7,7 +7,6 @@ import SessionUtilitiesKit
 enum _005_AddSnodeReveivedMessageInfoPrimaryKey: Migration {
     static let target: TargetMigrations.Identifier = .snodeKit
     static let identifier: String = "AddSnodeReveivedMessageInfoPrimaryKey" // stringlint:disable
-    static let needsConfigSync: Bool = false
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [SnodeReceivedMessageInfo.self]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [SnodeReceivedMessageInfo.self]
     

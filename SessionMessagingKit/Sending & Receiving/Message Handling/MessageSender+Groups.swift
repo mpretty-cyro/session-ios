@@ -8,10 +8,7 @@ import SessionSnodeKit
 
 extension MessageSender {
     private typealias PreparedGroupData = (
-        groupSessionId: SessionId,
-        groupState: [ConfigDump.Variant: LibSession.Config],
         thread: SessionThread,
-        group: ClosedGroup,
         members: [GroupMember],
         preparedNotificationsSubscription: HTTP.PreparedRequest<PushNotificationAPI.SubscribeResponse>?
     )
@@ -55,11 +52,10 @@ extension MessageSender {
                             displayPictureUrl: displayPictureInfo?.downloadUrl,
                             displayPictureEncryptionKey: displayPictureInfo?.encryptionKey,
                             members: members.map { ($0.0, $0.1?.name, $0.1?.profilePictureUrl, $0.1?.profileEncryptionKey) }
-                        ) { [dependencies] success, groupId, groupIdentityPrivateKey in
-                            guard success else {
-                                let error: LibSessionError = (dependencies[singleton: .libSession].lastError ?? .unknown)
-                                SNLog("Failed to create group due to error: \(error)")
-                                return resolver(Result.failure(error))
+                        ) { groupId, groupIdentityPrivateKey, error in
+                            guard error == nil else {
+                                SNLog("Failed to create group due to error: \(error ?? .unknown)")
+                                return resolver(Result.failure(error ?? .unknown))
                             }
                             
                             resolver(Result.success((groupId, groupIdentityPrivateKey)))
@@ -69,7 +65,8 @@ extension MessageSender {
             }
             .flatMap { groupId, groupIdentityPrivateKey -> AnyPublisher<PreparedGroupData, Error> in
                 dependencies[singleton: .storage].writePublisher(using: dependencies) { db -> PreparedGroupData in
-                    
+                    // Note: These objects should already exist in the database becuase the 'createGroup' triggers the
+                    // libSession 'store' hook which will insert them
                     let thread: SessionThread = try SessionThread
                         .fetchOrCreate(
                             db,
@@ -96,24 +93,11 @@ extension MessageSender {
                             )
                     }
                     
-                    return (
-                        SessionId(.group, hex: groupId),
-                        [:],    // TODO: Remove this
-                        thread,
-                        ClosedGroup(
-                            threadId: "",
-                            name: "",
-                            formationTimestamp: 0,
-                            shouldPoll: nil,
-                            invited: nil
-                        ),  // TODO: Remove this
-                        members,
-                        preparedNotificationSubscription
-                    )
+                    return (thread, members, preparedNotificationSubscription)
                 }
             }
             .handleEvents(
-                receiveOutput: { _, _, thread, _, members, preparedNotificationSubscription in
+                receiveOutput: { thread, members, preparedNotificationSubscription in
                     // Start polling
                     dependencies[singleton: .groupsPoller].startIfNeeded(for: thread.id, using: dependencies)
                     
@@ -160,7 +144,7 @@ extension MessageSender {
                     }
                 }
             )
-            .map { _, _, thread, _, _, _ in thread }
+            .map { thread, _, _ in thread }
             .eraseToAnyPublisher()
     }
     
@@ -364,38 +348,17 @@ extension MessageSender {
             /// **Note:** This **MUST** be called _after_ the new members have been added to the group, otherwise the
             /// keys may not be generated correctly for the newly added members
             if allowAccessToHistoricMessages {
-                /// Since our state doesn't care about the `GROUP_KEYS` needed for other members triggering a `keySupplement`
-                /// change won't result in the `GROUP_KEYS` config changing or the `ConfigurationSyncJob` getting triggered
-                /// we need to push the change directly
-                let supplementData: Data = try LibSession.keySupplement(
-                    db,
-                    groupSessionId: sessionId,
-                    memberIds: members.map { $0.id }.asSet(),
-                    using: dependencies
-                )
-                
-                try SnodeAPI
-                    .preparedSendMessage(
-                        message: SnodeMessage(
-                            recipient: sessionId.hexString,
-                            data: supplementData.base64EncodedString(),
-                            ttl: ConfigDump.Variant.groupKeys.ttl,
-                            timestampMs: UInt64(changeTimestampMs)
-                        ),
-                        in: .configGroupKeys,
-                        authMethod: Authentication.groupAdmin(
-                            groupSessionId: sessionId,
-                            ed25519SecretKey: Array(groupIdentityPrivateKey)
-                        ),
+                try LibSession
+                    .keySupplement(
+                        groupSessionId: sessionId,
+                        memberIds: members.map { $0.id }.asSet(),
                         using: dependencies
                     )
-                    .send(using: dependencies)
                     .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
                     .sinkUntilComplete()
             }
             else {
                 try LibSession.rekey(
-                    db,
                     groupSessionId: sessionId,
                     using: dependencies
                 )
@@ -545,7 +508,7 @@ extension MessageSender {
                 .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
                 .sinkUntilComplete()
             
-            LibSession.updateMemberStatus(
+            try LibSession.updateMemberStatus(
                 groupSessionId: SessionId(.group, hex: groupSessionId),
                 memberId: memberId,
                 role: .standard,
@@ -615,7 +578,7 @@ extension MessageSender {
                 else { throw MessageSenderError.invalidClosedGroupUpdate }
                 
                 /// Flag the members for removal
-                LibSession.flagMembersForRemoval(
+                try LibSession.flagMembersForRemoval(
                     groupSessionId: sessionId,
                     memberIds: memberIds,
                     removeMessages: removeTheirMessages,
@@ -704,7 +667,7 @@ extension MessageSender {
             // Update the libSession status for each member and schedule a job to send
             // the promotion message
             try members.forEach { memberId, _ in
-                LibSession.updateMemberStatus(
+                try LibSession.updateMemberStatus(
                     groupSessionId: groupSessionId,
                     memberId: memberId,
                     role: .admin,

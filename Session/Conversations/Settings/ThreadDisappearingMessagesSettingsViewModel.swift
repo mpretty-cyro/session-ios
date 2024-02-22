@@ -654,7 +654,7 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                     )
                     
                 case .group:
-                    LibSession.update(
+                    try LibSession.update(
                         groupSessionId: SessionId(.group, hex: threadId),
                         disappearingConfig: updatedConfig,
                         using: dependencies

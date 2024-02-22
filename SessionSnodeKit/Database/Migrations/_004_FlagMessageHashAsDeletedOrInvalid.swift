@@ -7,7 +7,6 @@ import SessionUtilitiesKit
 enum _004_FlagMessageHashAsDeletedOrInvalid: Migration {
     static let target: TargetMigrations.Identifier = .snodeKit
     static let identifier: String = "FlagMessageHashAsDeletedOrInvalid" // stringlint:disable
-    static let needsConfigSync: Bool = false
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [SnodeReceivedMessageInfo.self]
     

@@ -104,10 +104,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                 )
                 
                 /// Prepare a `GroupUpdateDeleteMessage` to be sent (instruct their clients to delete the group content)
-                let currentGen: Int = try LibSession.currentGeneration(
-                    groupSessionId: groupSessionId,
-                    using: dependencies
-                )
+                let currentGen: Int = dependencies[singleton: .libSession].currentGeneration(groupSessionId: groupSessionId)
                 let deleteMessageData: [(recipient: SessionId, message: Data)] = pendingRemovals.keys
                     .compactMap { try? LibSessionMessage.groupKicked(memberId: $0, groupKeysGen: currentGen) }
                 let encryptedDeleteMessageData: Data = try dependencies[singleton: .crypto].tryGenerate(
@@ -167,7 +164,7 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                                     using: dependencies,
                                     updates: { db in
                                         /// Remove the members from the `GROUP_MEMBERS` config
-                                        LibSession.removeMembers(
+                                        try LibSession.removeMembers(
                                             groupSessionId: groupSessionId,
                                             memberIds: Set(pendingRemovals.keys),
                                             using: dependencies
@@ -179,7 +176,6 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
                                         /// **Note:** This **MUST** be called _after_ the members have been removed, otherwise
                                         /// the removed members may still be able to access the keys
                                         try LibSession.rekey(
-                                            db,
                                             groupSessionId: groupSessionId,
                                             using: dependencies
                                         )

@@ -9,48 +9,48 @@ import SessionUtilitiesKit
 
 public extension LibSession.StateManager {
     func volatileContact(sessionId: String) -> CVolatileContact? {
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CVolatileContact = CVolatileContact()
         
-        guard state_get_convo_info_volatile_1to1(state, &result, &cSessionId, nil) else { return nil }
+        guard state_get_convo_info_volatile_1to1(state, &result, cSessionId, nil) else { return nil }
         
         return result
     }
     
     func volatileGroup(groupSessionId: String) -> CVolatileGroup? {
-        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
         var result: CVolatileGroup = CVolatileGroup()
         
-        guard state_get_convo_info_volatile_group(state, &result, &cGroupId, nil) else { return nil }
+        guard state_get_convo_info_volatile_group(state, &result, cGroupId, nil) else { return nil }
         
         return result
     }
     
     func volatileCommunity(server: String, roomToken: String) -> CVolatileCommunity? {
-        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
-        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        let cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        let cRoom: [CChar] = roomToken.cArray.nullTerminated()
         var result: CVolatileCommunity = CVolatileCommunity()
         
-        guard state_get_convo_info_volatile_community(state, &result, &cBaseUrl, &cRoom, nil) else { return nil }
+        guard state_get_convo_info_volatile_community(state, &result, cBaseUrl, cRoom, nil) else { return nil }
         
         return result
     }
     
     func volatileLegacyGroup(legacyGroupId: String) -> CVolatileLegacyGroup? {
-        var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        let cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
         var result: CVolatileLegacyGroup = CVolatileLegacyGroup()
         
-        guard state_get_convo_info_volatile_legacy_group(state, &result, &cLegacyGroupId, nil) else { return nil }
+        guard state_get_convo_info_volatile_legacy_group(state, &result, cLegacyGroupId, nil) else { return nil }
         
         return result
     }
     
     func volatileContactOrConstruct(sessionId: String) throws -> CVolatileContact {
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CVolatileContact = CVolatileContact()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_convo_info_volatile_1to1(state, &result, &cSessionId, &error) else {
+        guard state_get_or_construct_convo_info_volatile_1to1(state, &result, cSessionId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct volatile contact: \(LibSessionError(error))")
@@ -61,11 +61,11 @@ public extension LibSession.StateManager {
     }
     
     func volatileGroupOrConstruct(groupSessionId: String) throws -> CVolatileGroup {
-        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
         var result: CVolatileGroup = CVolatileGroup()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_convo_info_volatile_group(state, &result, &cGroupId, &error) else {
+        guard state_get_or_construct_convo_info_volatile_group(state, &result, cGroupId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct volatile group: \(LibSessionError(error))")
@@ -76,13 +76,13 @@ public extension LibSession.StateManager {
     }
     
     func volatileCommunityOrConstruct(server: String, roomToken: String, publicKey: String) throws -> CVolatileCommunity {
-        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
-        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
-        var cPubkey: [UInt8] = Data(hex: publicKey).cArray
+        let cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        let cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        let cPubkey: [UInt8] = Data(hex: publicKey).cArray
         var result: CVolatileCommunity = CVolatileCommunity()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_convo_info_volatile_community(state, &result, &cBaseUrl, &cRoom, &cPubkey, &error) else {
+        guard state_get_or_construct_convo_info_volatile_community(state, &result, cBaseUrl, cRoom, cPubkey, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct volatile community: \(LibSessionError(error))")
@@ -93,11 +93,11 @@ public extension LibSession.StateManager {
     }
     
     func volatileLegacyGroupOrConstruct(legacyGroupId: String) throws -> CVolatileLegacyGroup {
-        var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        let cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
         var result: CVolatileLegacyGroup = CVolatileLegacyGroup()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_convo_info_volatile_legacy_group(state, &result, &cLegacyGroupId, &error) else {
+        guard state_get_or_construct_convo_info_volatile_legacy_group(state, &result, cLegacyGroupId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct volatile legacy group: \(LibSessionError(error))")
@@ -257,7 +257,7 @@ internal extension LibSession {
     
     static func upsert(
         convoInfoVolatileChanges: [VolatileThreadInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         // Exclude any invalid thread info
@@ -353,7 +353,7 @@ internal extension LibSession {
     static func updateMarkedAsUnreadState(
         threads: [SessionThread],
         openGroupUrlInfo: [String: OpenGroupUrlInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         // If we have no updated threads then no need to continue
@@ -378,8 +378,8 @@ internal extension LibSession {
     static func remove(
         volatileContactIds: [String],
         using dependencies: Dependencies
-    ) {
-        dependencies[singleton: .libSession].mutate { state in
+    ) throws {
+        try dependencies[singleton: .libSession].mutate { state in
             volatileContactIds.forEach { contactId in
                 var cSessionId: [CChar] = contactId.cArray.nullTerminated()
                 
@@ -391,7 +391,7 @@ internal extension LibSession {
     
     static func remove(
         volatileLegacyGroupIds: [String],
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         volatileLegacyGroupIds.forEach { legacyGroupId in
             var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
@@ -403,7 +403,7 @@ internal extension LibSession {
     
     static func remove(
         volatileGroupSessionIds: [String],
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         volatileGroupSessionIds.forEach { groupSessionId in
             var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
@@ -415,7 +415,7 @@ internal extension LibSession {
     
     static func remove(
         volatileCommunityInfo: [OpenGroupUrlInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         volatileCommunityInfo.forEach { urlInfo in
             var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()

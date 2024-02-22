@@ -210,6 +210,10 @@ enum Onboarding {
                     )
             }
             
+            // Now that registration is completed we need register for the libSession hooks to
+            // ensure changes get sent and stored
+            try? dependencies[singleton: .libSession].registerHooks()
+            
             // Notify the app that registration is complete
             if !suppressDidRegisterNotification {
                 Identity.didRegister()

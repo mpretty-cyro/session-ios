@@ -315,7 +315,7 @@ public final class OpenGroupManager {
         openGroupId: String,
         calledFromConfigHandling: Bool,
         using dependencies: Dependencies = Dependencies()
-    ) {
+    ) throws {
         let server: String? = try? OpenGroup
             .select(.server)
             .filter(id: openGroupId)
@@ -374,7 +374,7 @@ public final class OpenGroupManager {
         }
         
         if !calledFromConfigHandling, let server: String = server, let roomToken: String = roomToken {
-            LibSession.remove(server: server, roomToken: roomToken, using: dependencies)
+            try LibSession.remove(server: server, roomToken: roomToken, using: dependencies)
         }
     }
     

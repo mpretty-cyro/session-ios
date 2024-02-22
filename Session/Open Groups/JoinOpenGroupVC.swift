@@ -220,7 +220,7 @@ final class JoinOpenGroupVC: BaseVC, UIPageViewControllerDataSource, UIPageViewC
                                 // the next launch so remove it (the user will be left on the previous
                                 // screen so can re-trigger the join)
                                 dependencies[singleton: .storage].writeAsync { db in
-                                    OpenGroupManager.shared.delete(
+                                    try OpenGroupManager.shared.delete(
                                         db,
                                         openGroupId: OpenGroup.idFor(roomToken: roomToken, server: server),
                                         calledFromConfigHandling: false

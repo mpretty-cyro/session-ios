@@ -14,7 +14,7 @@ public enum AppSetup {
         retrySetupIfDatabaseInvalid: Bool = false,
         appSpecificBlock: (() -> ())? = nil,
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        migrationsCompletion: @escaping (Result<Void, Error>) -> (),
         using dependencies: Dependencies = Dependencies()
     ) {
         // If we've already run the app setup then only continue under certain circumstances
@@ -32,11 +32,7 @@ public enum AppSetup {
                         migrationsCompletion: migrationsCompletion
                     )
                     
-                default:
-                    migrationsCompletion(
-                        (storageIsValid ? .success(()) : .failure(StorageError.startupFailed)),
-                        false
-                    )
+                default: migrationsCompletion(storageIsValid ? .success(()) : .failure(StorageError.startupFailed))
             }
             return
         }
@@ -87,7 +83,7 @@ public enum AppSetup {
     public static func runPostSetupMigrations(
         backgroundTask: SessionBackgroundTask? = nil,
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        migrationsCompletion: @escaping (Result<Void, Error>) -> (),
         using dependencies: Dependencies
     ) {
         var backgroundTask: SessionBackgroundTask? = (backgroundTask ?? SessionBackgroundTask(label: #function, using: dependencies))
@@ -110,16 +106,13 @@ public enum AppSetup {
                         LibSession.loadState(db, using: dependencies)
                 }
             },
-            onComplete: { result, needsConfigSync in
+            onComplete: { result in
                 do {
                     /// Once the migrations have completed we need register for the libSession hooks to ensure changes get sent and stored
                     try dependencies[singleton: .libSession].registerHooks()
-                    
-                    // The 'needsConfigSync' flag should be based on whether either a migration or the
-                    // configs need to be sync'ed
-                    migrationsCompletion(result, (needsConfigSync || dependencies[cache: .libSession].needsSync))
+                    migrationsCompletion(result)
                 }
-                catch { migrationsCompletion(.failure(error), false) }
+                catch { migrationsCompletion(.failure(error)) }
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }

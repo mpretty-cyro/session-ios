@@ -9,7 +9,6 @@ import SessionUtilitiesKit
 enum _014_GenerateInitialUserConfigDumps: Migration {
     static let target: TargetMigrations.Identifier = .messagingKit
     static let identifier: String = "GenerateInitialUserConfigDumps" // stringlint:disable
-    static let needsConfigSync: Bool = true
     static let minExpectedRunDuration: TimeInterval = 4.0
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [
         Identity.self, SessionThread.self, Contact.self, Profile.self, ClosedGroup.self,

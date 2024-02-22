@@ -58,7 +58,6 @@ public enum SNMessagingKit: MigratableTarget { // Just to make the external API 
             .attachmentUpload: AttachmentUploadJob.self,
             .groupLeaving: GroupLeavingJob.self,
             .attachmentDownload: AttachmentDownloadJob.self,
-            .configurationSync: ConfigurationSyncJob.self,
             .configMessageReceive: ConfigMessageReceiveJob.self,
             .expirationUpdate: ExpirationUpdateJob.self,
             .displayPictureDownload: DisplayPictureDownloadJob.self,

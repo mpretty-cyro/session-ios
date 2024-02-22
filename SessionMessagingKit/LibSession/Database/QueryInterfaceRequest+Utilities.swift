@@ -119,17 +119,6 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
             LibSession.assignmentsRequireConfigUpdate(assignments)
         else { return updatedData }
         
-        defer {
-            // If we changed a column that requires a config update then we may as well automatically
-            // enqueue a new config sync job once the transaction completes (but only enqueue it once
-            // per transaction - doing it more than once is pointless)
-            let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
-            
-            db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(userSessionId.hexString)) { db in
-                ConfigurationSyncJob.enqueue(db, sessionIdHexString: userSessionId.hexString)
-            }
-        }
-        
         // Update the config dump state where needed
         switch self {
             case is QueryInterfaceRequest<Contact>:

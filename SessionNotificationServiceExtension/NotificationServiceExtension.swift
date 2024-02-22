@@ -114,8 +114,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                     switch processedMessage {
                         /// Custom handle config messages (as they don't get handled by the normal `MessageReceiver.handle` call
                         case .config(let publicKey, let namespace, let serverHash, let serverTimestampMs, let data):
-                            try LibSession.handleConfigMessages(
-                                db,
+                            try dependencies[singleton: .libSession].merge(
                                 sessionIdHexString: publicKey,
                                 messages: [
                                     ConfigMessageReceiveJob.Details.MessageInfo(
@@ -253,7 +252,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                 /// The `NotificationServiceExtension` needs custom behaviours for it's notification presenter so set it up here
                 dependencies.set(singleton: .notificationsManager, to: NSENotificationPresenter())
             },
-            migrationsCompletion: { [weak self] result, needsConfigSync in
+            migrationsCompletion: { [weak self] result in
                 switch result {
                     // Only 'NSLog' works in the extension - viewable via Console.app
                     case .failure(let error):
@@ -273,10 +272,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                         }
                         
                         DispatchQueue.main.async {
-                            self?.versionMigrationsDidComplete(
-                                needsConfigSync: needsConfigSync,
-                                using: dependencies
-                            )
+                            self?.versionMigrationsDidComplete(using: dependencies)
                         }
                 }
                 
@@ -286,22 +282,8 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         )
     }
     
-    private func versionMigrationsDidComplete(
-        needsConfigSync: Bool,
-        using dependencies: Dependencies
-    ) {
+    private func versionMigrationsDidComplete(using dependencies: Dependencies) {
         AssertIsOnMainThread()
-
-        // If we need a config sync then trigger it now
-        if needsConfigSync {
-            dependencies[singleton: .storage].write { db in
-                ConfigurationSyncJob.enqueue(
-                    db,
-                    sessionIdHexString: getUserSessionId(db, using: dependencies).hexString,
-                    using: dependencies
-                )
-            }
-        }
 
         checkIsAppReady(migrationsCompleted: true, using: dependencies)
     }

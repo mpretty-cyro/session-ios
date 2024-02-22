@@ -55,7 +55,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         }
 
         AppSetup.setupEnvironment(
-            migrationsCompletion: { [weak self, dependencies] result, needsConfigSync in
+            migrationsCompletion: { [weak self, dependencies] result in
                 switch result {
                     case .failure: SNLog("[SessionShareExtension] Failed to complete migrations")
                     case .success:
@@ -67,7 +67,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                             
                             // performUpdateCheck must be invoked after Environment has been initialized because
                             // upgrade process may depend on Environment.
-                            self?.versionMigrationsDidComplete(needsConfigSync: needsConfigSync)
+                            self?.versionMigrationsDidComplete()
                         }
                 }
             },
@@ -97,21 +97,10 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         ThemeManager.traitCollectionDidChange(previousTraitCollection)
     }
 
-    func versionMigrationsDidComplete(needsConfigSync: Bool) {
+    func versionMigrationsDidComplete() {
         AssertIsOnMainThread()
 
         Logger.debug("")
-
-        // If we need a config sync then trigger it now
-        if needsConfigSync {
-            dependencies[singleton: .storage].write { [dependencies] db in
-                ConfigurationSyncJob.enqueue(
-                    db,
-                    sessionIdHexString: getUserSessionId(db, using: dependencies).hexString,
-                    using: dependencies
-                )
-            }
-        }
 
         versionMigrationsComplete.mutate { $0 = true }
         checkIsAppReady(migrationsCompleted: true)

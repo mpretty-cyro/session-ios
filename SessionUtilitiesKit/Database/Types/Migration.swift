@@ -6,7 +6,6 @@ import GRDB
 public protocol Migration {
     static var target: TargetMigrations.Identifier { get }
     static var identifier: String { get }
-    static var needsConfigSync: Bool { get }
     static var minExpectedRunDuration: TimeInterval { get }
     static var requirements: [MigrationRequirement] { get }
     

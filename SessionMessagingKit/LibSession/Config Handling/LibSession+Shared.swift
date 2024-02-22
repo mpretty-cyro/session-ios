@@ -53,64 +53,6 @@ internal extension LibSession {
         return (priority >= LibSession.visiblePriority)
     }
     
-    static func pushChangesIfNeeded(
-        _ db: Database,
-        for variant: ConfigDump.Variant,
-        sessionId: SessionId,
-        using dependencies: Dependencies
-    ) throws {
-        try performAndPushChange(db, for: variant, sessionId: sessionId, using: dependencies) { _ in }
-    }
-    
-    static func performAndPushChange(
-        _ db: Database,
-        for variant: ConfigDump.Variant,
-        sessionId: SessionId,
-        using dependencies: Dependencies,
-        change: (Config?) throws -> ()
-    ) throws {
-        // Since we are doing direct memory manipulation we are using an `Atomic`
-        // type which has blocking access in it's `mutate` closure
-        let needsPush: Bool
-        
-        do {
-            needsPush = try dependencies[cache: .libSession]
-                .config(for: variant, sessionId: sessionId)
-                .mutate { config in
-                    // Peform the change
-                    try change(config)
-                    
-                    // If an error occurred during the change then actually throw it to prevent
-                    // any database change from completing
-                    if let lastError: LibSessionError = config?.lastError { throw lastError }
-
-                    // If we don't need to dump the data the we can finish early
-                    guard config.needsDump(using: dependencies) else { return config.needsPush }
-
-                    try LibSession.createDump(
-                        config: config,
-                        for: variant,
-                        sessionId: sessionId,
-                        timestampMs: SnodeAPI.currentOffsetTimestampMs(using: dependencies),
-                        using: dependencies
-                    )?.upsert(db)
-
-                    return config.needsPush
-                }
-        }
-        catch {
-            SNLog("[LibSession] Failed to update/dump updated \(variant) config data due to error: \(error)")
-            throw error
-        }
-        
-        // Make sure we need a push before scheduling one
-        guard needsPush else { return }
-        
-        db.afterNextTransactionNestedOnce(dedupeId: LibSession.syncDedupeId(sessionId.hexString)) { db in
-            ConfigurationSyncJob.enqueue(db, sessionIdHexString: sessionId.hexString)
-        }
-    }
-    
     @discardableResult static func updatingThreads<T>(
         _ db: Database,
         _ updated: [T],
@@ -140,7 +82,7 @@ internal extension LibSession {
     static func upsert(
         threads: [SessionThread],
         openGroupUrlInfo: [String: OpenGroupUrlInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         let userSessionId: SessionId = getUserSessionId(using: dependencies)
@@ -264,7 +206,7 @@ internal extension LibSession {
     static func updatingSetting(
         _ updated: Setting?,
         using dependencies: Dependencies
-    ) {
+    ) throws {
         // Ensure the setting is one which should be synced (we also don't currently support any nullable settings)
         guard
             let updatedSetting: Setting = updated,
@@ -274,7 +216,7 @@ internal extension LibSession {
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch updatedSetting.id {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                dependencies[singleton: .libSession].mutate { state in
+                try dependencies[singleton: .libSession].mutate { state in
                     LibSession.updateSettings(
                         checkForCommunityMessageRequests: updatedSetting.unsafeValue(as: Bool.self),
                         in: state
@@ -453,7 +395,7 @@ public extension LibSession.StateManager {
                 return (community(server: urlInfo.server, roomToken: urlInfo.roomToken) != nil)
                 
             case .legacyGroup:
-                guard var groupInfo: CLegacyGroup = legacyGroup(legacyGroupId: threadId) else { return false }
+                guard let groupInfo: CLegacyGroup = legacyGroup(legacyGroupId: threadId) else { return false }
 
                 /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence (also need to explicitly free the legacy group object)
                 ugroups_legacy_group_free(groupInfo)

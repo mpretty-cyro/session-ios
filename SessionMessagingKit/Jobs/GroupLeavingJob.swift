@@ -92,14 +92,7 @@ public enum GroupLeavingJob: JobExecutor {
                             )
                         )
                         
-                    case (.group, .delete, _), (.group, .leave, true):
-                        try LibSession.deleteGroupForEveryone(
-                            groupSessionId: SessionId(.group, hex: threadId),
-                            using: dependencies
-                        )
-                        
-                        return .delete
-                        
+                    case (.group, .delete, _), (.group, .leave, true): return .delete
                     default: throw MessageSenderError.invalidClosedGroupUpdate
                 }
             }
@@ -112,19 +105,28 @@ public enum GroupLeavingJob: JobExecutor {
                             .eraseToAnyPublisher()
                         
                     case .delete:
-                        return ConfigurationSyncJob
-                            .run(sessionIdHexString: threadId, using: dependencies)
-                            .map { _ in () }
-                            .eraseToAnyPublisher()
+                        return Deferred {
+                            Future { resolver in
+                                LibSession.deleteGroupForEveryone(
+                                    groupSessionId: SessionId(.group, hex: threadId),
+                                    using: dependencies
+                                ) { error in
+                                    switch error {
+                                        case .none: resolver(Result.success(()))
+                                        case .some(let error): resolver(Result.failure(error))
+                                    }
+                                }
+                            }
+                        }.eraseToAnyPublisher()
                 }
             }
             .tryCatch { error -> AnyPublisher<Void, Error> in
                 /// If it failed due to one of these errors then clear out any associated data (as the `SessionThread` exists but
                 /// either the data required to send the `MEMBER_LEFT` message doesn't or the user has had their access to the
                 /// group revoked which would leave the user in a state where they can't leave the group)
-                switch (error as? MessageSenderError, error as? SnodeAPIError) {
-                    case (.invalidClosedGroupUpdate, _), (.noKeyPair, _), (.encryptionFailed, _),
-                        (_, .unauthorised):
+                switch (error as? MessageSenderError, error as? SnodeAPIError, error as? LibSessionError) {
+                    case (.invalidClosedGroupUpdate, _, _), (.noKeyPair, _, _), (.encryptionFailed, _, _),
+                        (_, .unauthorised, _), (_, _, .cannotMutateReadOnlyConfigObject):
                         return Just(()).setFailureType(to: Error.self).eraseToAnyPublisher()
                     
                     default: throw error

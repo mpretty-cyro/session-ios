@@ -25,39 +25,39 @@ public extension LibSession {
 
 public extension LibSession.StateManager {
     func group(groupSessionId: String) -> CGroup? {
-        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
         var result: CGroup = CGroup()
         
-        guard state_get_ugroups_group(state, &result, &cGroupId, nil) else { return nil }
+        guard state_get_ugroups_group(state, &result, cGroupId, nil) else { return nil }
         
         return result
     }
     
     func community(server: String, roomToken: String) -> CCommunity? {
-        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
-        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        let cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        let cRoom: [CChar] = roomToken.cArray.nullTerminated()
         var result: CCommunity = CCommunity()
         
-        guard state_get_ugroups_community(state, &result, &cBaseUrl, &cRoom, nil) else { return nil }
+        guard state_get_ugroups_community(state, &result, cBaseUrl, cRoom, nil) else { return nil }
         
         return result
     }
     
     func legacyGroup(legacyGroupId: String) -> CLegacyGroup? {
-        var cGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        let cGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
         var result: CLegacyGroup?
         
-        guard state_get_ugroups_legacy_group(state, &result, &cGroupId, nil) else { return nil }
+        guard state_get_ugroups_legacy_group(state, &result, cGroupId, nil) else { return nil }
         
         return result
     }
     
     func groupOrConstruct(groupSessionId: String) throws -> CGroup {
-        var cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.cArray.nullTerminated()
         var result: CGroup = CGroup()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_ugroups_group(state, &result, &cGroupId, &error) else {
+        guard state_get_or_construct_ugroups_group(state, &result, cGroupId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct group conversation: \(LibSessionError(error))")
@@ -68,13 +68,13 @@ public extension LibSession.StateManager {
     }
     
     func communityOrConstruct(server: String, roomToken: String, publicKey: String) throws -> CCommunity {
-        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
-        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
-        var cPubkey: [UInt8] = Data(hex: publicKey).cArray
+        let cBaseUrl: [CChar] = server.cArray.nullTerminated()
+        let cRoom: [CChar] = roomToken.cArray.nullTerminated()
+        let cPubkey: [UInt8] = Data(hex: publicKey).cArray
         var result: CCommunity = CCommunity()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_ugroups_community(state, &result, &cBaseUrl, &cRoom, &cPubkey, &error) else {
+        guard state_get_or_construct_ugroups_community(state, &result, cBaseUrl, cRoom, cPubkey, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct community conversation: \(LibSessionError(error))")
@@ -85,12 +85,12 @@ public extension LibSession.StateManager {
     }
     
     func legacyGroupOrConstruct(legacyGroupId: String) throws -> CLegacyGroup {
-        var cGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
+        let cGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
         var maybeResult: CLegacyGroup?
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
         guard
-            state_get_or_construct_ugroups_legacy_group(state, &maybeResult, &cGroupId, &error),
+            state_get_or_construct_ugroups_legacy_group(state, &maybeResult, cGroupId, &error),
             let result: CLegacyGroup = maybeResult
         else {
             /// It looks like there are some situations where this object might not get created correctly (and
@@ -622,6 +622,7 @@ internal extension LibSession {
                 LibSession.removeGroupStateIfNeeded(
                     db,
                     groupSessionId: SessionId(.group, hex: groupSessionId),
+                    removeUserState: true,
                     using: dependencies
                 )
             }
@@ -649,7 +650,7 @@ internal extension LibSession {
     
     static func upsert(
         legacyGroups: [LegacyGroupInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         guard !legacyGroups.isEmpty else { return }
@@ -751,7 +752,7 @@ internal extension LibSession {
     
     static func upsert(
         groups: [GroupInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         guard !groups.isEmpty else { return }
@@ -800,7 +801,7 @@ internal extension LibSession {
     
     static func upsert(
         communities: [CommunityInfo],
-        in state: UnsafeMutablePointer<mutable_state_user_object>,
+        in state: UnsafeMutablePointer<mutable_user_state_object>,
         using dependencies: Dependencies
     ) throws {
         guard !communities.isEmpty else { return }
@@ -884,8 +885,8 @@ public extension LibSession {
         server: String,
         roomToken: String,
         using dependencies: Dependencies
-    ) {
-        dependencies[singleton: .libSession].mutate { state in
+    ) throws {
+        try dependencies[singleton: .libSession].mutate { state in
             var cBaseUrl: [CChar] = server.cArray.nullTerminated()
             var cRoom: [CChar] = roomToken.cArray.nullTerminated()
             
@@ -1036,10 +1037,10 @@ public extension LibSession {
     static func remove(
         legacyGroupIds: [String],
         using dependencies: Dependencies
-    ) {
+    ) throws {
         guard !legacyGroupIds.isEmpty else { return }
         
-        dependencies[singleton: .libSession].mutate { state in
+        try dependencies[singleton: .libSession].mutate { state in
             legacyGroupIds.forEach { threadId in
                 var cGroupId: [CChar] = threadId.cArray.nullTerminated()
                 
@@ -1108,7 +1109,7 @@ public extension LibSession {
     static func markAsKicked(
         groupSessionIds: [String],
         using dependencies: Dependencies
-    ) {
+    ) throws {
         // Need to make sure the group doesn't already exist (otherwise we will end up overriding the
         // content which could revert newer changes since this can be triggered from other 'NEW' messages
         // coming in from the legacy group swarm)
@@ -1117,7 +1118,7 @@ public extension LibSession {
         
         guard !targetGroups.isEmpty else { return }
         
-        dependencies[singleton: .libSession].mutate { state in
+        try dependencies[singleton: .libSession].mutate { state in
             targetGroups.forEach { userGroup in
                 var mutableUserGroup: ugroups_group_info = userGroup
                 
@@ -1130,10 +1131,10 @@ public extension LibSession {
     static func remove(
         groupSessionIds: [String],
         using dependencies: Dependencies
-    ) {
+    ) throws {
         guard !groupSessionIds.isEmpty else { return }
         
-        dependencies[singleton: .libSession].mutate { state in
+        try dependencies[singleton: .libSession].mutate { state in
             groupSessionIds.forEach { groupSessionId in
                 var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
                 

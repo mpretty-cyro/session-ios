@@ -20,19 +20,19 @@ public extension LibSession {
 
 public extension LibSession.StateManager {
     func groupDeleteBefore(groupId: SessionId) -> Int64 {
-        var cGroupId: [CChar] = groupId.hexString.cArray
+        let cGroupId: [CChar] = groupId.hexString.cArray
         var cTimestamp: Int64 = 0
         
-        guard state_get_groups_info_delete_before(state, &cGroupId, &cTimestamp) else { return 0 }
+        guard state_get_group_delete_before(state, cGroupId, &cTimestamp) else { return 0 }
         
         return cTimestamp
     }
     
     func groupAttachDeleteBefore(groupId: SessionId) -> Int64 {
-        var cGroupId: [CChar] = groupId.hexString.cArray
+        let cGroupId: [CChar] = groupId.hexString.cArray
         var cTimestamp: Int64 = 0
         
-        guard state_get_groups_info_attach_delete_before(state, &cGroupId, &cTimestamp) else { return 0 }
+        guard state_get_group_attach_delete_before(state, cGroupId, &cTimestamp) else { return 0 }
         
         return cTimestamp
     }
@@ -60,12 +60,12 @@ internal extension LibSession {
         serverTimestampMs: Int64,
         using dependencies: Dependencies
     ) throws {
-        var cGroupId: [CChar] = groupSessionId.hexString.cArray
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray
         
         // If the group is destroyed then remove the group date (want to keep the group itself around because
         // the UX of conversations randomly disappearing isn't great) - no other changes matter and this
         // can't be reversed
-        guard !state_groups_info_is_destroyed(state, &cGroupId) else {
+        guard !state_group_is_destroyed(state, cGroupId) else {
             try ClosedGroup.removeData(
                 db,
                 threadIds: [groupSessionId.hexString],
@@ -84,24 +84,24 @@ internal extension LibSession {
         var cGroupDescription: [CChar] = [CChar](repeating: 0, count: LibSession.sizeMaxGroupDescriptionBytes)
         var cFormationTimestamp: Int64 = 0
         
-        guard state_get_groups_info_name(state, &cGroupId, &cGroupName) else { return }
+        guard state_get_group_name(state, cGroupId, &cGroupName) else { return }
 
         let groupName: String = String(cString: cGroupName)
         var groupDesc: String?
         var formationTimestamp: TimeInterval = 0
         
-        if state_get_groups_info_description(state, &cGroupId, &cGroupDescription) {
+        if state_get_group_description(state, cGroupId, &cGroupDescription) {
             groupDesc = String(cString: cGroupDescription)
         }
         
-        if state_get_groups_info_created(state, &cGroupId, &cFormationTimestamp) {
+        if state_get_group_created(state, cGroupId, &cFormationTimestamp) {
             formationTimestamp = TimeInterval(cFormationTimestamp)
         }
         
         // The `displayPic.key` can contain junk data so if the `displayPictureUrl` is null then just
         // set the `displayPictureKey` to null as well
         var displayPic: user_profile_pic = user_profile_pic()
-        state_get_groups_info_pic(state, &cGroupId, &displayPic)
+        state_get_group_pic(state, cGroupId, &displayPic)
         let displayPictureUrl: String? = String(libSessionVal: displayPic.url, nullIfEmpty: true)
         let displayPictureKey: Data? = (displayPictureUrl == nil ? nil :
             Data(
@@ -172,7 +172,7 @@ internal extension LibSession {
 
         // Update the disappearing messages configuration
         var cTargetExpiry: Int32 = 0
-        state_get_groups_info_expiry_timer(state, &cGroupId, &cTargetExpiry)
+        state_get_group_expiry_timer(state, cGroupId, &cTargetExpiry)
         let targetIsEnable: Bool = (cTargetExpiry > 0)
         let targetConfig: DisappearingMessagesConfiguration = DisappearingMessagesConfiguration(
             threadId: groupSessionId.hexString,
@@ -209,7 +209,7 @@ internal extension LibSession {
         // If there is a `delete_before` setting then delete all messages before the provided timestamp
         var cDeleteBeforeTimestamp: Int64 = 0
         
-        if state_get_groups_info_delete_before(state, &cGroupId, &cDeleteBeforeTimestamp) {
+        if state_get_group_delete_before(state, cGroupId, &cDeleteBeforeTimestamp) {
             if isAdmin {
                 let hashesToDelete: Set<String>? = try? Interaction
                     .filter(Interaction.Columns.threadId == groupSessionId.hexString)
@@ -235,7 +235,7 @@ internal extension LibSession {
         // the provided timestamp and schedule a garbage collection job
         var cAttachDeleteBeforeTimestamp: Int64 = 0
         
-        if state_get_groups_info_attach_delete_before(state, &cGroupId, &cAttachDeleteBeforeTimestamp) {
+        if state_get_group_attach_delete_before(state, cGroupId, &cAttachDeleteBeforeTimestamp) {
             if isAdmin {
                 let hashesToDelete: Set<String>? = try? Interaction
                     .filter(Interaction.Columns.threadId == groupSessionId.hexString)
@@ -314,22 +314,22 @@ internal extension LibSession {
         
         // Loop through each of the groups and update their settings
         try targetGroups.forEach { group in
-            dependencies[singleton: .libSession].mutate(groupId: SessionId(.group, hex: group.id)) { state in
+            try dependencies[singleton: .libSession].mutate(groupId: SessionId(.group, hex: group.id)) { state in
                 /// Update the name
                 ///
                 /// **Note:** We indentionally only update the `GROUP_INFO` and not the `USER_GROUPS` as once the
                 /// group is synced between devices we want to rely on the proper group config to get display info
                 var updatedName: [CChar] = group.name.cArray.nullTerminated()
-                state_set_groups_info_name(state, &updatedName)
+                state_set_group_name(state, &updatedName)
                 
                 var updatedDescription: [CChar] = (group.groupDescription ?? "").cArray.nullTerminated()
-                state_set_groups_info_description(state, &updatedDescription)
+                state_set_group_description(state, &updatedDescription)
                 
                 // Either assign the updated display pic, or sent a blank pic (to remove the current one)
                 var displayPic: user_profile_pic = user_profile_pic()
                 displayPic.url = group.displayPictureUrl.toLibSession()
                 displayPic.key = group.displayPictureEncryptionKey.toLibSession()
-                state_set_groups_info_pic(state, displayPic)
+                state_set_group_pic(state, displayPic)
             }
         }
         
@@ -362,11 +362,11 @@ internal extension LibSession {
         guard !existingGroupIds.isEmpty else { return updated }
         
         // Loop through each of the groups and update their settings
-        existingGroupIds
+        try existingGroupIds
             .compactMap { groupId in targetUpdatedConfigs.first(where: { $0.id == groupId }).map { (groupId, $0) } }
             .forEach { groupId, updatedConfig in
-                dependencies[singleton: .libSession].mutate(groupId: SessionId(.group, hex: groupId)) { state in
-                    state_set_groups_info_expiry_timer(state, Int32(updatedConfig.durationSeconds))
+                try dependencies[singleton: .libSession].mutate(groupId: SessionId(.group, hex: groupId)) { state in
+                    state_set_group_expiry_timer(state, Int32(updatedConfig.durationSeconds))
                 }
             }
         
@@ -381,11 +381,11 @@ public extension LibSession {
         groupSessionId: SessionId,
         disappearingConfig: DisappearingMessagesConfiguration?,
         using dependencies: Dependencies
-    ) {
+    ) throws {
         guard let config: DisappearingMessagesConfiguration = disappearingConfig else { return }
         
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
-            state_set_groups_info_expiry_timer(state, Int32(config.durationSeconds))
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+            state_set_group_expiry_timer(state, Int32(config.durationSeconds))
         }
     }
     
@@ -397,8 +397,8 @@ public extension LibSession {
         // Do nothing if the timestamp isn't newer than the current value
         guard Int64(timestamp) > dependencies[singleton: .libSession].groupDeleteBefore(groupId: groupSessionId) else { return }
         
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
-            state_set_groups_info_delete_before(state, Int64(timestamp))
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+            state_set_group_delete_before(state, Int64(timestamp))
         }
     }
     
@@ -412,17 +412,28 @@ public extension LibSession {
             return
         }
         
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
-            state_set_groups_info_attach_delete_before(state, Int64(timestamp))
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+            state_set_group_attach_delete_before(state, Int64(timestamp))
         }
     }
     
     static func deleteGroupForEveryone(
         groupSessionId: SessionId,
-        using dependencies: Dependencies
-    ) throws {
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
-            state_destroy_group(state)
+        using dependencies: Dependencies,
+        closure: @escaping (Error?) -> ()
+    ) {
+        let closureId: UUID = dependencies[singleton: .libSession].afterNextSend(groupId: groupSessionId, closure: closure)
+        
+        do {
+            try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+                state_destroy_group(state)
+            }
+        }
+        catch {
+            // If we failed to destroy the group (eg. because the user doesn't have admin access) then remove
+            // the 'after next send' closure and call it immediately with the error
+            dependencies[singleton: .libSession].removeAfterNextSend(closureId: closureId)
+            closure(error)
         }
     }
 }

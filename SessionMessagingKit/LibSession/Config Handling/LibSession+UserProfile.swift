@@ -174,7 +174,7 @@ internal extension LibSession {
     
     static func update(
         profile: Profile,
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         // Update the name
         var updatedName: [CChar] = profile.name.cArray.nullTerminated()
@@ -190,7 +190,7 @@ internal extension LibSession {
     static func updateNoteToSelf(
         priority: Int32? = nil,
         disappearingMessagesConfig: DisappearingMessagesConfiguration? = nil,
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         if let priority: Int32 = priority {
             state_set_profile_nts_priority(state, priority)
@@ -203,7 +203,7 @@ internal extension LibSession {
     
     static func updateSettings(
         checkForCommunityMessageRequests: Bool? = nil,
-        in state: UnsafeMutablePointer<mutable_state_user_object>
+        in state: UnsafeMutablePointer<mutable_user_state_object>
     ) {
         if let blindedMessageRequests: Bool = checkForCommunityMessageRequests {
             state_set_profile_blinded_msgreqs(state, (blindedMessageRequests ? 1 : 0))

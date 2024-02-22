@@ -16,11 +16,11 @@ public extension LibSession {
 
 public extension LibSession.StateManager {
     func groupMember(groupSessionId: SessionId, sessionId: String) -> CGroupMember? {
-        var cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CGroupMember = CGroupMember()
         
-        guard state_get_group_member(state, &cGroupId, &result, &cSessionId, nil) else { return nil }
+        guard state_get_group_member(state, cGroupId, &result, cSessionId, nil) else { return nil }
         
         return result
     }
@@ -30,12 +30,12 @@ public extension LibSession.StateManager {
     }
     
     func groupMemberOrConstruct(groupSessionId: SessionId, sessionId: String) throws -> CGroupMember {
-        var cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
+        let cSessionId: [CChar] = sessionId.cArray.nullTerminated()
         var result: CGroupMember = CGroupMember()
         var error: [CChar] = [CChar](repeating: 0, count: 256)
         
-        guard state_get_or_construct_group_member(state, &cGroupId, &result, &cSessionId, &error) else {
+        guard state_get_or_construct_group_member(state, cGroupId, &result, cSessionId, &error) else {
             /// It looks like there are some situations where this object might not get created correctly (and
             /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
             SNLog("[LibSession] Unable to getOrConstruct group conversation: \(LibSessionError(error))")
@@ -220,7 +220,7 @@ internal extension LibSession {
         role: GroupMember.Role,
         status: GroupMember.RoleStatus,
         using dependencies: Dependencies
-    ) {
+    ) throws {
         // If the member doesn't exist or the role status is already "accepted" then do nothing
         guard
             var member: CGroupMember = dependencies[singleton: .libSession]
@@ -243,7 +243,7 @@ internal extension LibSession {
             default: break
         }
         
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
             state_set_group_member(state, &member)
         }
     }
@@ -253,8 +253,8 @@ internal extension LibSession {
         memberIds: Set<String>,
         removeMessages: Bool,
         using dependencies: Dependencies
-    ) {
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+    ) throws {
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
             memberIds.forEach { memberId in
                 guard
                     var member: CGroupMember = dependencies[singleton: .libSession]
@@ -271,8 +271,8 @@ internal extension LibSession {
         groupSessionId: SessionId,
         memberIds: Set<String>,
         using dependencies: Dependencies
-    ) {
-        dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
+    ) throws {
+        try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
             memberIds.forEach { memberId in
                 var cMemberId: [CChar] = memberId.cArray
                 state_erase_group_member(state, &cMemberId)
@@ -300,7 +300,7 @@ internal extension LibSession {
             groupId.prefix == .group
         else { return updated }
         
-        dependencies[singleton: .libSession].mutate(groupId: groupId) { state in
+        try dependencies[singleton: .libSession].mutate(groupId: groupId) { state in
             // Loop through each of the groups and update their settings
             targetMembers.forEach { updatedMember in
                 guard
@@ -349,8 +349,8 @@ internal extension LibSession {
         var infiniteLoopGuard: Int = 0
         var result: [CGroupMember] = []
         var member: CGroupMember = CGroupMember()
-        var cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
-        let membersIterator: UnsafeMutablePointer<groups_members_iterator> = groups_members_iterator_new(state, &cGroupId)
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
+        let membersIterator: UnsafeMutablePointer<groups_members_iterator> = groups_members_iterator_new(state, cGroupId)
         
         while !groups_members_iterator_done(membersIterator, &member) {
             try LibSession.checkLoopLimitReached(&infiniteLoopGuard, for: .groupMembers)

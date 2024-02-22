@@ -12,7 +12,6 @@ import SessionUtilitiesKit
 enum _013_SessionUtilChanges: Migration {
     static let target: TargetMigrations.Identifier = .messagingKit
     static let identifier: String = "SessionUtilChanges"
-    static let needsConfigSync: Bool = true
     static let minExpectedRunDuration: TimeInterval = 0.4
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [
         Identity.self, GroupMember.self, ClosedGroupKeyPair.self, SessionThread.self

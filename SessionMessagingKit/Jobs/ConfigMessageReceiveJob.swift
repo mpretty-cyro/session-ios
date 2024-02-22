@@ -46,28 +46,17 @@ public enum ConfigMessageReceiveJob: JobExecutor {
             return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
-        var lastError: Error?
-        
-        dependencies[singleton: .storage].write { db in
-            do {
-                try LibSession.handleConfigMessages(
-                    db,
-                    sessionIdHexString: sessionIdHexString,
-                    messages: details.messages,
-                    using: dependencies
-                )
-            }
-            catch { lastError = error }
+        do {
+            try dependencies[singleton: .libSession].merge(
+                sessionIdHexString: sessionIdHexString,
+                messages: details.messages
+            )
+            success(job, false, dependencies)
         }
-        
-        // Handle the result
-        switch lastError {
-            case .some(let error):
-                SNLog("[ConfigMessageReceiveJob] Couldn't receive config message due to error: \(error)")
-                removeDependencyOnMessageReceiveJobs()
-                failure(job, error, true, dependencies)
-
-            case .none: success(job, false, dependencies)
+        catch {
+            SNLog("[ConfigMessageReceiveJob] Couldn't receive config message due to error: \(error)")
+            removeDependencyOnMessageReceiveJobs()
+            failure(job, error, true, dependencies)
         }
     }
 }
