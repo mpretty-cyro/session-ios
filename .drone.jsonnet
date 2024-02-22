@@ -62,6 +62,57 @@ local load_cocoapods_cache = {
   ]
 };
 
+// Pre-boot the simulator to minimise the chance the build process hangs
+local pre_boot_simulator = {
+  name: 'Pre-Boot Test Simulator',
+  commands: [
+    'mkdir -p build/artifacts',
+    'echo "Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}" > ./build/artifacts/device_name',
+    'xcrun simctl create "$(cat ./build/artifacts/device_name)" com.apple.CoreSimulator.SimDeviceType.iPhone-14',
+    'echo $(xcrun simctl list devices | grep -m 1 $(cat ./build/artifacts/device_name) | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})") > ./build/artifacts/sim_uuid',
+    'xcrun simctl boot $(cat ./build/artifacts/sim_uuid)',
+    'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*$(cat ./build/artifacts/sim_uuid).*")[0m"',
+  ]
+};
+
+// Build and run the unit tests
+local build_and_run_unit_tests = {
+  name: 'Build and Run Tests',
+  commands: [
+    'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -parallelizeTargets -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+  ],
+  depends_on: [
+    'Pre-Boot Test Simulator',
+    'Install CocoaPods'
+  ],
+};
+
+// Generate a unit test summary
+local unit_test_summary = {
+  name: 'Unit Test Summary',
+  commands: [
+    'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
+  ],
+  depends_on: ['Build and Run Tests'],
+  when: {
+    status: ['failure', 'success']
+  }
+}
+
+// Delete the pre-booted simulator
+local delete_test_simulator = {
+  name: 'Delete Test Simulator',
+  commands: [
+    'xcrun simctl delete $(cat ./build/artifacts/sim_uuid)'
+  ],
+  depends_on: [
+    'Build and Run Tests',
+  ],
+  when: {
+    status: ['failure', 'success']
+  }
+};
+
 // Override the cached CocoaPods directory (to speed up the next build)
 local update_cocoapods_cache(depends_on) = {
   name: 'Update CocoaPods Cache',
@@ -91,111 +142,75 @@ local update_cocoapods_cache(depends_on) = {
 
 [
   // Unit tests (PRs only)
-//  {
-//    kind: 'pipeline',
-//    type: 'exec',
-//    name: 'Unit Tests',
-//    platform: { os: 'darwin', arch: 'amd64' },
-//    trigger: { event: { exclude: [ 'push' ] } },
-//    steps: [
-//      version_info,
-//      clone_submodules,
-//      load_cocoapods_cache,
-//      install_cocoapods,
-//      {
-//        name: 'Reset Simulators',
-//        commands: [
-//          'xcrun simctl shutdown all',
-//          'xcrun simctl erase all'
-//        ],
-//        depends_on: [
-//          'Install CocoaPods'
-//        ]
-//      },
-//      {
-//        name: 'Build and Run Tests',
-//        commands: [
-//          'mkdir build',
-//          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,name=iPhone 14" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
-//        ],
-//        depends_on: [
-//          'Install CocoaPods'
-//        ],
-//      },
-//      {
-//        name: 'Unit Test Summary',
-//        commands: [
-//          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
-//        ],
-//        depends_on: ['Build and Run Tests'],
-//        when: {
-//          status: ['failure', 'success']
-//        }
-//      },
-//      {
-//        name: 'Shutdown Simulators',
-//        commands: [ 'xcrun simctl shutdown all' ],
-//        depends_on: [
-//          'Build and Run Tests',
-//        ],
-//        when: {
-//          status: ['failure', 'success']
-//        }
-//      },
-//      update_cocoapods_cache(['Build For Testing'])
-//    ],
-//  },
-//  // Validate build artifact was created by the direct branch push (PRs only)
-//  {
-//    kind: 'pipeline',
-//    type: 'exec',
-//    name: 'Check Build Artifact Existence',
-//    platform: { os: 'darwin', arch: 'amd64' },
-//    trigger: { event: { exclude: [ 'push' ] } },
-//    steps: [
-//      {
-//        name: 'Poll for build artifact existence',
-//        commands: [
-//          './Scripts/drone-upload-exists.sh'
-//        ]
-//      }
-//    ]
-//  },
+  {
+    kind: 'pipeline',
+    type: 'exec',
+    name: 'Unit Tests',
+    platform: { os: 'darwin', arch: 'amd64' },
+    trigger: { event: { exclude: [ 'push' ] } },
+    steps: [
+      version_info,
+      clone_submodules,
+      load_cocoapods_cache,
+      install_cocoapods,
+      pre_boot_simulator,
+      build_and_run_unit_tests,
+      unit_test_summary,
+      delete_test_simulator,
+      update_cocoapods_cache(['Build For Testing'])
+    ],
+  },
+  // Validate build artifact was created by the direct branch push (PRs only)
+  {
+    kind: 'pipeline',
+    type: 'exec',
+    name: 'Check Build Artifact Existence',
+    platform: { os: 'darwin', arch: 'amd64' },
+    trigger: { event: { exclude: [ 'push' ] } },
+    steps: [
+      {
+        name: 'Poll for build artifact existence',
+        commands: [
+          './Scripts/drone-upload-exists.sh'
+        ]
+      }
+    ]
+  },
   // Simulator build (non-PRs only)
-//  {
-//    kind: 'pipeline',
-//    type: 'exec',
-//    name: 'Simulator Build',
-//    platform: { os: 'darwin', arch: 'amd64' },
-//    trigger: { event: { exclude: [ 'pull_request' ] } },
-//    steps: [
-//      version_info,
-//      clone_submodules,
-//      load_cocoapods_cache,
-//      install_cocoapods,
-//      {
-//        name: 'Build',
-//        commands: [
-//          'mkdir build',
-//          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS mulator" | xcbeautify --is-ci'
-//        ],
-//        depends_on: [
-//          'Install CocoaPods'
-//        ],
-//      },
-//      update_cocoapods_cache(['Build']),
-//      {
-//        name: 'Upload artifacts',
-//        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
-//        commands: [
-//          './Scripts/drone-static-upload.sh'
-//        ],
-//        depends_on: [
-//          'Build'
-//        ]
-//      },
-//    ],
-//  },
+  {
+    kind: 'pipeline',
+    type: 'exec',
+    name: 'Simulator Build',
+    platform: { os: 'darwin', arch: 'amd64' },
+    trigger: { event: { exclude: [ 'pull_request' ] } },
+    steps: [
+      version_info,
+      clone_submodules,
+      load_cocoapods_cache,
+      install_cocoapods,
+      {
+        name: 'Build',
+        commands: [
+          'mkdir build',
+          'xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App Store Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS mulator" | xcbeautify --is-ci'
+        ],
+        depends_on: [
+          'Install CocoaPods'
+        ],
+      },
+      update_cocoapods_cache(['Build']),
+      {
+        name: 'Upload artifacts',
+        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
+        commands: [
+          './Scripts/drone-static-upload.sh'
+        ],
+        depends_on: [
+          'Build'
+        ]
+      },
+    ],
+  },
   // Unit tests and Codecov upload (non-PRs only)
   {
     kind: 'pipeline',
@@ -208,50 +223,10 @@ local update_cocoapods_cache(depends_on) = {
       clone_submodules,
       load_cocoapods_cache,
       install_cocoapods,
-      {
-        name: 'Pre-Boot Test Simulator',
-        commands: [
-          'mkdir -p build/artifacts',
-          'echo "Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}" > ./build/artifacts/device_name',
-          'xcrun simctl create "$(cat ./build/artifacts/device_name)" com.apple.CoreSimulator.SimDeviceType.iPhone-14',
-          'echo $(xcrun simctl list devices | grep -m 1 $(cat ./build/artifacts/device_name) | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})") > ./build/artifacts/sim_uuid',
-          'xcrun simctl boot $(cat ./build/artifacts/sim_uuid)',
-          'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*$(cat ./build/artifacts/sim_uuid).*")[0m"',
-        ]
-      },
-      {
-        name: 'Build and Run Tests',
-        commands: [
-          'echo "Test |$(cat ./build/artifacts/device_name), $(cat ./build/artifacts/sim_uuid)"|',
-          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -parallelizeTargets -destination "platform=iOS Simulator,id=$(cat ./build/artifacts/sim_uuid)" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
-        ],
-        depends_on: [
-          'Pre-Boot Test Simulator',
-          'Install CocoaPods'
-        ],
-      },
-      {
-        name: 'Unit Test Summary',
-        commands: [
-          'xcresultparser --output-format cli --failed-tests-only ./build/artifacts/testResults.xcresult',
-        ],
-        depends_on: ['Build and Run Tests'],
-        when: {
-          status: ['failure', 'success']
-        }
-      },
-      {
-        name: 'Delete Test Simulator',
-        commands: [
-          'xcrun simctl delete $(cat ./build/artifacts/sim_uuid)'
-        ],
-        depends_on: [
-          'Build and Run Tests',
-        ],
-        when: {
-          status: ['failure', 'success']
-        }
-      },
+      pre_boot_simulator,
+      build_and_run_unit_tests,
+      unit_test_summary,
+      delete_test_simulator,
       update_cocoapods_cache(['Build and Run Tests']),
       {
         name: 'Install Codecov CLI',
