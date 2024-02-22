@@ -209,14 +209,19 @@ local update_cocoapods_cache(depends_on) = {
       load_cocoapods_cache,
       install_cocoapods,
       {
+        name: 'Shutdown Simulators (Remove Me ASAP)', // Needed due to old configs starting arbitrary sims
+        commands: [
+          'echo "Test |${DEVICE_NAME}, ${SIM_UUID}"|',
+          'xcrun simctl shutdown all'
+        ]
+      },
+      {
         name: 'Pre-Boot Test Simulator',
         commands: [
-          |||
-            DEVICE_NAME="Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}"
-            xcrun simctl create "${DEVICE_NAME}" com.apple.CoreSimulator.SimDeviceType.iPhone-14
-            SIM_UUID=$(xcrun simctl list devices | grep -m 1 "${DEVICE_NAME}" | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})")
-            xcrun simctl boot ${SIM_UUID}
-          |||,
+          'export DEVICE_NAME="Test-iPhone14-${DRONE_COMMIT:0:9}-${DRONE_BUILD_EVENT}"',
+          'xcrun simctl create "${DEVICE_NAME}" com.apple.CoreSimulator.SimDeviceType.iPhone-14',
+          'export SIM_UUID=$(xcrun simctl list devices | grep -m 1 "${DEVICE_NAME}" | grep -E -o -i "([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})")',
+          'xcrun simctl boot ${SIM_UUID}',
           'echo "[32mPre-booting simulator complete: $(xcrun simctl list | sed "s/^[[:space:]]*//" | grep -o ".*${SIM_UUID}.*")[0m"',
         ]
       },
@@ -224,6 +229,7 @@ local update_cocoapods_cache(depends_on) = {
         name: 'Build and Run Tests',
         commands: [
           'mkdir build',
+          'echo "Test |${DEVICE_NAME}, ${SIM_UUID}"|',
           'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -destination "platform=iOS Simulator,id=${SIM_UUID}" -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
         depends_on: [
