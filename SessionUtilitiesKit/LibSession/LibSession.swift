@@ -100,6 +100,12 @@ public protocol StateManagerType {
     )
     func approveGroup(groupSessionId: String, groupIdentityPrivateKey: [UInt8]?)
     func loadGroupAdminKey(groupSessionId: SessionId, groupIdentitySeed: [UInt8]) throws
+    func addGroupMembers(
+        groupSessionId: SessionId,
+        allowAccessToHistoricMessages: Bool,
+        members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+        callback: @escaping (LibSessionError?) -> Void
+    )
     func removeGroup(groupSessionId: SessionId, removeUserState: Bool)
     func isAdmin(groupSessionId: SessionId) -> Bool
     func currentGeneration(groupSessionId: SessionId) -> Int
@@ -200,6 +206,12 @@ public extension LibSession {
         ) { callback("", [], LibSessionError.invalidState) }
         public func approveGroup(groupSessionId: String, groupIdentityPrivateKey: [UInt8]?) {}
         public func loadGroupAdminKey(groupSessionId: SessionId, groupIdentitySeed: [UInt8]) throws {}
+        public func addGroupMembers(
+            groupSessionId: SessionId,
+            allowAccessToHistoricMessages: Bool,
+            members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+            callback: @escaping (LibSessionError?) -> Void
+        ) { callback(nil) }
         public func removeGroup(groupSessionId: SessionId, removeUserState: Bool) {}
         
         public func isAdmin(groupSessionId: SessionId) -> Bool { return false }

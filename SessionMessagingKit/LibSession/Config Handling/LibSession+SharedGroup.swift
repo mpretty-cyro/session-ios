@@ -121,6 +121,71 @@ public extension LibSession.StateManager {
         }
     }
     
+    func addGroupMembers(
+        groupSessionId: SessionId,
+        allowAccessToHistoricMessages: Bool,
+        members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
+        callback: @escaping (LibSessionError?) -> Void
+    ) {
+        class CWrapper {
+            let callback: (LibSessionError?) -> Void
+            
+            public init(_ callback: @escaping (LibSessionError?) -> Void) {
+                self.callback = callback
+            }
+        }
+        let cGroupId: [CChar] = groupSessionId.hexString.cArray
+        let cMembers: [CGroupMember] = members.map { id, name, picUrl, picEncKey in
+            var profilePic: user_profile_pic = user_profile_pic()
+            
+            if
+                let picUrl: String = picUrl,
+                let picKey: Data = picEncKey,
+                !picUrl.isEmpty,
+                picKey.count == DisplayPictureManager.aes256KeyByteLength
+            {
+                profilePic.url = picUrl.toLibSession()
+                profilePic.key = picKey.toLibSession()
+            }
+            
+            return CGroupMember(
+                session_id: id.toLibSession(),
+                name: (name ?? "").toLibSession(),
+                profile_pic: profilePic,
+                admin: false,
+                invited: 1,
+                promoted: 0,
+                removed: 0,
+                supplement: allowAccessToHistoricMessages
+            )
+        }
+        let callbackWrapper: CWrapper = CWrapper(callback)
+        let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(callbackWrapper).toOpaque()
+        
+        state_add_group_members(
+            state,
+            cGroupId,
+            allowAccessToHistoricMessages,
+            cMembers,
+            cMembers.count,
+            { errorPtr, errorLen, maybeCtx in
+                // If we have no context then we can't do anything
+                guard
+                    let cWrapper: CWrapper = maybeCtx.map({ Unmanaged<CWrapper>.fromOpaque($0).takeRetainedValue() })
+                else { return }
+                guard errorLen == 0 else {
+                    let error: LibSessionError = (String(pointer: errorPtr, length: errorLen, encoding: .utf8)
+                        .map { LibSessionError($0) })
+                        .defaulting(to: .unknown)
+                    return cWrapper.callback(error)
+                }
+                
+                cWrapper.callback(nil)
+            },
+            cWrapperPtr
+        )
+    }
+    
     func removeGroup(groupSessionId: SessionId, removeUserState: Bool) {
         let cGroupId: [CChar] = groupSessionId.hexString.cArray
         

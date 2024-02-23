@@ -424,7 +424,7 @@ public extension LibSession {
                 cMessagesData.forEach { $0?.deallocate() }
             }
             
-            guard state_merge(state, cPubkey, &cConfigMessages, cConfigMessages.count) else {
+            guard state_merge(state, cPubkey, &cConfigMessages, cConfigMessages.count, nil) else {
                 throw lastErrorForced()
             }
         }

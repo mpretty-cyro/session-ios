@@ -52,58 +52,6 @@ internal extension LibSession {
         }
     }
     
-    static func keySupplement(
-        groupSessionId: SessionId,
-        memberIds: Set<String>,
-        using dependencies: Dependencies
-    ) throws -> AnyPublisher<Void, Error> {
-        return Deferred {
-            Future { [dependencies] resolver in
-                do {
-                    try dependencies[singleton: .libSession].mutate(groupId: groupSessionId) { state in
-                        var cMemberIds: [UnsafePointer<CChar>?] = memberIds
-                            .map { id in id.cArray.nullTerminated() }
-                            .unsafeCopy()
-                        
-                        defer { cMemberIds.forEach { $0?.deallocate() } }
-                        
-                        // Performing a `key_supplement` generates the supplemental key changes, since our state doesn't care
-                        // about the `GROUP_KEYS` needed for other members this change won't result in the `GROUP_KEYS` config
-                        // going into a pending state so it gets sent directly via the '_send' hook and the callback below is
-                        // triggered if that request is completed successfully
-                        class CWrapper {
-                            let resolver: (Result<Void, Error>) -> Void
-                            
-                            public init(_ resolver: @escaping (Result<Void, Error>) -> Void) {
-                                self.resolver = resolver
-                            }
-                        }
-                        
-                        let resolverWrapper: CWrapper = CWrapper(resolver)
-                        let cWrapperPtr: UnsafeMutableRawPointer = Unmanaged.passRetained(resolverWrapper).toOpaque()
-                        state_supplement_group_key(
-                            state,
-                            &cMemberIds,
-                            cMemberIds.count,
-                            { success, maybeCtx in
-                                guard let ctx: UnsafeMutableRawPointer = maybeCtx else { return }
-                                
-                                let wrapper: CWrapper = Unmanaged<CWrapper>.fromOpaque(ctx).takeRetainedValue()
-                                
-                                switch success {
-                                    case true: wrapper.resolver(Result.success(()))
-                                    case false: wrapper.resolver(Result.failure(LibSessionError.failedToKeySupplementGroup))
-                                }
-                            },
-                            cWrapperPtr
-                        )
-                    }
-                }
-                catch { resolver(Result.failure(error)) }
-            }
-        }.eraseToAnyPublisher()
-    }
-    
     static func generateSubaccountToken(
         groupSessionId: SessionId,
         memberId: String,
