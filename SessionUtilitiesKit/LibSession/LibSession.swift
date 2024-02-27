@@ -98,7 +98,7 @@ public protocol StateManagerType {
         members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
         callback: @escaping (String, [UInt8], LibSessionError?) -> Void
     )
-    func approveGroup(groupSessionId: String, groupIdentityPrivateKey: [UInt8]?)
+    func approveGroup(groupSessionId: String)
     func loadGroupAdminKey(groupSessionId: SessionId, groupIdentitySeed: [UInt8]) throws
     func addGroupMembers(
         groupSessionId: SessionId,
@@ -204,7 +204,7 @@ public extension LibSession {
             members: [(id: String, name: String?, picUrl: String?, picEncKey: Data?)],
             callback: @escaping (String, [UInt8], LibSessionError?) -> Void
         ) { callback("", [], LibSessionError.invalidState) }
-        public func approveGroup(groupSessionId: String, groupIdentityPrivateKey: [UInt8]?) {}
+        public func approveGroup(groupSessionId: String) {}
         public func loadGroupAdminKey(groupSessionId: SessionId, groupIdentitySeed: [UInt8]) throws {}
         public func addGroupMembers(
             groupSessionId: SessionId,

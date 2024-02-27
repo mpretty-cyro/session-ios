@@ -99,17 +99,10 @@ public extension LibSession.StateManager {
         )
     }
     
-    func approveGroup(groupSessionId: String, groupIdentityPrivateKey: [UInt8]?) {
+    func approveGroup(groupSessionId: String) {
         let cGroupId: [CChar] = groupSessionId.cArray
         
-        // It looks like C doesn't deal will passing pointers to null variables well so we need
-        // to explicitly pass 'nil' for the admin key in this case
-        switch groupIdentityPrivateKey {
-            case .none: state_approve_group(state, cGroupId, nil)
-            case .some(let groupIdentityPrivateKey):
-                let cGroupIdentityPrivateKey: [UInt8] = Array(groupIdentityPrivateKey)
-                state_approve_group(state, cGroupId, cGroupIdentityPrivateKey)
-        }
+        state_approve_group(state, cGroupId)
     }
     
     func loadGroupAdminKey(groupSessionId: SessionId, groupIdentitySeed: [UInt8]) throws {

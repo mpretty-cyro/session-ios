@@ -317,7 +317,8 @@ extension MessageSender {
         groupSessionId: String,
         members: [(id: String, profile: Profile?)],
         allowAccessToHistoricMessages: Bool,
-        using dependencies: Dependencies
+        using dependencies: Dependencies,
+        callback: @escaping (LibSessionError?) -> ()
     ) {
         guard let sessionId: SessionId = try? SessionId(from: groupSessionId), sessionId.prefix == .group else { return }
         
@@ -326,7 +327,8 @@ extension MessageSender {
             allowAccessToHistoricMessages: allowAccessToHistoricMessages,
             members: members.map { ($0.id, $0.profile?.name, $0.profile?.profilePictureUrl, $0.profile?.profileEncryptionKey) }
         ) { [dependencies] error in
-            guard error == nil else { return }
+            // Invite process failed to update libSession
+            guard error == nil else { return callback(error) }
             
             dependencies[singleton: .storage].writeAsync(using: dependencies) { db in
                 guard
@@ -437,6 +439,9 @@ extension MessageSender {
                     using: dependencies
                 )
             }
+            
+            // Invite process successfully updated libSession
+            callback(nil)
         }
     }
     

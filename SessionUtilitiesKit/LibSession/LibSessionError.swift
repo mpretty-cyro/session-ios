@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtil
 
 public enum LibSessionError: LocalizedError {
     case invalidState
@@ -27,7 +28,7 @@ public enum LibSessionError: LocalizedError {
     
     public init(_ errorString: String) {
         switch errorString {
-            case "Unable to make changes to a read-only config object": self = .cannotMutateReadOnlyConfigObject
+            case String(cString: SESSION_ERROR_READ_ONLY_CONFIG): self = .cannotMutateReadOnlyConfigObject
             default: self = LibSessionError.libSessionError(errorString)
         }
     }

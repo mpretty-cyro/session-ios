@@ -63,15 +63,12 @@ public enum ProcessPendingGroupMemberRemovalsJob: JobExecutor {
         }
         
         /// If there are no pending removals then we can just complete
-        guard
-            let pendingRemovals: [String: Bool] = try? LibSession.getPendingMemberRemovals(
-                groupSessionId: groupSessionId,
-                using: dependencies
-            ),
-            !pendingRemovals.isEmpty
-        else {
-            return success(job, false, dependencies)
-        }
+        let pendingRemovals: [String: Bool] = LibSession.getPendingMemberRemovals(
+            groupSessionId: groupSessionId,
+            using: dependencies
+        )
+        
+        guard !pendingRemovals.isEmpty else { return success(job, false, dependencies) }
         
         /// Define a timestamp to use for all messages created by the removal changes
         ///

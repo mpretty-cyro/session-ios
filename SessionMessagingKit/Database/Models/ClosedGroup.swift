@@ -201,10 +201,7 @@ public extension ClosedGroup {
         }
         
         /// Create the libSession state for the group
-        dependencies[singleton: .libSession].approveGroup(
-            groupSessionId: group.id,
-            groupIdentityPrivateKey: group.groupIdentityPrivateKey.map { Array($0) }
-        )
+        dependencies[singleton: .libSession].approveGroup(groupSessionId: group.id)
         
         /// Start polling
         dependencies[singleton: .groupsPoller].startIfNeeded(for: group.id, using: dependencies)
