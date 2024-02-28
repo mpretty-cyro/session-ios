@@ -15,6 +15,11 @@ class LibSessionSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
+        @TestState var groupId: SessionId! = SessionId(.group, hex: "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece")
+        @TestState var groupSecretKey: Data! = Data(hex:
+            "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +
+            "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
+        )
         @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
             dependencies.dateNow = Date(timeIntervalSince1970: 1234567890)
             dependencies.forceSynchronous = true
@@ -78,21 +83,6 @@ class LibSessionSpec: QuickSpec {
                 userDefaults.when { $0.string(forKey: .any) }.thenReturn(nil)
             }
         )
-        
-        @TestState var createGroupOutput: LibSession.CreatedGroupInfo! = {
-            mockStorage.write(using: dependencies) { db in
-                 try LibSession.createGroup(
-                    db,
-                    name: "TestGroup",
-                    description: nil,
-                    displayPictureUrl: nil,
-                    displayPictureFilename: nil,
-                    displayPictureEncryptionKey: nil,
-                    members: [],
-                    using: dependencies
-                 )
-            }
-        }()
         @TestState var mockSwarmCache: Set<Snode>! = [
             Snode(
                 address: "test",
@@ -116,28 +106,18 @@ class LibSessionSpec: QuickSpec {
         @TestState(cache: .snodeAPI, in: dependencies) var mockSnodeAPICache: MockSnodeAPICache! = MockSnodeAPICache(
             initialSetup: { cache in
                 cache.when { $0.clockOffsetMs }.thenReturn(0)
-                cache.when { $0.loadedSwarms }.thenReturn([createGroupOutput.groupSessionId.hexString])
-                cache.when { $0.swarmCache }.thenReturn([createGroupOutput.groupSessionId.hexString: mockSwarmCache])
+                cache.when { $0.hasLoadedSwarm(for: .any) }.thenReturn(true)
+                cache.when { $0.swarmCache(publicKey: .any) }.thenReturn(mockSwarmCache)
+                cache.when { $0.setSwarmCache(publicKey: .any, cache: .any) }.thenReturn(nil)
             }
         )
-        @TestState(cache: .libSession, in: dependencies) var mockLibSessionCache: MockLibSessionCache! = MockLibSessionCache(
-            initialSetup: { cache in
-                var conf: UnsafeMutablePointer<config_object>!
-                var secretKey: [UInt8] = Array(Data(hex: TestConstants.edSecretKey))
-                _ = user_groups_init(&conf, &secretKey, nil, 0, nil)
-                
-                cache.when { $0.setConfig(for: .any, sessionId: .any, to: .any) }.thenReturn(())
-                cache.when { $0.config(for: .userGroups, sessionId: .any) }
-                    .thenReturn(Atomic(.object(conf)))
-                cache.when { $0.config(for: .groupInfo, sessionId: .any) }
-                    .thenReturn(Atomic(createGroupOutput.groupState[.groupInfo]))
-                cache.when { $0.config(for: .groupMembers, sessionId: .any) }
-                    .thenReturn(Atomic(createGroupOutput.groupState[.groupMembers]))
-                cache.when { $0.config(for: .groupKeys, sessionId: .any) }
-                    .thenReturn(Atomic(createGroupOutput.groupState[.groupKeys]))
+        @TestState var stateManager: LibSession.StateManager! = { [dependencies, mockStorage] in
+            mockStorage!.read { db in
+                let result = try LibSession.StateManager(db, using: dependencies!)
+                MockStateManager.registerFakeResponse(for: result.state)
+                return result
             }
-        )
-        @TestState var userGroupsConfig: LibSession.Config!
+        }()
         
         // MARK: - LibSession
         describe("LibSession") {
@@ -344,391 +324,23 @@ class LibSessionSpec: QuickSpec {
             
             // MARK: -- when creating a group
             context("when creating a group") {
-                beforeEach {
-                    var userGroupsConf: UnsafeMutablePointer<config_object>!
-                    var secretKey: [UInt8] = Array(Data(hex: TestConstants.edSecretKey))
-                    _ = user_groups_init(&userGroupsConf, &secretKey, nil, 0, nil)
-                    userGroupsConfig = .object(userGroupsConf)
-                    
-                    mockLibSessionCache
-                        .when { $0.config(for: .userGroups, sessionId: .any) }
-                        .thenReturn(Atomic(userGroupsConfig))
-                }
-                
-                // MARK: ---- throws when there is no user ed25519 keyPair
-                it("throws when there is no user ed25519 keyPair") {
+                // MARK: ---- fails when given an invalid member id
+                it("fails when given an invalid member id") {
                     var resultError: Error? = nil
                     
-                    mockStorage.write { db in
-                        try Identity.filter(id: .ed25519PublicKey).deleteAll(db)
-                        try Identity.filter(id: .ed25519SecretKey).deleteAll(db)
-                        
-                        do {
-                            _ = try LibSession.createGroup(
-                                db,
-                                name: "Testname",
-                                description: nil,
-                                displayPictureUrl: nil,
-                                displayPictureFilename: nil,
-                                displayPictureEncryptionKey: nil,
-                                members: [],
-                                using: dependencies
-                            )
-                        }
-                        catch { resultError = error }
-                    }
-                    
-                    expect(resultError).to(matchError(MessageSenderError.noKeyPair))
-                }
-                
-                // MARK: ---- throws when it fails to generate a new identity ed25519 keyPair
-                it("throws when it fails to generate a new identity ed25519 keyPair") {
-                    var resultError: Error? = nil
-                    
-                    mockCrypto.when { $0.generate(.ed25519KeyPair()) }.thenReturn(nil)
-                    
-                    mockStorage.write { db in
-                        do {
-                            _ = try LibSession.createGroup(
-                                db,
-                                name: "Testname",
-                                description: nil,
-                                displayPictureUrl: nil,
-                                displayPictureFilename: nil,
-                                displayPictureEncryptionKey: nil,
-                                members: [],
-                                using: dependencies
-                            )
-                        }
-                        catch { resultError = error }
-                    }
-                    
-                    expect(resultError).to(matchError(MessageSenderError.noKeyPair))
-                }
-                
-                // MARK: ---- throws when given an invalid member id
-                it("throws when given an invalid member id") {
-                    var resultError: Error? = nil
-                    
-                    mockStorage.write { db in
-                        do {
-                            _ = try LibSession.createGroup(
-                                db,
-                                name: "Testname",
-                                description: nil,
-                                displayPictureUrl: nil,
-                                displayPictureFilename: nil,
-                                displayPictureEncryptionKey: nil,
-                                members: [(
-                                    id: "123456",
-                                    profile: Profile(
-                                        id: "123456",
-                                        name: ""
-                                    )
-                                )],
-                                using: dependencies
-                            )
-                        }
-                        catch { resultError = error }
+                    stateManager.createGroup(
+                        name: "Test",
+                        description: "TestDesc",
+                        displayPictureUrl: nil,
+                        displayPictureEncryptionKey: nil,
+                        members: [("123456", nil, nil, nil)]
+                    ) { groupId, groupSecretKey, error in
+                        resultError = error
                     }
                     
                     expect(resultError).to(matchError(
-                        NSError(
-                            domain: "cpp_exception",
-                            code: -2,
-                            userInfo: [
-                                NSLocalizedDescriptionKey: "Invalid session ID: expected 66 hex digits starting with 05; got 123456"
-                            ]
-                        )
+                        LibSessionError.libSessionError("Invalid session ID: expected 66 hex digits starting with 05; got 123456")
                     ))
-                }
-                
-                // MARK: ---- returns the correct identity keyPair
-                it("returns the correct identity keyPair") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(createGroupOutput.identityKeyPair.publicKey.toHexString())
-                        .to(equal("cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"))
-                    expect(createGroupOutput.identityKeyPair.secretKey.toHexString())
-                        .to(equal(
-                            "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +
-                            "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                        ))
-                }
-                
-                // MARK: ---- returns a closed group with the correct data set
-                it("returns a closed group with the correct data set") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: "TestUrl",
-                            displayPictureFilename: "TestFilename",
-                            displayPictureEncryptionKey: Data([1, 2, 3]),
-                            members: [],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(createGroupOutput.group.threadId)
-                        .to(equal("03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"))
-                    expect(createGroupOutput.group.groupIdentityPrivateKey?.toHexString())
-                        .to(equal(
-                            "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +
-                            "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                        ))
-                    expect(createGroupOutput.group.name).to(equal("Testname"))
-                    expect(createGroupOutput.group.displayPictureUrl).to(equal("TestUrl"))
-                    expect(createGroupOutput.group.displayPictureFilename).to(equal("TestFilename"))
-                    expect(createGroupOutput.group.displayPictureEncryptionKey).to(equal(Data([1, 2, 3])))
-                    expect(createGroupOutput.group.formationTimestamp).to(equal(1234567890))
-                    expect(createGroupOutput.group.invited).to(beFalse())
-                }
-                
-                // MARK: ---- returns the members setup correctly
-                it("returns the members setup correctly") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: Profile(
-                                    id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                    name: "TestName",
-                                    profilePictureUrl: "testUrl",
-                                    profileEncryptionKey: Data([1, 2, 3])
-                                )
-                            )],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(createGroupOutput.members.count).to(equal(2))
-                    expect(createGroupOutput.members.map { $0.groupId })
-                        .to(equal([
-                            "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece",
-                            "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece",
-                        ]))
-                    expect(createGroupOutput.members.map { $0.profileId }.asSet())
-                        .to(equal([
-                            "051111111111111111111111111111111111111111111111111111111111111111",
-                            "05\(TestConstants.publicKey)"
-                        ]))
-                    expect(createGroupOutput.members.map { $0.role }.asSet())
-                        .to(equal([
-                            .standard,
-                            .admin
-                        ]))
-                    expect(createGroupOutput.members.map { $0.isHidden }.asSet())
-                        .to(equal([
-                            false,
-                            false
-                        ]))
-                }
-                
-                // MARK: ---- adds the current user as an admin when not provided
-                it("adds the current user as an admin when not provided") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: Profile(
-                                    id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                    name: "TestName"
-                                )
-                            )],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(createGroupOutput.members.map { $0.groupId })
-                        .to(contain("03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"))
-                    expect(createGroupOutput.members.map { $0.profileId })
-                        .to(contain("05\(TestConstants.publicKey)"))
-                    expect(createGroupOutput.members.map { $0.role }).to(contain(.admin))
-                }
-                
-                // MARK: ---- handles members without profile data correctly
-                it("handles members without profile data correctly") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: nil
-                            )],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(createGroupOutput.members.count).to(equal(2))
-                    expect(createGroupOutput.members.map { $0.groupId })
-                        .to(contain("03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"))
-                    expect(createGroupOutput.members.map { $0.profileId })
-                        .to(contain("051111111111111111111111111111111111111111111111111111111111111111"))
-                    expect(createGroupOutput.members.map { $0.role }).to(contain(.standard))
-                }
-                
-                // MARK: ---- stores the config states in the cache correctly
-                it("stores the config states in the cache correctly") {
-                    createGroupOutput = mockStorage.write(using: dependencies) { db in
-                        try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: nil
-                            )],
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(mockLibSessionCache).to(call(.exactly(times: 3)) {
-                        $0.setConfig(for: .any, sessionId: .any, to: .any)
-                    })
-                    expect(mockLibSessionCache)
-                        .to(call(matchingParameters: .atLeast(2)) {
-                            $0.setConfig(
-                                for: .groupInfo,
-                                sessionId: SessionId(
-                                    .group,
-                                    hex: "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                                ),
-                                to: .any
-                            )
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(matchingParameters: .atLeast(2)) {
-                            $0.setConfig(
-                                for: .groupMembers,
-                                sessionId: SessionId(
-                                    .group,
-                                    hex: "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                                ),
-                                to: .any
-                            )
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(matchingParameters: .atLeast(2)) {
-                            $0.setConfig(
-                                for: .groupKeys,
-                                sessionId: SessionId(
-                                    .group,
-                                    hex: "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                                ),
-                                to: .any
-                            )
-                        })
-                }
-            }
-            
-            // MARK: -- when saving a created a group
-            context("when saving a created a group") {
-                // MARK: ---- saves config dumps for the stored configs
-                it("saves config dumps for the stored configs") {
-                    mockStorage.write(using: dependencies) { db in
-                        createGroupOutput = try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: nil
-                            )],
-                            using: dependencies
-                        )
-                        
-                        try LibSession.saveCreatedGroup(
-                            db,
-                            group: createGroupOutput.group,
-                            groupState: createGroupOutput.groupState,
-                            using: dependencies
-                        )
-                    }
-                    
-                    let result: [ConfigDump]? = mockStorage.read(using: dependencies) { db in
-                        try ConfigDump.fetchAll(db)
-                    }
-                    
-                    expect(result?.map { $0.variant }.asSet())
-                        .to(contain([.groupInfo, .groupKeys, .groupMembers]))
-                    expect(result?.map { $0.sessionId }.asSet())
-                        .to(contain([
-                            SessionId(
-                                .group,
-                                hex: "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
-                            )
-                        ]))
-                    expect(result?.map { $0.timestampMs }.asSet())
-                        .to(contain([1234567890000]))
-                }
-                
-                // MARK: ---- adds the group to the user groups config
-                it("adds the group to the user groups config") {
-                    mockStorage.write(using: dependencies) { db in
-                        createGroupOutput = try LibSession.createGroup(
-                            db,
-                            name: "Testname",
-                            description: nil,
-                            displayPictureUrl: nil,
-                            displayPictureFilename: nil,
-                            displayPictureEncryptionKey: nil,
-                            members: [(
-                                id: "051111111111111111111111111111111111111111111111111111111111111111",
-                                profile: nil
-                            )],
-                            using: dependencies
-                        )
-                        
-                        try LibSession.saveCreatedGroup(
-                            db,
-                            group: createGroupOutput.group,
-                            groupState: createGroupOutput.groupState,
-                            using: dependencies
-                        )
-                    }
-                    
-                    let result: [ConfigDump]? = mockStorage.read(using: dependencies) { db in
-                        try ConfigDump.fetchAll(db)
-                    }
-                    
-                    expect(result?.map { $0.variant }.asSet()).to(contain([.userGroups]))
-                    expect(result?.map { $0.timestampMs }.asSet()).to(contain([1234567890000]))
                 }
             }
             
@@ -739,81 +351,63 @@ class LibSessionSpec: QuickSpec {
                 @TestState var latestDisappearingConfig: DisappearingMessagesConfiguration?
                 
                 beforeEach {
+                    stateManager.createGroup(
+                        name: "Test",
+                        description: "TestDesc",
+                        displayPictureUrl: nil,
+                        displayPictureEncryptionKey: nil,
+                        members: []
+                    ) { groupIdNew, groupSecretKeyNew, error in
+                        groupId = SessionId(.group, hex: groupIdNew)
+                        groupSecretKey = Data(groupSecretKeyNew)
+                    }
+                    
                     mockStorage.write(using: dependencies) { db in
                         try SessionThread.fetchOrCreate(
                             db,
-                            id: createGroupOutput.group.threadId,
+                            id: groupId.hexString,
                             variant: .group,
                             shouldBeVisible: true,
                             calledFromConfigHandling: false,
                             using: dependencies
                         )
-                        try createGroupOutput.group.insert(db)
-                        try createGroupOutput.members.forEach { try $0.insert(db) }
+                        try ClosedGroup(
+                            threadId: groupId.hexString,
+                            name: "Test",
+                            formationTimestamp: 0,
+                            shouldPoll: false,
+                            groupIdentityPrivateKey: Data([5, 4, 3, 2, 1]),
+                            authData: Data([1, 2, 3, 4, 5]),
+                            invited: false
+                        ).upsert(db)
+                        
                         initialDisappearingConfig = try DisappearingMessagesConfiguration
-                            .fetchOne(db, id: createGroupOutput.group.threadId)
+                            .fetchOne(db, id: groupId.hexString)
                             .defaulting(
-                                to: DisappearingMessagesConfiguration.defaultWith(createGroupOutput.group.threadId)
+                                to: DisappearingMessagesConfiguration.defaultWith(groupId.hexString)
                             )
-                    }
-                }
-                
-                // MARK: ---- does nothing if there are no changes
-                it("does nothing if there are no changes") {
-                    dependencies.setMockableValue(key: "needsDump", false)
-                    
-                    mockStorage.write(using: dependencies) { db in
-                        try LibSession.handleGroupInfoUpdate(
-                            db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
-                            serverTimestampMs: 1234567891000,
-                            using: dependencies
-                        )
-                    }
-                    
-                    latestGroup = mockStorage.read(using: dependencies) { db in
-                        try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
-                    }
-                    expect(createGroupOutput.groupState[.groupInfo]).toNot(beNil())
-                    expect(createGroupOutput.group).to(equal(latestGroup))
-                }
-                
-                // MARK: ---- throws if the config is invalid
-                it("throws if the config is invalid") {
-                    dependencies.setMockableValue(key: "needsDump", true)
-                    
-                    mockStorage.write(using: dependencies) { db in
-                        expect {
-                            try LibSession.handleGroupInfoUpdate(
-                                db,
-                                in: .invalid,
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
-                                serverTimestampMs: 1234567891000,
-                                using: dependencies
-                            )
-                        }
-                        .to(throwError())
                     }
                 }
                 
                 // MARK: ---- removes group data if the group is destroyed
                 it("removes group data if the group is destroyed") {
-                    createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_destroy_group($0) }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        state_destroy_group(mutable_state)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
                     }
                     
                     latestGroup = mockStorage.read(using: dependencies) { db in
-                        try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
+                        try ClosedGroup.fetchOne(db, id: groupId.hexString)
                     }
                     expect(latestGroup?.authData).to(beNil())
                     expect(latestGroup?.groupIdentityPrivateKey).to(beNil())
@@ -821,73 +415,72 @@ class LibSessionSpec: QuickSpec {
                 
                 // MARK: ---- updates the name if it changed
                 it("updates the name if it changed") {
-                    createGroupOutput.groupState[.groupInfo]?.conf.map {
-                        var updatedName: [CChar] = "UpdatedName".cArray.nullTerminated()
-                        groups_info_set_name($0, &updatedName)
-                    }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        var cUpdatedName: [CChar] = "UpdatedName".cArray.nullTerminated()
+                        state_set_group_name(mutable_state, &cUpdatedName)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
                     }
                     
                     latestGroup = mockStorage.read(using: dependencies) { db in
-                        try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
+                        try ClosedGroup.fetchOne(db, id: groupId.hexString)
                     }
-                    expect(createGroupOutput.group.name).to(equal("TestGroup"))
                     expect(latestGroup?.name).to(equal("UpdatedName"))
                 }
                 
                 // MARK: ---- updates the description if it changed
                 it("updates the description if it changed") {
-                    createGroupOutput.groupState[.groupInfo]?.conf.map {
-                        var updatedDesc: [CChar] = "UpdatedDesc".cArray.nullTerminated()
-                        groups_info_set_description($0, &updatedDesc)
-                    }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        var cUpdatedDesc: [CChar] = "UpdatedDesc".cArray.nullTerminated()
+                        state_set_group_description(mutable_state, &cUpdatedDesc)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
                     }
                     
                     latestGroup = mockStorage.read(using: dependencies) { db in
-                        try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
+                        try ClosedGroup.fetchOne(db, id: groupId.hexString)
                     }
-                    expect(createGroupOutput.group.groupDescription).to(beNil())
                     expect(latestGroup?.groupDescription).to(equal("UpdatedDesc"))
                 }
                 
                 // MARK: ---- updates the formation timestamp if it changed
                 it("updates the formation timestamp if it changed") {
-                    createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_created($0, 54321) }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        state_set_group_created(mutable_state, 54321)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
                     }
                     
                     latestGroup = mockStorage.read(using: dependencies) { db in
-                        try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
+                        try ClosedGroup.fetchOne(db, id: groupId.hexString)
                     }
-                    expect(createGroupOutput.group.formationTimestamp).to(equal(1234567890))
                     expect(latestGroup?.formationTimestamp).to(equal(54321))
                 }
                 
@@ -904,20 +497,19 @@ class LibSessionSpec: QuickSpec {
                                     ClosedGroup.Columns.displayPictureFilename.set(to: "TestFilename")
                                 )
                         }
-                        dependencies.setMockableValue(key: "needsDump", true)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
                         }
                         
                         latestGroup = mockStorage.read(using: dependencies) { db in
-                            try ClosedGroup.fetchOne(db, id: createGroupOutput.group.threadId)
+                            try ClosedGroup.fetchOne(db, id: groupId.hexString)
                         }
                         expect(latestGroup?.displayPictureUrl).to(beNil())
                         expect(latestGroup?.displayPictureEncryptionKey).to(beNil())
@@ -927,22 +519,22 @@ class LibSessionSpec: QuickSpec {
                     
                     // MARK: ------ schedules a display picture download job if there is a new one
                     it("schedules a display picture download job if there is a new one") {
-                        createGroupOutput.groupState[.groupInfo]?.conf.map {
-                            var displayPic: user_profile_pic = user_profile_pic()
-                            displayPic.url = "https://www.oxen.io/file/1234".toLibSession()
-                            displayPic.key = Data(
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            var cDisplayPic: user_profile_pic = user_profile_pic()
+                            cDisplayPic.url = "https://www.oxen.io/file/1234".toLibSession()
+                            cDisplayPic.key = Data(
                                 repeating: 1,
                                 count: DisplayPictureManager.aes256KeyByteLength
                             ).toLibSession()
-                            groups_info_set_pic($0, displayPic)
-                        }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                            state_set_group_pic(mutable_state, cDisplayPic)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -960,7 +552,7 @@ class LibSessionSpec: QuickSpec {
                                         shouldSkipLaunchBecomeActive: false,
                                         details: DisplayPictureDownloadJob.Details(
                                             target: .group(
-                                                id: createGroupOutput.group.threadId,
+                                                id: groupId.hexString,
                                                 url: "https://www.oxen.io/file/1234",
                                                 encryptionKey: Data(
                                                     repeating: 1,
@@ -979,21 +571,23 @@ class LibSessionSpec: QuickSpec {
                 
                 // MARK: ---- updates the disappearing messages config
                 it("updates the disappearing messages config") {
-                    createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_expiry_timer($0, 10) }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        state_set_group_expiry_timer(mutable_state, 10)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
                     }
                     
                     latestDisappearingConfig = mockStorage.read(using: dependencies) { db in
-                        try DisappearingMessagesConfiguration.fetchOne(db, id: createGroupOutput.group.threadId)
+                        try DisappearingMessagesConfiguration.fetchOne(db, id: groupId.hexString)
                     }
                     expect(initialDisappearingConfig?.isEnabled).to(beFalse())
                     expect(initialDisappearingConfig?.durationSeconds).to(equal(0))
@@ -1010,7 +604,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1018,21 +612,23 @@ class LibSessionSpec: QuickSpec {
                             )
                             _ = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_delete_before($0, 123456) }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1049,7 +645,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1057,28 +653,30 @@ class LibSessionSpec: QuickSpec {
                             )
                             _ = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
                             ).inserted(db)
                             _ = try Interaction(
                                 serverHash: "1235",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4322",
                                 variant: .standardIncoming,
                                 timestampMs: 200000000
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_delete_before($0, 123456) }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1100,7 +698,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1108,7 +706,7 @@ class LibSessionSpec: QuickSpec {
                             )
                             let interaction: Interaction = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
@@ -1126,16 +724,16 @@ class LibSessionSpec: QuickSpec {
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map {
-                            groups_info_set_attach_delete_before($0, 123456)
-                        }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_attach_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1152,7 +750,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1160,7 +758,7 @@ class LibSessionSpec: QuickSpec {
                             )
                             let interaction: Interaction = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
@@ -1178,16 +776,16 @@ class LibSessionSpec: QuickSpec {
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map {
-                            groups_info_set_attach_delete_before($0, 123456)
-                        }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_attach_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1218,7 +816,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1226,14 +824,14 @@ class LibSessionSpec: QuickSpec {
                             )
                             let interaction1: Interaction = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
                             ).inserted(db)
                             let interaction2: Interaction = try Interaction(
                                 serverHash: "1235",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 200000000
@@ -1262,16 +860,16 @@ class LibSessionSpec: QuickSpec {
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map {
-                            groups_info_set_attach_delete_before($0, 123456)
-                        }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_attach_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1288,7 +886,7 @@ class LibSessionSpec: QuickSpec {
                         mockStorage.write(using: dependencies) { db in
                             try SessionThread.fetchOrCreate(
                                 db,
-                                id: createGroupOutput.group.threadId,
+                                id: groupId.hexString,
                                 variant: .contact,
                                 shouldBeVisible: true,
                                 calledFromConfigHandling: false,
@@ -1296,14 +894,14 @@ class LibSessionSpec: QuickSpec {
                             )
                             let interaction1: Interaction = try Interaction(
                                 serverHash: "1234",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 100000000
                             ).inserted(db)
                             _ = try Interaction(
                                 serverHash: "1235",
-                                threadId: createGroupOutput.group.threadId,
+                                threadId: groupId.hexString,
                                 authorId: "4321",
                                 variant: .standardIncoming,
                                 timestampMs: 200000000
@@ -1321,16 +919,16 @@ class LibSessionSpec: QuickSpec {
                             ).inserted(db)
                         }
                         
-                        createGroupOutput.groupState[.groupInfo]?.conf.map {
-                            groups_info_set_attach_delete_before($0, 123456)
-                        }
-                        dependencies.setMockableValue(key: "needsDump", true)
+                        var cGroupId: [CChar] = groupId.hexString.cArray
+                        state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                            state_set_group_attach_delete_before(mutable_state, 123456)
+                        }, nil)
                         
                         mockStorage.write(using: dependencies) { db in
                             try LibSession.handleGroupInfoUpdate(
                                 db,
-                                in: createGroupOutput.groupState[.groupInfo],
-                                groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                                in: stateManager.state,
+                                groupSessionId: SessionId(.group, hex: groupId.hexString),
                                 serverTimestampMs: 1234567891000,
                                 using: dependencies
                             )
@@ -1348,7 +946,7 @@ class LibSessionSpec: QuickSpec {
                     mockStorage.write(using: dependencies) { db in
                         try SessionThread.fetchOrCreate(
                             db,
-                            id: createGroupOutput.group.threadId,
+                            id: groupId.hexString,
                             variant: .contact,
                             shouldBeVisible: true,
                             calledFromConfigHandling: false,
@@ -1356,21 +954,23 @@ class LibSessionSpec: QuickSpec {
                         )
                         _ = try Interaction(
                             serverHash: "1234",
-                            threadId: createGroupOutput.group.threadId,
+                            threadId: groupId.hexString,
                             authorId: "4321",
                             variant: .standardIncoming,
                             timestampMs: 100000000
                         ).inserted(db)
                     }
                     
-                    createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_delete_before($0, 123456) }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        state_set_group_delete_before(mutable_state, 123456)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
@@ -1381,8 +981,8 @@ class LibSessionSpec: QuickSpec {
                             serverHashes: ["1234"],
                             requireSuccessfulDeletion: false,
                             authMethod: Authentication.groupAdmin(
-                                groupSessionId: createGroupOutput.groupSessionId,
-                                ed25519SecretKey: createGroupOutput.identityKeyPair.secretKey
+                                groupSessionId: groupId,
+                                ed25519SecretKey: Array(groupSecretKey!)
                             ),
                             using: dependencies
                         )
@@ -1405,28 +1005,30 @@ class LibSessionSpec: QuickSpec {
                     mockStorage.write(using: dependencies) { db in
                         try SessionThread.fetchOrCreate(
                             db,
-                            id: createGroupOutput.group.threadId,
+                            id: groupId.hexString,
                             variant: .contact,
                             shouldBeVisible: true,
                             calledFromConfigHandling: false,
                             using: dependencies
                         )
                         _ = try Interaction(
-                            threadId: createGroupOutput.group.threadId,
+                            threadId: groupId.hexString,
                             authorId: "4321",
                             variant: .standardIncoming,
                             timestampMs: 100000000
                         ).inserted(db)
                     }
                     
-                    createGroupOutput.groupState[.groupInfo]?.conf.map { groups_info_set_delete_before($0, 123456) }
-                    dependencies.setMockableValue(key: "needsDump", true)
+                    var cGroupId: [CChar] = groupId.hexString.cArray
+                    state_mutate_group(stateManager.state, &cGroupId, { mutable_state, ctx in
+                        state_set_group_delete_before(mutable_state, 123456)
+                    }, nil)
                     
                     mockStorage.write(using: dependencies) { db in
                         try LibSession.handleGroupInfoUpdate(
                             db,
-                            in: createGroupOutput.groupState[.groupInfo],
-                            groupSessionId: SessionId(.group, hex: createGroupOutput.group.threadId),
+                            in: stateManager.state,
+                            groupSessionId: SessionId(.group, hex: groupId.hexString),
                             serverTimestampMs: 1234567891000,
                             using: dependencies
                         )
@@ -1442,17 +1044,6 @@ class LibSessionSpec: QuickSpec {
                         })
                 }
             }
-        }
-    }
-}
-
-// MARK: - Convenience
-
-private extension LibSession.Config {
-    var conf: UnsafeMutablePointer<config_object>? {
-        switch self {
-            case .object(let conf): return conf
-            default: return nil
         }
     }
 }

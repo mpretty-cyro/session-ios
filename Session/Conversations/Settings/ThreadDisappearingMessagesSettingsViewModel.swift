@@ -642,6 +642,7 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                 case .contact:
                     try LibSession.update(
                         sessionId: threadId,
+                        userSessionId: getUserSessionId(db, using: dependencies),
                         disappearingMessagesConfig: updatedConfig,
                         using: dependencies
                     )

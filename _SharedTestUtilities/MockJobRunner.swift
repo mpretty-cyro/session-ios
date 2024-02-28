@@ -20,6 +20,8 @@ class MockJobRunner: Mock<JobRunnerType>, JobRunnerType {
         mockNoReturn()
     }
     
+    func queue(for variant: Job.Variant) -> DispatchQueue? { DispatchQueue.main }
+    
     // MARK: - State Management
     
     func jobInfoFor(jobs: [Job]?, state: JobRunner.JobState, variant: Job.Variant?) -> [Int64: JobRunner.JobInfo] {

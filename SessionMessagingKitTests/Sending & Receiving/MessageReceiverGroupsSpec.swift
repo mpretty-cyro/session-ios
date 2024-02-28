@@ -83,7 +83,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
                     .thenReturn(Authentication.Signature.standard(signature: "TestSignature".bytes))
                 crypto
-                    .when { $0.generate(.signatureSubaccount(config: .any, verificationBytes: .any, memberAuthData: .any)) }
+                    .when { $0.generate(.signatureSubaccount(groupSessionId: .any, verificationBytes: .any, memberAuthData: .any, using: .any)) }
                     .thenReturn(Authentication.Signature.subaccount(
                         subaccount: "TestSubAccount".bytes,
                         subaccountSig: "TestSubAccountSignature".bytes,
@@ -107,68 +107,34 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
             }
         )
-        @TestState var secretKey: [UInt8]! = Array(Data(hex: TestConstants.edSecretKey))
-        @TestState var groupEdPK: [UInt8]! = groupKeyPair.publicKey
-        @TestState var groupEdSK: [UInt8]! = groupKeyPair.secretKey
-        @TestState var userGroupsConfig: LibSession.Config! = {
-            var conf: UnsafeMutablePointer<config_object>!
-            _ = user_groups_init(&conf, &secretKey, nil, 0, nil)
-            
-            return .object(conf)
+        @TestState(singleton: .libSession, in: dependencies) var stateManager: LibSession.StateManager! = { [dependencies, mockStorage] in
+            mockStorage!.read { db in
+                let result = try LibSession.StateManager(db, using: dependencies!)
+                MockStateManager.registerFakeResponse(for: result.state)
+                return result
+            }
         }()
-        @TestState var convoInfoVolatileConfig: LibSession.Config! = {
-            var conf: UnsafeMutablePointer<config_object>!
-            _ = convo_info_volatile_init(&conf, &secretKey, nil, 0, nil)
-            
-            return .object(conf)
-        }()
-        @TestState var groupInfoConf: UnsafeMutablePointer<config_object>! = {
-            var conf: UnsafeMutablePointer<config_object>!
-            _ = groups_info_init(&conf, &groupEdPK, &groupEdSK, nil, 0, nil)
-            
-            return conf
-        }()
-        @TestState var groupMembersConf: UnsafeMutablePointer<config_object>! = {
-            var conf: UnsafeMutablePointer<config_object>!
-            _ = groups_members_init(&conf, &groupEdPK, &groupEdSK, nil, 0, nil)
-            
-            return conf
-        }()
-        @TestState var groupKeysConf: UnsafeMutablePointer<config_group_keys>! = {
-            var conf: UnsafeMutablePointer<config_group_keys>!
-            _ = groups_keys_init(&conf, &secretKey, &groupEdPK, &groupEdSK, groupInfoConf, groupMembersConf, nil, 0, nil)
-            
-            return conf
-        }()
-        @TestState var groupInfoConfig: LibSession.Config! = .object(groupInfoConf)
-        @TestState var groupMembersConfig: LibSession.Config! = .object(groupMembersConf)
-        @TestState var groupKeysConfig: LibSession.Config! = .groupKeys(
-            groupKeysConf,
-            info: groupInfoConf,
-            members: groupMembersConf
-        )
-        @TestState(cache: .libSession, in: dependencies) var mockLibSessionCache: MockLibSessionCache! = MockLibSessionCache(
-            initialSetup: { cache in
-                let userSessionId: SessionId = SessionId(.standard, hex: TestConstants.publicKey)
-                
-                cache
-                    .when { $0.setConfig(for: .any, sessionId: .any, to: .any) }
-                    .thenReturn(())
-                cache
-                    .when { $0.config(for: .userGroups, sessionId: userSessionId) }
-                    .thenReturn(Atomic(userGroupsConfig))
-                cache
-                    .when { $0.config(for: .convoInfoVolatile, sessionId: userSessionId) }
-                    .thenReturn(Atomic(convoInfoVolatileConfig))
-                cache
-                    .when { $0.config(for: .groupInfo, sessionId: groupId) }
-                    .thenReturn(Atomic(groupInfoConfig))
-                cache
-                    .when { $0.config(for: .groupMembers, sessionId: groupId) }
-                    .thenReturn(Atomic(groupMembersConfig))
-                cache
-                    .when { $0.config(for: .groupKeys, sessionId: groupId) }
-                    .thenReturn(Atomic(groupKeysConfig))
+        @TestState var mockStateManager: MockStateManager! = MockStateManager(
+            initialSetup: { stateManager in
+                stateManager.when { $0.currentGeneration(groupSessionId: groupId) }.thenReturn(1)
+                stateManager.when { $0.approveGroup(groupSessionId: .any) }.thenReturn(nil)
+                stateManager.when { $0.removeGroup(groupSessionId: .any, removeUserState: .any) }.thenReturn(nil)
+                stateManager.when { try $0.markAsKicked(groupSessionIds: .any) }.thenReturn(nil)
+                stateManager.when { try $0.wasKickedFromGroup(groupSessionId: .any) }.thenReturn(false)
+                stateManager.when { try $0.loadGroupAdminKey(groupSessionId: .any, groupIdentitySeed: .any) }.thenReturn(nil)
+                stateManager.when { try $0.mutate { _ in } }.thenReturn(nil)
+                stateManager.when { try $0.mutate(groupId: .any) { _ in } }.thenReturn(nil)
+                stateManager
+                    .when {
+                        $0.timestampAlreadyRead(
+                            threadId: .any,
+                            rawThreadVariant: .any,
+                            timestampMs: .any,
+                            openGroupServer: .any,
+                            openGroupRoomToken: .any
+                        )
+                    }
+                    .thenReturn(false)
             }
         )
         @TestState var mockSwarmCache: Set<Snode>! = [
@@ -194,8 +160,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
         @TestState(cache: .snodeAPI, in: dependencies) var mockSnodeAPICache: MockSnodeAPICache! = MockSnodeAPICache(
             initialSetup: { cache in
                 cache.when { $0.clockOffsetMs }.thenReturn(0)
-                cache.when { $0.loadedSwarms }.thenReturn([groupId.hexString])
-                cache.when { $0.swarmCache }.thenReturn([groupId.hexString: mockSwarmCache])
+                cache.when { $0.hasLoadedSwarm(for: .any) }.thenReturn(true)
+                cache.when { $0.swarmCache(publicKey: .any) }.thenReturn(mockSwarmCache)
+                cache.when { $0.setSwarmCache(publicKey: .any, cache: .any) }.thenReturn(nil)
             }
         )
         @TestState(singleton: .groupsPoller, in: dependencies) var mockGroupsPoller: MockPoller! = MockPoller(
@@ -318,8 +285,48 @@ class MessageReceiverGroupsSpec: QuickSpec {
         
         // MARK: - a MessageReceiver dealing with Groups
         describe("a MessageReceiver dealing with Groups") {
+            beforeEach {
+                stateManager.createGroup(
+                    name: "",
+                    description: nil,
+                    displayPictureUrl: nil,
+                    displayPictureEncryptionKey: nil,
+                    members: []
+                ) { groupIdNew, groupSecretKeyNew, _ in
+                    groupId = SessionId(.group, hex: groupIdNew)
+                    groupSecretKey = Data(groupSecretKeyNew)
+                }
+                mockCrypto
+                    .when { $0.generate(.ed25519KeyPair(seed: .any)) }
+                    .thenReturn(KeyPair(publicKey: Array(Data(hex: groupId.hexString)), secretKey: Array(groupSecretKey)))
+            }
+            
+            receivingGroupInvitation()
+            receivingGroupPromotion()
+            receivingInfoChanged()
+            receivingMemberChanged()
+            receivingMemberLeft()
+            receivingInviteResponse()
+            receivingDeleteContent()
+            receivingDelete()
+            receivingMemberVisibleMessage()
+        }
+        
+        func receivingGroupInvitation() {
             // MARK: -- when receiving a group invitation
             context("when receiving a group invitation") {
+                beforeEach {
+                    dependencies.set(singleton: .libSession, to: mockStateManager)
+                    groupId = SessionId(.group, hex: "03cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece")
+                    groupSecretKey = Data(hex:
+                        "0123456789abcdef0123456789abcdeffedcba9876543210fedcba9876543210" +
+                        "cbd569f56fb13ea95a3f0c05c331cc24139c0090feb412069dc49fab34406ece"
+                    )
+                    mockCrypto
+                        .when { $0.generate(.ed25519KeyPair(seed: .any)) }
+                        .thenReturn(KeyPair(publicKey: Array(Data(hex: groupId.hexString)), secretKey: Array(groupSecretKey)))
+                }
+                
                 // MARK: ---- throws if the admin signature fails to verify
                 it("throws if the admin signature fails to verify") {
                     mockCrypto
@@ -450,7 +457,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(user_groups_size(userGroupsConfig.conf)).to(equal(1))
+                    expect(state_size_ugroups(stateManager.state)).to(equal(1))
                 }
                 
                 // MARK: ---- from a sender that is not approved
@@ -484,6 +491,8 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     
                     // MARK: ------ adds the group to USER_GROUPS with the invited flag set to true
                     it("adds the group to USER_GROUPS with the invited flag set to true") {
+                        dependencies.set(singleton: .libSession, to: stateManager)
+                        
                         mockStorage.write { db in
                             try MessageReceiver.handleGroupUpdateMessage(
                                 db,
@@ -494,11 +503,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                        var userGroup: ugroups_group_info = ugroups_group_info()
-                        
-                        expect(user_groups_get_group(userGroupsConfig.conf, &userGroup, &cGroupId)).to(beTrue())
-                        expect(userGroup.invited).to(beTrue())
+                        let cGroup: CGroup? = stateManager.group(groupSessionId: groupId.hexString)
+                        expect(cGroup).toNot(beNil())
+                        expect(cGroup?.invited).to(beTrue())
                     }
                     
                     // MARK: ------ does not start the poller
@@ -604,34 +611,10 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         expect(groups?.first?.invited).to(beFalse())
                     }
                     
-                    // MARK: ------ creates the group state
-                    it("creates the group state") {
-                        mockStorage.write { db in
-                            try MessageReceiver.handleGroupUpdateMessage(
-                                db,
-                                threadId: groupId.hexString,
-                                threadVariant: .group,
-                                message: inviteMessage,
-                                using: dependencies
-                            )
-                        }
-                        
-                        expect(mockLibSessionCache)
-                            .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
-                                $0.setConfig(for: .groupInfo, sessionId: groupId, to: .any)
-                            })
-                        expect(mockLibSessionCache)
-                            .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
-                                $0.setConfig(for: .groupMembers, sessionId: groupId, to: .any)
-                            })
-                        expect(mockLibSessionCache)
-                            .to(call(.exactly(times: 1), matchingParameters: .atLeast(2)) {
-                                $0.setConfig(for: .groupKeys, sessionId: groupId, to: .any)
-                            })
-                    }
-                    
                     // MARK: ------ adds the group to USER_GROUPS with the invited flag set to false
                     it("adds the group to USER_GROUPS with the invited flag set to false") {
+                        dependencies.set(singleton: .libSession, to: stateManager)
+                        
                         mockStorage.write { db in
                             try MessageReceiver.handleGroupUpdateMessage(
                                 db,
@@ -642,11 +625,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                        var userGroup: ugroups_group_info = ugroups_group_info()
-                        
-                        expect(user_groups_get_group(userGroupsConfig.conf, &userGroup, &cGroupId)).to(beTrue())
-                        expect(userGroup.invited).to(beFalse())
+                        let cGroup: CGroup? = stateManager.group(groupSessionId: groupId.hexString)
+                        expect(cGroup).toNot(beNil())
+                        expect(cGroup?.invited).to(beFalse())
                     }
                     
                     // MARK: ------ starts the poller
@@ -848,17 +829,20 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     expect(interactions?.count).to(equal(0))
                 }
             }
-            
+        }
+        
+        func receivingGroupPromotion() {
             // MARK: -- when receiving a group promotion
             context("when receiving a group promotion") {
                 @TestState var result: Result<Void, Error>!
                 
                 beforeEach {
-                    var cMemberId: [CChar] = "05\(TestConstants.publicKey)".cArray
-                    var member: config_group_member = config_group_member()
-                    _ = groups_members_get_or_construct(groupMembersConf, &member, &cMemberId)
-                    member.name = "TestName".toLibSession()
-                    groups_members_set(groupMembersConf, &member)
+                    stateManager.addGroupMembers(
+                        groupSessionId: groupId,
+                        allowAccessToHistoricMessages: false,
+                        members: [("05\(TestConstants.publicKey)", "TestName", nil, nil)],
+                        callback: { _ in }
+                    )
                     
                     mockStorage.write(using: dependencies) { db in
                         try SessionThread.fetchOrCreate(
@@ -901,7 +885,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 
                 // MARK: ---- updates the GROUP_KEYS state correctly
                 it("updates the GROUP_KEYS state correctly") {
-                    mockCrypto.when { $0.generate(.ed25519KeyPair(seed: .any)) }.thenReturn(nil)
+                    dependencies.set(singleton: .libSession, to: mockStateManager)
                     
                     mockStorage.write { db in
                         try MessageReceiver.handleGroupUpdateMessage(
@@ -913,8 +897,13 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(LibSession.isAdmin(groupSessionId: groupId, using: dependencies))
-                        .to(beTrue())
+                    expect(mockStateManager)
+                        .to(call(.exactly(times: 1), matchingParameters: .all) {
+                            try $0.loadGroupAdminKey(
+                                groupSessionId: groupId,
+                                groupIdentitySeed: Array(promoteMessage.groupIdentitySeed)
+                            )
+                        })
                 }
                 
                 // MARK: ---- replaces the memberAuthData with the admin key in the database
@@ -932,18 +921,20 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                     
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
                     let groups: [ClosedGroup]? = mockStorage.read { db in try ClosedGroup.fetchAll(db) }
                     expect(groups?.count).to(equal(1))
-                    expect(groups?.first?.groupIdentityPrivateKey).to(equal(Data(groupKeyPair.secretKey)))
+                    expect(groups?.first?.groupIdentityPrivateKey).to(equal(groupSecretKey))
                     expect(groups?.first?.authData).to(beNil())
                 }
                 
@@ -960,13 +951,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                     
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
                     let members: [GroupMember]? = mockStorage.read { db in try GroupMember.fetchAll(db) }
@@ -988,13 +981,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                     
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
                     let members: [GroupMember]? = mockStorage.read { db in try GroupMember.fetchAll(db) }
@@ -1016,13 +1011,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                     
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
                     let members: [GroupMember]? = mockStorage.read { db in try GroupMember.fetchAll(db) }
@@ -1044,13 +1041,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                     
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
                     let members: [GroupMember]? = mockStorage.read { db in try GroupMember.fetchAll(db) }
@@ -1062,29 +1061,36 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 // MARK: ---- updates the member in GROUP_MEMBERS from a standard member to be an approved admin
                 it("updates the member in GROUP_MEMBERS from a standard member to be an approved admin") {
                     mockStorage.write { db in
-                        try MessageReceiver.handleGroupUpdateMessage(
-                            db,
-                            threadId: groupId.hexString,
-                            threadVariant: .group,
-                            message: promoteMessage,
-                            using: dependencies
-                        )
+                        expect {
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: promoteMessage,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                     }
                     
-                    var cMemberId: [CChar] = "05\(TestConstants.publicKey)".cArray
-                    var groupMember: config_group_member = config_group_member()
-                    _ = groups_members_get(groupMembersConf, &groupMember, &cMemberId)
-                    expect(groupMember.admin).to(beTrue())
-                    expect(groupMember.promoted).to(equal(0))
+                    let cMember: CGroupMember? = stateManager.groupMember(
+                        groupSessionId: groupId,
+                        sessionId: "05\(TestConstants.publicKey)"
+                    )
+                    expect(cMember?.admin).to(beTrue())
+                    expect(cMember?.promoted).to(equal(0))
                 }
                 
                 // MARK: ---- updates the member in GROUP_MEMBERS from a pending admin to be an approved admin
                 it("updates the member in GROUP_MEMBERS from a pending admin to be an approved admin") {
-                    var cMemberId: [CChar] = "05\(TestConstants.publicKey)".cArray
-                    var initialMember: config_group_member = config_group_member()
-                    _ = groups_members_get_or_construct(groupMembersConf, &initialMember, &cMemberId)
-                    initialMember.promoted = 1
-                    groups_members_set(groupMembersConf, &initialMember)
+                    expect {
+                        try LibSession.updateMemberStatus(
+                            groupSessionId: groupId,
+                            memberId: "05\(TestConstants.publicKey)",
+                            role: .admin,
+                            status: .pending,
+                            using: dependencies
+                        )
+                    }.toNot(throwError())
                     
                     mockStorage.write { db in
                         try MessageReceiver.handleGroupUpdateMessage(
@@ -1096,13 +1102,17 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    var groupMember: config_group_member = config_group_member()
-                    _ = groups_members_get(groupMembersConf, &groupMember, &cMemberId)
-                    expect(groupMember.admin).to(beTrue())
-                    expect(groupMember.promoted).to(equal(0))
+                    let cMember: CGroupMember? = stateManager.groupMember(
+                        groupSessionId: groupId,
+                        sessionId: "05\(TestConstants.publicKey)"
+                    )
+                    expect(cMember?.admin).to(beTrue())
+                    expect(cMember?.promoted).to(equal(0))
                 }
             }
-            
+        }
+        
+        func receivingInfoChanged() {
             // MARK: -- when receiving an info changed message
             context("when receiving an info changed message") {
                 beforeEach {
@@ -1274,7 +1284,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                 }
             }
-            
+        }
+        
+        func receivingMemberChanged() {
             // MARK: -- when receiving a member changed message
             context("when receiving a member changed message") {
                 beforeEach {
@@ -1668,7 +1680,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                 }
             }
-            
+        }
+        
+        func receivingMemberLeft() {
             // MARK: -- when receiving a member left message
             context("when receiving a member left message") {
                 beforeEach {
@@ -1770,12 +1784,14 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 // MARK: ---- when the current user is a group admin
                 context("when the current user is a group admin") {
                     beforeEach {
-                        // Only update members if they already exist in the group
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        _ = groups_members_get_or_construct(groupMembersConf, &groupMember, &cMemberId)
-                        groupMember.name = "TestOtherName".toLibSession()
-                        groups_members_set(groupMembersConf, &groupMember)
+                        stateManager.addGroupMembers(
+                            groupSessionId: groupId,
+                            allowAccessToHistoricMessages: false,
+                            members: [
+                                ("051111111111111111111111111111111111111111111111111111111111111112", "TestOtherName", nil, nil)
+                            ],
+                            callback: { _ in }
+                        )
                         
                         mockStorage.write { db in
                             try ClosedGroup(
@@ -1810,14 +1826,17 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                        expect(groupMember.removed).to(equal(1))
+                        let cMember: CGroupMember? = stateManager.groupMember(
+                            groupSessionId: groupId,
+                            sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                        )
+                        expect(cMember?.removed).to(equal(1))
                     }
                     
                     // MARK: ------ removes the GroupMember
                     it("removes the GroupMember") {
+                        dependencies.set(singleton: .libSession, to: mockStateManager)
+                        
                         mockStorage.write { db in
                             try MessageReceiver.handleGroupUpdateMessage(
                                 db,
@@ -1834,6 +1853,8 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     
                     // MARK: ------ schedules a job to process the pending removal
                     it("schedules a job to process the pending removal") {
+                        dependencies.set(singleton: .libSession, to: mockStateManager)
+                        
                         mockStorage.write { db in
                             try MessageReceiver.handleGroupUpdateMessage(
                                 db,
@@ -1921,7 +1942,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                 }
             }
-            
+        }
+        
+        func receivingInviteResponse() {
             // MARK: -- when receiving an invite response message
             context("when receiving an invite response message") {
                 beforeEach {
@@ -1995,12 +2018,14 @@ class MessageReceiverGroupsSpec: QuickSpec {
                 context("and the current user is a group admin") {
                     beforeEach {
                         // Only update members if they already exist in the group
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        _ = groups_members_get_or_construct(groupMembersConf, &groupMember, &cMemberId)
-                        groupMember.name = "TestOtherMember".toLibSession()
-                        groupMember.invited = 1
-                        groups_members_set(groupMembersConf, &groupMember)
+                        stateManager.addGroupMembers(
+                            groupSessionId: groupId,
+                            allowAccessToHistoricMessages: false,
+                            members: [
+                                ("051111111111111111111111111111111111111111111111111111111111111112", "TestOtherMember", nil, nil)
+                            ],
+                            callback: { _ in }
+                        )
                         
                         mockStorage.write { db in
                             try ClosedGroup(
@@ -2045,19 +2070,24 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         expect(members?.first?.role).to(equal(.standard))
                         expect(members?.first?.roleStatus).to(equal(.accepted))
                         
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                        expect(groupMember.invited).to(equal(0))
+                        let cMember: CGroupMember? = stateManager.groupMember(
+                            groupSessionId: groupId,
+                            sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                        )
+                        expect(cMember?.invited).to(equal(0))
                     }
                     
                     // MARK: ------ updates a failed member entry to an accepted member
                     it("updates a failed member entry to an accepted member") {
-                        var cMemberId1: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember1: config_group_member = config_group_member()
-                        _ = groups_members_get(groupMembersConf, &groupMember1, &cMemberId1)
-                        groupMember1.invited = 2
-                        groups_members_set(groupMembersConf, &groupMember1)
+                        expect {
+                            try LibSession.updateMemberStatus(
+                                groupSessionId: groupId,
+                                memberId: "051111111111111111111111111111111111111111111111111111111111111112",
+                                role: .standard,
+                                status: .failed,
+                                using: dependencies
+                            )
+                        }.toNot(throwError())
                         
                         mockStorage.write { db in
                             try GroupMember(
@@ -2087,10 +2117,11 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         expect(members?.first?.role).to(equal(.standard))
                         expect(members?.first?.roleStatus).to(equal(.accepted))
                         
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                        expect(groupMember.invited).to(equal(0))
+                        let cMember: CGroupMember? = stateManager.groupMember(
+                            groupSessionId: groupId,
+                            sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                        )
+                        expect(cMember?.invited).to(equal(0))
                     }
                     
                     // MARK: ------ updates the entry in libSession directly if there is no database value
@@ -2109,14 +2140,17 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                        var groupMember: config_group_member = config_group_member()
-                        expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                        expect(groupMember.invited).to(equal(0))
+                        let cMember: CGroupMember? = stateManager.groupMember(
+                            groupSessionId: groupId,
+                            sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                        )
+                        expect(cMember?.invited).to(equal(0))
                     }
                 }
             }
-            
+        }
+        
+        func receivingDeleteContent() {
             // MARK: -- when receiving a delete content message
             context("when receiving a delete content message") {
                 beforeEach {
@@ -2732,25 +2766,15 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                 }
             }
-            
+        }
+        
+        func receivingDelete() {
             // MARK: -- when receiving a delete message
             context("when receiving a delete message") {
                 beforeEach {
-                    var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                    var userGroup: ugroups_group_info = ugroups_group_info()
-                    user_groups_get_or_construct_group(userGroupsConfig.conf, &userGroup, &cGroupId)
-                    userGroup.name = "TestName".toLibSession()
-                    user_groups_set_group(userGroupsConfig.conf, &userGroup)
-                    
-                    // Rekey a couple of times to increase the key generation to 1
-                    var fakeHash1: [CChar] = "fakehash1".cArray.nullTerminated()
-                    var fakeHash2: [CChar] = "fakehash2".cArray.nullTerminated()
-                    var pushResult: UnsafePointer<UInt8>? = nil
-                    var pushResultLen: Int = 0
-                    _ = groups_keys_rekey(groupKeysConf, groupInfoConf, groupMembersConf, &pushResult, &pushResultLen)
-                    _ = groups_keys_load_message(groupKeysConf, &fakeHash1, pushResult, pushResultLen, 1234567890, groupInfoConf, groupMembersConf)
-                    _ = groups_keys_rekey(groupKeysConf, groupInfoConf, groupMembersConf, &pushResult, &pushResultLen)
-                    _ = groups_keys_load_message(groupKeysConf, &fakeHash2, pushResult, pushResultLen, 1234567890, groupInfoConf, groupMembersConf)
+                    // Ensure we get a couple of times to increase the key generation to 1
+                    mockStateManager.when { $0.currentGeneration(groupSessionId: groupId) }.thenReturn(1)
+                    dependencies.set(singleton: .libSession, to: mockStateManager)
                     
                     mockStorage.write { db in
                         try SessionThread.fetchOrCreate(
@@ -2891,17 +2915,9 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    expect(mockLibSessionCache)
+                    expect(mockStateManager)
                         .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupKeys, sessionId: groupId, to: nil)
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupInfo, sessionId: groupId, to: nil)
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupMembers, sessionId: groupId, to: nil)
+                            $0.removeGroup(groupSessionId: groupId, removeUserState: false)
                         })
                 }
                 
@@ -2915,19 +2931,6 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             using: dependencies
                         )
                     }
-                    
-                    expect(mockLibSessionCache)
-                        .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupKeys, sessionId: groupId, to: nil)
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupInfo, sessionId: groupId, to: nil)
-                        })
-                    expect(mockLibSessionCache)
-                        .to(call(.exactly(times: 1), matchingParameters: .all) {
-                            $0.setConfig(for: .groupMembers, sessionId: groupId, to: nil)
-                        })
                     
                     let dumps: [ConfigDump]? = mockStorage.read { db in
                         try ConfigDump
@@ -3046,9 +3049,10 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                        var userGroup: ugroups_group_info = ugroups_group_info()
-                        expect(user_groups_get_group(userGroupsConfig.conf, &userGroup, &cGroupId)).to(beFalse())
+                        expect(mockStateManager)
+                            .to(call(.exactly(times: 1), matchingParameters: .all) {
+                                try $0.markAsKicked(groupSessionIds: [groupId.hexString])
+                            })
                     }
                 }
                 
@@ -3086,9 +3090,8 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                        var userGroup: ugroups_group_info = ugroups_group_info()
-                        expect(user_groups_get_group(userGroupsConfig.conf, &userGroup, &cGroupId)).to(beTrue())
+                        let cGroup: CGroup? = stateManager.group(groupSessionId: groupId.hexString)
+                        expect(cGroup).toNot(beNil())
                     }
                     
                     // MARK: ---- stops the poller and flags the group to not poll
@@ -3117,6 +3120,24 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     
                     // MARK: ------ marks the group in USER_GROUPS as kicked
                     it("marks the group in USER_GROUPS as kicked") {
+                        // Need to use a proper stateManager for this case
+                        dependencies.set(singleton: .libSession, to: stateManager)
+                        
+                        // Need to add the group befor we delete it
+                        mockStorage.write { db in
+                            try MessageReceiver.handleGroupUpdateMessage(
+                                db,
+                                threadId: groupId.hexString,
+                                threadVariant: .group,
+                                message: inviteMessage,
+                                using: dependencies
+                            )
+                        }
+                        
+                        let cGroup: CGroup? = stateManager.group(groupSessionId: groupId.hexString)
+                        expect(cGroup).toNot(beNil())
+                        
+                        // Now do the deletion
                         mockStorage.write { db in
                             try MessageReceiver.handleGroupDelete(
                                 db,
@@ -3126,10 +3147,7 @@ class MessageReceiverGroupsSpec: QuickSpec {
                             )
                         }
                         
-                        var cGroupId: [CChar] = groupId.hexString.cArray.nullTerminated()
-                        var userGroup: ugroups_group_info = ugroups_group_info()
-                        expect(user_groups_get_group(userGroupsConfig.conf, &userGroup, &cGroupId)).to(beTrue())
-                        expect(ugroups_group_is_kicked(&userGroup)).to(beTrue())
+                        expect(stateManager.wasKickedFromGroup(groupSessionId: groupId)).to(beTrue())
                     }
                 }
                 
@@ -3190,17 +3208,20 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     }
                 }
             }
-            
+        }
+        
+        func receivingMemberVisibleMessage() {
             // MARK: -- when receiving a visible message from a member that is not accepted and the current user is a group admin
             context("when receiving a visible message from a member that is not accepted and the current user is a group admin") {
                 beforeEach {
-                    // Only update members if they already exist in the group
-                    var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                    var groupMember: config_group_member = config_group_member()
-                    _ = groups_members_get_or_construct(groupMembersConf, &groupMember, &cMemberId)
-                    groupMember.name = "TestOtherMember".toLibSession()
-                    groupMember.invited = 1
-                    groups_members_set(groupMembersConf, &groupMember)
+                    stateManager.addGroupMembers(
+                        groupSessionId: groupId,
+                        allowAccessToHistoricMessages: false,
+                        members: [
+                            ("051111111111111111111111111111111111111111111111111111111111111112", "TestOtherMember", nil, nil)
+                        ],
+                        callback: { _ in }
+                    )
                     
                     mockStorage.write { db in
                         try SessionThread.fetchOrCreate(
@@ -3256,19 +3277,24 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     expect(members?.first?.role).to(equal(.standard))
                     expect(members?.first?.roleStatus).to(equal(.accepted))
                     
-                    var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                    var groupMember: config_group_member = config_group_member()
-                    expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                    expect(groupMember.invited).to(equal(0))
+                    let cMember: CGroupMember? = stateManager.groupMember(
+                        groupSessionId: groupId,
+                        sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                    )
+                    expect(cMember?.invited).to(equal(0))
                 }
                 
                 // MARK: ---- updates a failed member entry to an accepted member
                 it("updates a failed member entry to an accepted member") {
-                    var cMemberId1: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                    var groupMember1: config_group_member = config_group_member()
-                    _ = groups_members_get(groupMembersConf, &groupMember1, &cMemberId1)
-                    groupMember1.invited = 2
-                    groups_members_set(groupMembersConf, &groupMember1)
+                    expect {
+                        try LibSession.updateMemberStatus(
+                            groupSessionId: groupId,
+                            memberId: "051111111111111111111111111111111111111111111111111111111111111112",
+                            role: .standard,
+                            status: .failed,
+                            using: dependencies
+                        )
+                    }.toNot(throwError())
                     
                     mockStorage.write { db in
                         try GroupMember(
@@ -3300,10 +3326,11 @@ class MessageReceiverGroupsSpec: QuickSpec {
                     expect(members?.first?.role).to(equal(.standard))
                     expect(members?.first?.roleStatus).to(equal(.accepted))
                     
-                    var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                    var groupMember: config_group_member = config_group_member()
-                    expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                    expect(groupMember.invited).to(equal(0))
+                    let cMember: CGroupMember? = stateManager.groupMember(
+                        groupSessionId: groupId,
+                        sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                    )
+                    expect(cMember?.invited).to(equal(0))
                 }
                 
                 // MARK: ---- updates the entry in libSession directly if there is no database value
@@ -3324,10 +3351,11 @@ class MessageReceiverGroupsSpec: QuickSpec {
                         )
                     }
                     
-                    var cMemberId: [CChar] = "051111111111111111111111111111111111111111111111111111111111111112".cArray
-                    var groupMember: config_group_member = config_group_member()
-                    expect(groups_members_get(groupMembersConf, &groupMember, &cMemberId)).to(beTrue())
-                    expect(groupMember.invited).to(equal(0))
+                    let cMember: CGroupMember? = stateManager.groupMember(
+                        groupSessionId: groupId,
+                        sessionId: "051111111111111111111111111111111111111111111111111111111111111112"
+                    )
+                    expect(cMember?.invited).to(equal(0))
                 }
             }
         }
@@ -3335,15 +3363,6 @@ class MessageReceiverGroupsSpec: QuickSpec {
 }
 
 // MARK: - Convenience
-
-private extension LibSession.Config {
-    var conf: UnsafeMutablePointer<config_object>? {
-        switch self {
-            case .object(let conf): return conf
-            default: return nil
-        }
-    }
-}
 
 private extension Result {
     var failure: Failure? {

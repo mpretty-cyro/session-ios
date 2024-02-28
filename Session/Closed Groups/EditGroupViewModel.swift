@@ -732,35 +732,40 @@ class EditGroupViewModel: SessionTableViewModel, NavigatableStateHolder, Editabl
                                         )
                                     }
                                     
-                                    MessageSender.addGroupMembers(
-                                        groupSessionId: threadId,
-                                        members: selectedMemberInfo.map { ($0.profileId, $0.profile) },
-                                        allowAccessToHistoricMessages: dependencies[feature: .updatedGroupsAllowHistoricAccessOnInvite],
-                                        using: dependencies
-                                    ) { error in
-                                        guard error == nil else {
-                                            viewModel?.showToast(
-                                                text: GroupInviteMemberJob.failureMessage(
-                                                    groupName: currentGroupName,
-                                                    memberIds: selectedMemberInfo.map { $0.profileId },
-                                                    profileInfo: selectedMemberInfo
-                                                        .reduce(into: [:]) { result, next in
-                                                            result[next.profileId] = next.profile
-                                                        }
-                                                ),
-                                                backgroundColor: .backgroundSecondary
-                                            )
-                                            return
-                                        }
-                                        
-                                        viewModel?.showToast(
-                                            text: (selectedMemberInfo.count == 1 ?
-                                                "GROUP_ACTION_INVITE_SENDING".localized() :
-                                                "GROUP_ACTION_INVITE_SENDING_MULTIPLE".localized()
-                                            ),
-                                            backgroundColor: .backgroundSecondary
+                                    MessageSender
+                                        .addGroupMembers(
+                                            groupSessionId: threadId,
+                                            members: selectedMemberInfo.map { ($0.profileId, $0.profile) },
+                                            allowAccessToHistoricMessages: dependencies[feature: .updatedGroupsAllowHistoricAccessOnInvite],
+                                            using: dependencies
                                         )
-                                    }
+                                        .sinkUntilComplete(
+                                            receiveCompletion: { result in
+                                                switch result {
+                                                    case .failure:
+                                                        viewModel?.showToast(
+                                                            text: GroupInviteMemberJob.failureMessage(
+                                                                groupName: currentGroupName,
+                                                                memberIds: selectedMemberInfo.map { $0.profileId },
+                                                                profileInfo: selectedMemberInfo
+                                                                    .reduce(into: [:]) { result, next in
+                                                                        result[next.profileId] = next.profile
+                                                                    }
+                                                            ),
+                                                            backgroundColor: .backgroundSecondary
+                                                        )
+                                                        
+                                                    case .finished:
+                                                        viewModel?.showToast(
+                                                            text: (selectedMemberInfo.count == 1 ?
+                                                                "GROUP_ACTION_INVITE_SENDING".localized() :
+                                                                "GROUP_ACTION_INVITE_SENDING_MULTIPLE".localized()
+                                                            ),
+                                                            backgroundColor: .backgroundSecondary
+                                                        )
+                                                }
+                                            }
+                                        )
                                 }
                                 
                             case .standard: // Assume it's a legacy group

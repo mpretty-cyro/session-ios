@@ -101,6 +101,24 @@ public extension LibSession.StateManager {
         
         return result
     }
+    
+    func markAsKicked(groupSessionIds: [String]) throws {
+        // Need to make sure the group doesn't already exist (otherwise we will end up overriding the
+        // content which could revert newer changes since this can be triggered from other 'NEW' messages
+        // coming in from the legacy group swarm)
+        let targetGroups: [CGroup] = groupSessionIds.compactMap { group(groupSessionId: $0) }
+        
+        guard !targetGroups.isEmpty else { return }
+        
+        try mutate { mutable_state in
+            targetGroups.forEach { userGroup in
+                var mutableUserGroup: ugroups_group_info = userGroup
+                
+                ugroups_group_set_kicked(&mutableUserGroup)
+                state_set_ugroups_group(mutable_state, &mutableUserGroup)
+            }
+        }
+    }
 }
 
 // MARK: - UserGroups Handling
@@ -1103,28 +1121,6 @@ public extension LibSession {
                 in: state,
                 using: dependencies
             )
-        }
-    }
-    
-    static func markAsKicked(
-        groupSessionIds: [String],
-        using dependencies: Dependencies
-    ) throws {
-        // Need to make sure the group doesn't already exist (otherwise we will end up overriding the
-        // content which could revert newer changes since this can be triggered from other 'NEW' messages
-        // coming in from the legacy group swarm)
-        let targetGroups: [ugroups_group_info] = groupSessionIds
-            .compactMap { dependencies[singleton: .libSession].group(groupSessionId: $0) }
-        
-        guard !targetGroups.isEmpty else { return }
-        
-        try dependencies[singleton: .libSession].mutate { state in
-            targetGroups.forEach { userGroup in
-                var mutableUserGroup: ugroups_group_info = userGroup
-                
-                ugroups_group_set_kicked(&mutableUserGroup)
-                state_set_ugroups_group(state, &mutableUserGroup)
-            }
         }
     }
     

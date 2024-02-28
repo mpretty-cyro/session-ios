@@ -107,6 +107,7 @@ public protocol StateManagerType {
         callback: @escaping (LibSessionError?) -> Void
     )
     func removeGroup(groupSessionId: SessionId, removeUserState: Bool)
+    func markAsKicked(groupSessionIds: [String]) throws
     func isAdmin(groupSessionId: SessionId) -> Bool
     func currentGeneration(groupSessionId: SessionId) -> Int
     func tokenSubaccount(groupSessionId: SessionId, memberId: String) throws -> [UInt8]
@@ -213,6 +214,7 @@ public extension LibSession {
             callback: @escaping (LibSessionError?) -> Void
         ) { callback(nil) }
         public func removeGroup(groupSessionId: SessionId, removeUserState: Bool) {}
+        public func markAsKicked(groupSessionIds: [String]) throws {}
         
         public func isAdmin(groupSessionId: SessionId) -> Bool { return false }
         public func currentGeneration(groupSessionId: SessionId) -> Int { return 0 }

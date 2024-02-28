@@ -10,10 +10,6 @@ extension Message.Destination: Mocked {
     static var mock: Message.Destination = .contact(publicKey: "")
 }
 
-extension LibSession.Config: Mocked {
-    static var mock: LibSession.Config = .invalid
-}
-
 extension ConfigDump.Variant: Mocked {
     static var mock: ConfigDump.Variant = .userProfile
 }

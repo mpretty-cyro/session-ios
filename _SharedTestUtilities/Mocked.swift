@@ -29,6 +29,7 @@ func anyAny() -> Any { 0 }
 extension Mocked { static var any: Self { mock } }
 
 extension Int: Mocked { static var mock: Int { 0 } }
+extension Int64: Mocked { static var mock: Int64 { 0 } }
 extension Dictionary: Mocked { static var mock: Self { [:] } }
 extension Float: Mocked { static var mock: Float { 0 } }
 extension Double: Mocked { static var mock: Double { 0 } }
@@ -40,6 +41,7 @@ extension Bool: Mocked { static var mock: Bool { false } }
 // so need their own direct 'any' values
 
 extension Array { static var any: Self { mock(type: Element.self) } }
+extension Set { static var any: Self { mock(type: Element.self) } }
 extension Dictionary { static var any: Self { mock(typeA: Key.self, typeB: Value.self) } }
 extension Error { static var any: Error { TestError.mock } }
 
@@ -73,6 +75,12 @@ extension Array: MockedGeneric {
     typealias Generic = Element
     
     static func mock(type: Element.Type) -> [Element] { return [] }
+}
+
+extension Set: MockedGeneric {
+    typealias Generic = Element
+    
+    static func mock(type: Element.Type) -> Set<Element> { return [] }
 }
 
 extension Dictionary: MockedDoubleGeneric {

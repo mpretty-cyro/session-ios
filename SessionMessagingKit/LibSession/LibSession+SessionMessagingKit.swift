@@ -451,6 +451,9 @@ public extension LibSession {
     // MARK: - Loading
     
     static func loadState(_ db: Database, using dependencies: Dependencies) {
+        // When running unit tests we will have explicitly set the dependency so don't want to override it
+        guard !SNUtilitiesKit.isRunningTests else { return }
+        
         do { dependencies.set(singleton: .libSession, to: try StateManager(db, using: dependencies)) }
         catch { SNLog("[LibSession] loadState failed due to error: \(error)") }
     }

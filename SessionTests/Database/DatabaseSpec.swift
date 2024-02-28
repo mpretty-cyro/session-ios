@@ -30,7 +30,12 @@ class DatabaseSpec: QuickSpec {
                 cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
             }
         )
-        @TestState(cache: .libSession, in: dependencies) var libSessionCache: LibSession.Cache! = LibSession.Cache()
+        @TestState(singleton: .libSession, in: dependencies) var mockStateManager: MockStateManager! = MockStateManager(
+            initialSetup: { stateManager in
+                stateManager.when { try $0.mutate { _ in } }.thenReturn(nil)
+                stateManager.when { $0.rawBlindedMessageRequestValue }.thenReturn(0)
+            }
+        )
         @TestState var initialResult: Result<Void, Error>! = nil
         @TestState var finalResult: Result<Void, Error>! = nil
         
@@ -74,7 +79,7 @@ class DatabaseSpec: QuickSpec {
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
+                    onComplete: { result in initialResult = result },
                     using: dependencies
                 )
                 
@@ -90,7 +95,7 @@ class DatabaseSpec: QuickSpec {
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
+                    onComplete: { result in initialResult = result },
                     using: dependencies
                 )
                 expect(initialResult).to(beSuccess())
@@ -117,7 +122,7 @@ class DatabaseSpec: QuickSpec {
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
+                    onComplete: { result in initialResult = result },
                     using: dependencies
                 )
                 expect(initialResult).to(beSuccess())
@@ -145,7 +150,7 @@ class DatabaseSpec: QuickSpec {
                         onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                             MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                         },
-                        onComplete: { result, _ in initialResult = result },
+                        onComplete: { result in initialResult = result },
                         using: dependencies
                     )
                     expect(initialResult).to(beSuccess())
@@ -162,7 +167,7 @@ class DatabaseSpec: QuickSpec {
                         onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                             MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                         },
-                        onComplete: { result, _ in finalResult = result },
+                        onComplete: { result in finalResult = result },
                         using: dependencies
                     )
                     expect(finalResult).to(beSuccess())

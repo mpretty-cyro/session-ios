@@ -584,11 +584,10 @@ public extension LibSession {
     
     static func update(
         sessionId: String,
+        userSessionId: SessionId,
         disappearingMessagesConfig: DisappearingMessagesConfiguration,
         using dependencies: Dependencies
     ) throws {
-        let userSessionId: SessionId = getUserSessionId(using: dependencies)
-        
         try dependencies[singleton: .libSession].mutate { state in
             switch sessionId {
                 case userSessionId.hexString:

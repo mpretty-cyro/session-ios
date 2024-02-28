@@ -493,8 +493,7 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
         /// Clear the snodeAPI and getSnodePool caches
         dependencies.mutate(cache: .snodeAPI) {
             $0.snodePool = []
-            $0.swarmCache = [:]
-            $0.loadedSwarms = []
+            $0.clearSwarmCache()
             $0.snodeFailureCount = [:]
             $0.hasLoadedSnodePool = false
         }

@@ -83,6 +83,7 @@ extension MessageReceiver {
                 case .contact:
                     try LibSession.update(
                         sessionId: threadId,
+                        userSessionId: getUserSessionId(db, using: dependencies),
                         disappearingMessagesConfig: remoteConfig,
                         using: dependencies
                     )
@@ -229,6 +230,7 @@ extension MessageReceiver {
                 case .contact:
                     try LibSession.update(
                         sessionId: threadId,
+                        userSessionId: getUserSessionId(db, using: dependencies),
                         disappearingMessagesConfig: remoteConfig,
                         using: dependencies
                     )

@@ -324,10 +324,7 @@ public extension ClosedGroup {
                     ClosedGroup.Columns.authData.set(to: nil)
                 )
             
-            try LibSession.markAsKicked(
-                groupSessionIds: threadIds,
-                using: dependencies
-            )
+            try dependencies[singleton: .libSession].markAsKicked(groupSessionIds: threadIds)
         }
         
         if dataToRemove.contains(.messages) {

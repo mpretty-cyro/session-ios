@@ -22,7 +22,7 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in },
+                onComplete: { _ in },
                 using: dependencies
             )
         }
@@ -34,7 +34,7 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in },
+                onComplete: { _ in },
                 using: dependencies
             )
         }
