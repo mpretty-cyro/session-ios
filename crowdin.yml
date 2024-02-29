@@ -1,0 +1,5 @@
+commit_message: "[CI SKIP]"
+
+files:
+  - source: /Session/Meta/Translations/en.lproj/Localizable.strings
+    translation: /Session/Meta/Translations/%two_letters_code%.lproj/Localizable.strings
