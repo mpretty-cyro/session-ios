@@ -25,7 +25,7 @@ jobs:
             "./raw_translations" \                    # download_directory
             "./Session/Meta" \                        # output_directory
             "./Scripts/xliff_to_string_catalog.py" \  # conversion_script
-            --single-output
+            --single-output \
             --skip-untranslated-strings
           rm -rf "./raw_translations"
       - name: Create Pull Request
