@@ -15,7 +15,7 @@ jobs:
       - name: Checkout LibSession
         uses: actions/checkout@v4
         with:
-          repository: 'oxen-io/libsession-util'
+          repository: 'mpretty-cyro/libsession-util'
           path: 'libsession'
           ref: 'feature/shared-scripts'
       - name: Setup Python
