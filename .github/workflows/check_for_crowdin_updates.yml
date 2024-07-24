@@ -31,8 +31,8 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
+          commit-message: "[Automated] Update translations from Crowdin"
           title: Update translations from Crowdin
           body: This PR includes the latest translations from Crowdin
-          commit-message: [Automated] Update translations from Crowdin
           branch: feature/update-translations
           delete-branch: true
