@@ -20,11 +20,11 @@ jobs:
           CROWDIN_API_TOKEN: ${{ secrets.CROWDIN_API_TOKEN }}
         run: |
           python Scripts/download_and_convert_translations.py \
-            "$CROWDIN_API_TOKEN" \                    # api_token
-            618696 \                                  # project_id
-            "./raw_translations" \                    # download_directory
-            "./Session/Meta" \                        # output_directory
-            "./Scripts/xliff_to_string_catalog.py" \  # conversion_script
+            "$CROWDIN_API_TOKEN" \
+            618696 \
+            "./raw_translations" \
+            "./Session/Meta" \
+            "./Scripts/xliff_to_string_catalog.py" \
             --single-output \
             --skip-untranslated-strings
           rm -rf "./raw_translations"
