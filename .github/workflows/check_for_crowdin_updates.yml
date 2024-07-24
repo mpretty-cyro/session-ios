@@ -9,6 +9,15 @@ jobs:
     steps:
       - name: Checkout Repo Content
         uses: actions/checkout@v4
+        with:
+          path: 'repo'
+          ref: 'dev'
+      - name: Checkout LibSession
+        uses: actions/checkout@v4
+        with:
+          repository: 'oxen-io/libsession-util'
+          path: 'libsession'
+          ref: 'feature/shared-scripts'
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -20,20 +29,21 @@ jobs:
         env:
           CROWDIN_API_TOKEN: ${{ secrets.CROWDIN_API_TOKEN }}
         run: |
-          python "${{ github.workspace }}/Scripts/download_and_convert_translations.py" \
+          python "${{ github.workspace }}/libsession/utils/shared-scripts/download_and_convert_translations.py" \
             "$CROWDIN_API_TOKEN" \
             618696 \
             "${{ github.workspace }}/raw_translations" \
-            "${{ github.workspace }}/Session/Meta" \
-            "${{ github.workspace }}/Scripts/xliff_to_string_catalog.py" \
+            "${{ github.workspace }}/repo/Session/Meta" \
+            "${{ github.workspace }}/libsession/utils/shared-scripts/xliff_to_string_catalog.py" \
             --single-output \
             --skip-untranslated-strings
           rm -rf "${{ github.workspace }}/raw_translations"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "[Automated] Update translations from Crowdin"
+          path: 'repo'
           title: Update translations from Crowdin
           body: This PR includes the latest translations from Crowdin
           branch: feature/update-translations
+          commit-message: "[Automated] Update translations from Crowdin"
           delete-branch: true
