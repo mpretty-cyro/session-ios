@@ -33,9 +33,13 @@ jobs:
           python "${{ github.workspace }}/libsession/utils/shared-scripts/download_and_convert_translations.py" \
             "$CROWDIN_API_TOKEN" \
             618696 \
+            407522 \
+            36 \
             "${{ github.workspace }}/raw_translations" \
             "${{ github.workspace }}/repo/Session/Meta" \
             "${{ github.workspace }}/libsession/utils/shared-scripts/xliff_to_string_catalog.py" \
+            "${{ github.workspace }}/repo/Session/Meta/Constants.swift" \
+            "${{ github.workspace }}/libsession/utils/shared-scripts/static_strings_to_swift.py" \
             --single-output \
             --skip-untranslated-strings
           rm -rf "${{ github.workspace }}/raw_translations"
@@ -48,3 +52,4 @@ jobs:
           branch: feature/update-translations
           commit-message: "[Automated] Update translations from Crowdin"
           delete-branch: true
+ 
