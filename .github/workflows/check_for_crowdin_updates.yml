@@ -18,6 +18,12 @@ jobs:
           repository: 'mpretty-cyro/libsession-util'
           path: 'libsession'
           ref: 'feature/shared-scripts'
+      - name: Checkout LibSession
+        uses: actions/checkout@v4
+        with:
+          repository: 'mpretty-cyro/session-android'
+          path: 'android'
+          ref: 'dev'
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -51,5 +57,15 @@ jobs:
           body: This PR includes the latest translations from Crowdin
           branch: feature/update-translations
           commit-message: "[Automated] Update translations from Crowdin"
+          delete-branch: true
+      - name: Create Pull Request Cross Repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: 'android'
+          token: ${{ secrets.CROWDIN_PR_TOKEN }}
+          title: Update translations from Crowdin cross-repo
+          body: This PR includes the latest translations from Crowdin cross-repo
+          branch: feature/update-translations-cross-repo
+          commit-message: "[Automated] Update translations from Crowdin cross-repo"
           delete-branch: true
  
