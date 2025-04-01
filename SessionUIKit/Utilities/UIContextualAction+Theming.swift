@@ -3,7 +3,7 @@
 import UIKit
 
 public extension UIContextualAction {
-    private struct ActionInfo {
+    private struct ActionInfo: Sendable {
         let themeTintColor: ThemeValue
         let accessibility: Accessibility?
     }

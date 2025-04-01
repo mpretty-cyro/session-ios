@@ -78,7 +78,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupKeys, sessionId: groupSessionId) { config in
                 guard case .groupKeys(let conf, let infoConf, let membersConf) = config else {
                     throw LibSessionError.invalidConfigObject
@@ -102,7 +102,7 @@ internal extension LibSession {
         memberIds: Set<String>,
         using dependencies: Dependencies
     ) throws -> Data {
-        return try dependencies.mutate(cache: .libSession) { cache in
+        return try dependencies.mutateSync(cache: .libSession) { cache in
             guard case .groupKeys(let conf, _, _) = cache.config(for: .groupKeys, sessionId: groupSessionId) else {
                 throw LibSessionError.invalidConfigObject
             }
@@ -143,7 +143,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             /// Disable the admin check because we are about to convert the user to being an admin and it's guaranteed to fail
             try cache.withCustomBehaviour(.skipGroupAdminCheck, for: groupSessionId) {
                 try cache.performAndPushChange(db, for: .groupKeys, sessionId: groupSessionId) { config in
@@ -163,7 +163,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> Int {
-        return try dependencies.mutate(cache: .libSession) { cache in
+        return try dependencies.mutateSync(cache: .libSession) { cache in
             guard case .groupKeys(let conf, _, _) = cache.config(for: .groupKeys, sessionId: groupSessionId) else {
                 throw LibSessionError.invalidConfigObject
             }
@@ -176,7 +176,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> Int {
-        return try dependencies.mutate(cache: .libSession) { cache in
+        return try dependencies.mutateSync(cache: .libSession) { cache in
             guard case .groupKeys(let conf, _, _) = cache.config(for: .groupKeys, sessionId: groupSessionId) else {
                 throw LibSessionError.invalidConfigObject
             }

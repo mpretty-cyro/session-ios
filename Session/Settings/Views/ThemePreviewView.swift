@@ -26,7 +26,7 @@ public class ThemePreviewView: UIView {
                 ),
                 cellType: .textOnlyMessage
             ),
-            mediaCache: NSCache(),
+            mediaCache: LRUCache(),
             playbackInfo: nil,
             showExpandedReactions: false,
             lastSearchText: nil,
@@ -46,7 +46,7 @@ public class ThemePreviewView: UIView {
                 cellType: .textOnlyMessage,
                 isLast: false // To hide the status indicator
             ),
-            mediaCache: NSCache(),
+            mediaCache: LRUCache(),
             playbackInfo: nil,
             showExpandedReactions: false,
             lastSearchText: nil,

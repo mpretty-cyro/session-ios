@@ -312,7 +312,6 @@
 		C38EF24D255B6D67007E1867 /* UIView+OWS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF240255B6D67007E1867 /* UIView+OWS.swift */; };
 		C38EF24E255B6D67007E1867 /* Collection+OWS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF241255B6D67007E1867 /* Collection+OWS.swift */; };
 		C38EF2B3255B6D9C007E1867 /* UIViewController+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF2B1255B6D9C007E1867 /* UIViewController+Utilities.swift */; };
-		C38EF32E255B6DBF007E1867 /* ImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF304255B6DBE007E1867 /* ImageCache.swift */; };
 		C38EF363255B6DCC007E1867 /* ModalActivityIndicatorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF349255B6DC7007E1867 /* ModalActivityIndicatorViewController.swift */; };
 		C38EF372255B6DCC007E1867 /* MediaMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF358255B6DCC007E1867 /* MediaMessageView.swift */; };
 		C38EF385255B6DD2007E1867 /* AttachmentTextToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38EF37C255B6DCF007E1867 /* AttachmentTextToolbar.swift */; };
@@ -832,13 +831,13 @@
 		FD97B2402A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD97B23F2A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift */; };
 		FD97B2422A3FEBF30027DD57 /* UnreadMarkerCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD97B2412A3FEBF30027DD57 /* UnreadMarkerCell.swift */; };
 		FD99D0872D0FA731005D2E15 /* ThreadSafe.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD99D0862D0FA72E005D2E15 /* ThreadSafe.swift */; };
-		FD99D0902D10E71B005D2E15 /* NSCache+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD99D08F2D10E718005D2E15 /* NSCache+Utilities.swift */; };
 		FD99D0922D10F5EE005D2E15 /* ThreadSafeSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD99D0912D10F5EB005D2E15 /* ThreadSafeSpec.swift */; };
 		FD9AECA52AAA9609009B3406 /* NotificationResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9AECA42AAA9609009B3406 /* NotificationResolution.swift */; };
 		FD9BDE012A5D24EA005F1EBC /* SessionUIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C331FF1B2558F9D300070591 /* SessionUIKit.framework */; };
 		FD9DD2712A72516D00ECB68E /* TestExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9DD2702A72516D00ECB68E /* TestExtensions.swift */; };
 		FD9DD2722A72516D00ECB68E /* TestExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9DD2702A72516D00ECB68E /* TestExtensions.swift */; };
 		FD9DD2732A72516D00ECB68E /* TestExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9DD2702A72516D00ECB68E /* TestExtensions.swift */; };
+		FDA3B2802D9A12F9007E0EB6 /* Concurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA3B27F2D9A12F3007E0EB6 /* Concurrency.swift */; };
 		FDAA16762AC28A3B00DDBF77 /* UserDefaultsType.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAA16752AC28A3B00DDBF77 /* UserDefaultsType.swift */; };
 		FDAA167B2AC28E2F00DDBF77 /* SnodeRequestSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAA167A2AC28E2F00DDBF77 /* SnodeRequestSpec.swift */; };
 		FDAA167D2AC528A200DDBF77 /* Preferences+Sound.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAA167C2AC528A200DDBF77 /* Preferences+Sound.swift */; };
@@ -1584,7 +1583,6 @@
 		C38EF2F5255B6DBC007E1867 /* OWSAudioPlayer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OWSAudioPlayer.h; path = SessionMessagingKit/Utilities/OWSAudioPlayer.h; sourceTree = SOURCE_ROOT; };
 		C38EF2F7255B6DBC007E1867 /* OWSAudioPlayer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = OWSAudioPlayer.m; path = SessionMessagingKit/Utilities/OWSAudioPlayer.m; sourceTree = SOURCE_ROOT; };
 		C38EF2FB255B6DBD007E1867 /* OWSWindowManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OWSWindowManager.h; path = SessionMessagingKit/Utilities/OWSWindowManager.h; sourceTree = SOURCE_ROOT; };
-		C38EF304255B6DBE007E1867 /* ImageCache.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImageCache.swift; path = SignalUtilitiesKit/Utilities/ImageCache.swift; sourceTree = SOURCE_ROOT; };
 		C38EF306255B6DBE007E1867 /* OWSWindowManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = OWSWindowManager.m; path = SessionMessagingKit/Utilities/OWSWindowManager.m; sourceTree = SOURCE_ROOT; };
 		C38EF309255B6DBE007E1867 /* DeviceSleepManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DeviceSleepManager.swift; path = SessionMessagingKit/Utilities/DeviceSleepManager.swift; sourceTree = SOURCE_ROOT; };
 		C38EF349255B6DC7007E1867 /* ModalActivityIndicatorViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ModalActivityIndicatorViewController.swift; path = "SignalUtilitiesKit/Shared View Controllers/ModalActivityIndicatorViewController.swift"; sourceTree = SOURCE_ROOT; };
@@ -2014,10 +2012,10 @@
 		FD97B23F2A3FEB050027DD57 /* ARC4RandomNumberGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARC4RandomNumberGenerator.swift; sourceTree = "<group>"; };
 		FD97B2412A3FEBF30027DD57 /* UnreadMarkerCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMarkerCell.swift; sourceTree = "<group>"; };
 		FD99D0862D0FA72E005D2E15 /* ThreadSafe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSafe.swift; sourceTree = "<group>"; };
-		FD99D08F2D10E718005D2E15 /* NSCache+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSCache+Utilities.swift"; sourceTree = "<group>"; };
 		FD99D0912D10F5EB005D2E15 /* ThreadSafeSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSafeSpec.swift; sourceTree = "<group>"; };
 		FD9AECA42AAA9609009B3406 /* NotificationResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationResolution.swift; sourceTree = "<group>"; };
 		FD9DD2702A72516D00ECB68E /* TestExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestExtensions.swift; sourceTree = "<group>"; };
+		FDA3B27F2D9A12F3007E0EB6 /* Concurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Concurrency.swift; sourceTree = "<group>"; };
 		FDAA16752AC28A3B00DDBF77 /* UserDefaultsType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsType.swift; sourceTree = "<group>"; };
 		FDAA167A2AC28E2F00DDBF77 /* SnodeRequestSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnodeRequestSpec.swift; sourceTree = "<group>"; };
 		FDAA167C2AC528A200DDBF77 /* Preferences+Sound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Preferences+Sound.swift"; sourceTree = "<group>"; };
@@ -2804,7 +2802,6 @@
 				FD2272EF2C352200004D8A6C /* General.swift */,
 				C3C2A5CE2553860700C340D1 /* Logging.swift */,
 				C33FDAFD255A580600E217F9 /* LRUCache.swift */,
-				FD99D08F2D10E718005D2E15 /* NSCache+Utilities.swift */,
 				C33FDA7A255A57FB00E217F9 /* NSRegularExpression+SSK.swift */,
 				7B1D74AF27C365960030B423 /* Timer+MainThread.swift */,
 				FD705A91278D051200F16121 /* ReusableView.swift */,
@@ -3558,7 +3555,6 @@
 				FD71161D28D9772700B47552 /* UIViewController+OWS.swift */,
 				C38EF2B1255B6D9C007E1867 /* UIViewController+Utilities.swift */,
 				C33FDBD3255A581800E217F9 /* OWSSignalAddress.swift */,
-				C38EF304255B6DBE007E1867 /* ImageCache.swift */,
 				C33FDA9E255A57FF00E217F9 /* ReverseDispatchQueue.swift */,
 				C38EF241255B6D67007E1867 /* Collection+OWS.swift */,
 				C38EF3AE255B6DE5007E1867 /* OrderedDictionary.swift */,
@@ -3712,6 +3708,7 @@
 				FD7443472D07CA9F00862443 /* CGRect+Utilities.swift */,
 				FD7443482D07CA9F00862443 /* CGSize+Utilities.swift */,
 				FD7443492D07CA9F00862443 /* Codable+Utilities.swift */,
+				FDA3B27F2D9A12F3007E0EB6 /* Concurrency.swift */,
 				FDC1BD692CFE7B67002CDC71 /* DirectoryArchiver.swift */,
 				FDE33BBB2D5C124300E56F42 /* DispatchTimeInterval+Utilities.swift */,
 				FD559DF42A7368CB00C7C62A /* DispatchQueue+Utilities.swift */,
@@ -5847,7 +5844,6 @@
 				C38EF38C255B6DD2007E1867 /* ApprovalRailCellView.swift in Sources */,
 				C38EF3C7255B6DE7007E1867 /* ImageEditorCanvasView.swift in Sources */,
 				C38EF400255B6DF7007E1867 /* GalleryRailView.swift in Sources */,
-				C38EF32E255B6DBF007E1867 /* ImageCache.swift in Sources */,
 				C38EF3BA255B6DE7007E1867 /* ImageEditorItem.swift in Sources */,
 				C38EF24E255B6D67007E1867 /* Collection+OWS.swift in Sources */,
 				FD2272DD2C34EFFA004D8A6C /* AppSetup.swift in Sources */,
@@ -6060,6 +6056,7 @@
 				FD7728962849E7E90018502F /* String+Utilities.swift in Sources */,
 				C35D0DB525AE5F1200B6BF49 /* UIEdgeInsets.swift in Sources */,
 				FDF222092818D2B0000A4995 /* NSAttributedString+Utilities.swift in Sources */,
+				FDA3B2802D9A12F9007E0EB6 /* Concurrency.swift in Sources */,
 				C32C5E0C256DDAFA003C73A2 /* NSRegularExpression+SSK.swift in Sources */,
 				FD29598D2A43BC0B00888A17 /* Version.swift in Sources */,
 				FD71160028C8253500B47552 /* UIView+Combine.swift in Sources */,
@@ -6067,7 +6064,6 @@
 				FD17D7CD27F546FF00122BE0 /* Setting.swift in Sources */,
 				FDE754D42C9BAF6B002A2623 /* UICollectionView+ReusableView.swift in Sources */,
 				FDE754C02C9BAEF6002A2623 /* Array+Utilities.swift in Sources */,
-				FD99D0902D10E71B005D2E15 /* NSCache+Utilities.swift in Sources */,
 				FD17D7E527F6A09900122BE0 /* Identity.swift in Sources */,
 				FD9004142818AD0B00ABAAF6 /* _002_SetupStandardJobs.swift in Sources */,
 				FDAA16762AC28A3B00DDBF77 /* UserDefaultsType.swift in Sources */,

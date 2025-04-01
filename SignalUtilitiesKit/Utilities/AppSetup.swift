@@ -84,8 +84,8 @@ public enum AppSetup {
                     let userSessionId: SessionId = SessionId(.standard, publicKey: userKeyPair.publicKey)
                     
                     /// Cache the users session id so we don't need to fetch it from the database every time
-                    dependencies.mutate(cache: .general) {
-                        $0.setCachedSessionId(sessionId: userSessionId)
+                    dependencies.mutateSync(cache: .general) {
+                        await $0.setCachedSessionId(sessionId: userSessionId)
                     }
                     
                     /// Load the `libSession` state into memory

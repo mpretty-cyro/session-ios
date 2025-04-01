@@ -179,7 +179,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         dependencies[singleton: .notificationsManager].setDelegate(self)
         
         dependencies[singleton: .storage].resumeDatabaseAccess()
-        dependencies.mutate(cache: .libSessionNetwork) { $0.resumeNetworkAccess() }
+        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.resumeNetworkAccess() }
         
         // Reset the 'startTime' (since it would be invalid from the last launch)
         startTime = CACurrentMediaTime()
@@ -242,7 +242,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Stop all jobs except for message sending and when completed suspend the database
         dependencies[singleton: .jobRunner].stopAndClearPendingJobs(exceptForVariant: .messageSend) { [dependencies] neededBackgroundProcessing in
             if !self.hasCallOngoing() && (!neededBackgroundProcessing || dependencies[singleton: .appContext].isInBackground) {
-                dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+                dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
                 dependencies[singleton: .storage].suspendDatabaseAccess()
                 Log.info(.cat, "completed network and database shutdowns.")
                 Log.flush()
@@ -270,7 +270,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         // FIXME: Seems like there are some discrepancies between the expectations of how the iOS lifecycle methods work, we should look into them and ensure the code behaves as expected (in this case there were situations where these two wouldn't get called when returning from the background)
         dependencies[singleton: .storage].resumeDatabaseAccess()
-        dependencies.mutate(cache: .libSessionNetwork) { $0.resumeNetworkAccess() }
+        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.resumeNetworkAccess() }
         
         ensureRootViewController(calledFrom: .didBecomeActive)
 
@@ -333,7 +333,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         Log.appResumedExecution()
         Log.info(.backgroundPoller, "Starting background fetch.")
         dependencies[singleton: .storage].resumeDatabaseAccess()
-        dependencies.mutate(cache: .libSessionNetwork) { $0.resumeNetworkAccess() }
+        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.resumeNetworkAccess() }
         
         let queue: DispatchQueue = DispatchQueue(label: "com.session.backgroundPoll")
         let poller: BackgroundPoller = BackgroundPoller()
@@ -355,7 +355,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             cancellable?.cancel()
             
             if dependencies[singleton: .appContext].isInBackground {
-                dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+                dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
                 dependencies[singleton: .storage].suspendDatabaseAccess()
                 Log.flush()
             }
@@ -398,7 +398,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                         
                         // If we are still running in the background then suspend the network & database
                         if dependencies[singleton: .appContext].isInBackground {
-                            dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+                            dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
                             dependencies[singleton: .storage].suspendDatabaseAccess()
                             Log.flush()
                         }
@@ -459,7 +459,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             dependencies[singleton: .deviceSleepManager].removeBlock(blockObject: self)
             
             /// App launch hasn't really completed until the main screen is loaded so wait until then to register it
-            dependencies.mutate(cache: .appVersion) { $0.mainAppLaunchDidComplete() }
+            dependencies.mutateSync(cache: .appVersion) { await $0.mainAppLaunchDidComplete() }
             
             /// App won't be ready for extensions and no need to enqueue a config sync unless we successfully completed startup
             dependencies[singleton: .storage].writeAsync { db in
@@ -472,7 +472,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 ///
                 /// **Note:** We only want to do this if the app is active, and the user has completed the Onboarding process
                 if dependencies[singleton: .appContext].isAppForegroundAndActive && dependencies[cache: .onboarding].state == .completed {
-                    dependencies.mutate(cache: .libSession) { $0.syncAllPendingChanges(db) }
+                    dependencies.mutateSync(cache: .libSession) { await $0.syncAllPendingChanges(db) }
                 }
             }
             
@@ -885,8 +885,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         /// block the main thread
         DispatchQueue.global(qos: .background).async { [dependencies] in
             dependencies[singleton: .currentUserPoller].startIfNeeded()
-            dependencies.mutate(cache: .groupPollers) { $0.startAllPollers() }
-            dependencies.mutate(cache: .communityPollers) { $0.startAllPollers() }
+            dependencies.mutateSync(cache: .groupPollers) { $0.startAllPollers() }
+            dependencies.mutateSync(cache: .communityPollers) { $0.startAllPollers() }
         }
     }
     
@@ -897,8 +897,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             dependencies[singleton: .currentUserPoller].stop()
         }
     
-        dependencies.mutate(cache: .groupPollers) { $0.stopAndRemoveAllPollers() }
-        dependencies.mutate(cache: .communityPollers) { $0.stopAndRemoveAllPollers() }
+        dependencies.mutateSync(cache: .groupPollers) { $0.stopAndRemoveAllPollers() }
+        dependencies.mutateSync(cache: .communityPollers) { $0.stopAndRemoveAllPollers() }
     }
     
     // MARK: - App Link

@@ -65,7 +65,7 @@ public extension Authentication {
         // MARK: - SignatureGenerator
         
         public func generateSignature(with verificationBytes: [UInt8], using dependencies: Dependencies) throws -> Authentication.Signature {
-            return try dependencies.mutate(cache: .libSession) { cache in
+            return try dependencies.mutateSync(cache: .libSession) { cache in
                 try dependencies[singleton: .crypto].tryGenerate(
                     .signatureSubaccount(
                         config: cache.config(for: .groupKeys, sessionId: groupSessionId),

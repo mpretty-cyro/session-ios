@@ -57,7 +57,7 @@ struct LoadAccountScreen: View {
         do {
             guard seed.count == 16 else { throw Mnemonic.DecodingError.generic }
             
-            try dependencies.mutate(cache: .onboarding) { try $0.setSeedData(seed) }
+            try dependencies.mutateSync(cache: .onboarding) { try $0.setSeedData(seed) }
         }
         catch {
             errorString =  source.genericErrorMessage

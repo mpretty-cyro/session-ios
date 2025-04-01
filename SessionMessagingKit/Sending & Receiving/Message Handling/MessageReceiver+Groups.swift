@@ -189,7 +189,7 @@ extension MessageReceiver {
         ).upserted(db)
         
         if forceMarkAsInvited {
-            dependencies.mutate(cache: .libSession) { cache in
+            dependencies.mutateSync(cache: .libSession) { cache in
                 try? cache.markAsInvited(
                     db,
                     groupSessionIds: [groupSessionId],
@@ -802,7 +802,7 @@ extension MessageReceiver {
         /// If we haven't already handled being kicked from the group then update the name of the group in `USER_GROUPS` so
         /// that if the user doesn't delete the group and links a new device, the group will have the same name as on the current device
         if !LibSession.wasKickedFromGroup(groupSessionId: groupSessionId, using: dependencies) {
-            dependencies.mutate(cache: .libSession) { cache in
+            dependencies.mutateSync(cache: .libSession) { cache in
                 let groupInfoConfig: LibSession.Config? = cache.config(for: .groupInfo, sessionId: groupSessionId)
                 let userGroupsConfig: LibSession.Config? = cache.config(for: .userGroups, sessionId: userSessionId)
                 let groupName: String? = try? LibSession.groupName(in: groupInfoConfig)
@@ -972,7 +972,7 @@ extension MessageReceiver {
                 }
             }(),
             timestampMs: sentTimestampMs,
-            wasRead: dependencies.mutate(cache: .libSession) { cache in
+            wasRead: dependencies.mutateSync(cache: .libSession) { cache in
                 cache.timestampAlreadyRead(
                     threadId: groupSessionId.hexString,
                     threadVariant: .group,

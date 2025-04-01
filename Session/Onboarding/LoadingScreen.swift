@@ -35,7 +35,7 @@ struct LoadingScreen: View {
         }
         
         fileprivate func completeRegistration(onComplete: @escaping () -> ()) {
-            dependencies.mutate(cache: .onboarding) { [dependencies] onboarding in
+            dependencies.mutateSync(cache: .onboarding) { [dependencies] onboarding in
                 let shouldSyncPushTokens: Bool = onboarding.useAPNS
                 
                 onboarding.completeRegistration {

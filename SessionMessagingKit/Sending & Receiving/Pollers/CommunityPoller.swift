@@ -13,6 +13,7 @@ public extension Cache {
         identifier: "communityPollers",
         createInstance: { dependencies in CommunityPoller.Cache(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
@@ -249,7 +250,7 @@ public final class CommunityPoller: CommunityPollerType & PollerType {
     public func poll(forceSynchronousProcessing: Bool = false) -> AnyPublisher<PollResult, Error> {
         let lastSuccessfulPollTimestamp: TimeInterval = (self.lastPollStart > 0 ?
             lastPollStart :
-            dependencies.mutate(cache: .openGroupManager) { cache in
+            dependencies.mutateSync(cache: .openGroupManager) { cache in
                 cache.getLastSuccessfulCommunityPollTimestamp()
             }
         )
@@ -277,7 +278,7 @@ public final class CommunityPoller: CommunityPollerType & PollerType {
                 receiveOutput: { [weak self, dependencies] _ in
                     self?.pollCount += 1
                     
-                    dependencies.mutate(cache: .openGroupManager) { cache in
+                    dependencies.mutateSync(cache: .openGroupManager) { cache in
                         cache.setLastSuccessfulCommunityPollTimestamp(
                             dependencies.dateNow.timeIntervalSince1970
                         )

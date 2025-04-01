@@ -131,7 +131,7 @@ public enum GroupInviteMemberJob: JobExecutor {
                             }
                             
                             // Notify about the failure
-                            dependencies.mutate(cache: .groupInviteMemberJob) { cache in
+                            dependencies.mutateSync(cache: .groupInviteMemberJob) { cache in
                                 cache.addFailure(groupId: threadId, memberId: details.memberSessionIdHexString)
                             }
                             
@@ -234,7 +234,7 @@ public extension GroupInviteMemberJob {
                     scheduler: DispatchQueue.global(qos: .userInitiated)
                 )
                 .map { [dependencies] _ -> (failures: Set<Failure>, groupId: String) in
-                    dependencies.mutate(cache: .groupInviteMemberJob) { cache in
+                    dependencies.mutateSync(cache: .groupInviteMemberJob) { cache in
                         guard let targetGroupId: String = cache.failures.first?.groupId else { return ([], "") }
                         
                         let result: Set<Failure> = cache.failures.filter { $0.groupId == targetGroupId }
@@ -303,6 +303,7 @@ public extension Cache {
         identifier: "groupInviteMemberJob",
         createInstance: { dependencies in GroupInviteMemberJob.Cache(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }

@@ -250,7 +250,7 @@ public extension LibSession {
         disappearingMessagesConfig: DisappearingMessagesConfiguration? = nil,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userProfile, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.updateNoteToSelf(
                     priority: priority,

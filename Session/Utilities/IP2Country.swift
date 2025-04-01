@@ -15,6 +15,7 @@ public extension Cache {
         identifier: "ip2Country",
         createInstance: { dependencies in IP2Country(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
@@ -191,7 +192,7 @@ fileprivate class IP2Country: IP2CountryCacheType {
                     }
                 },
                 receiveValue: { [weak self] paths in
-                    dependencies.mutate(cache: .ip2Country) { _ in
+                    dependencies.mutateSync(cache: .ip2Country) { _ in
                         self?.populateCacheIfNeeded(paths: paths)
                     }
                 }

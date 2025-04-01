@@ -485,7 +485,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
                              success:@escaping ((ProxiedContentAssetRequest?, ProxiedContentAsset) -> Void),
                              failure:@escaping ((ProxiedContentAssetRequest) -> Void),
                              shouldIgnoreSignalProxy: Bool = false) -> ProxiedContentAssetRequest? {
-        if let asset = assetMap.get(key: assetDescription.url) {
+        if let asset = sync({ await self.assetMap.get(key: assetDescription.url) }) {
             // Synchronous cache hit.
             success(nil, asset)
             return nil
@@ -516,7 +516,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
         priority: ProxiedContentRequestPriority,
         shouldIgnoreSignalProxy: Bool = false
     ) -> AnyPublisher<(ProxiedContentAsset, ProxiedContentAssetRequest?), Error> {
-        if let asset = assetMap.get(key: assetDescription.url) {
+        if let asset = sync({ await self.assetMap.get(key: assetDescription.url) }) {
             // Synchronous cache hit.
             return Just((asset, nil))
                 .setFailureType(to: Error.self)
@@ -652,7 +652,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
             return
         }
 
-        if let asset = assetMap.get(key: assetRequest.assetDescription.url) {
+        if let asset = sync({ await self.assetMap.get(key: assetRequest.assetDescription.url) }) {
             // Deferred cache hit, avoids re-downloading assets that were
             // downloaded while this request was queued.
 

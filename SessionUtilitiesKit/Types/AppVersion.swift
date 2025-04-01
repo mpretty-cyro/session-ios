@@ -11,80 +11,114 @@ public extension Cache {
         identifier: "appVersion",
         createInstance: { dependencies in AppVersion(using: dependencies) },
         mutableInstance: { $0 },
-        immutableInstance: { $0 }
+        erasedInstance: { $0 },
+        immutableInstance: { $0.immutable }
     )
 }
 
 // MARK: - AppVersion
 
-public class AppVersion: AppVersionCacheType {
+public actor AppVersion: AppVersionCacheType {
+    public struct Immutable: AppVersionImmutableCacheType {
+        public let isValid: Bool
+        public let appVersion: String
+        public let buildNumber: String
+        public let commitHash: String
+        public let libSessionVersion: String
+        public let firstAppVersion: String?
+        public let lastAppVersion: String?
+        public let lastCompletedLaunchAppVersion: String?
+        public let lastCompletedLaunchMainAppVersion: String?
+        public let lastCompletedLaunchSAEAppVersion: String?
+        public let isFirstLaunch: Bool
+        public let didJustUpdate: Bool
+        
+        @MainActor public var versionInfo: String {
+            return [
+                "iOS \(UIDevice.current.systemVersion)",
+                [
+                    "App: \(appVersion)",
+                    [buildNumber.nullIfEmpty, commitHash.nullIfEmpty]
+                        .compactMap { $0 }
+                        .joined(separator: " - ")
+                        .nullIfEmpty
+                        .map { "(\($0))" }
+                ].compactMap { $0 }.joined(separator: " "),
+                "libSession: \(LibSession.version)"
+            ].joined(separator: ", ")
+        }
+        
+        public func with(
+            isValid: Bool? = nil,
+            appVersion: String? = nil,
+            buildNumber: String? = nil,
+            commitHash: String? = nil,
+            libSessionVersion: String? = nil,
+            firstAppVersion: String? = nil,
+            lastAppVersion: String? = nil,
+            lastCompletedLaunchAppVersion: String? = nil,
+            lastCompletedLaunchMainAppVersion: String? = nil,
+            lastCompletedLaunchSAEAppVersion: String? = nil,
+            isFirstLaunch: Bool? = nil,
+            didJustUpdate: Bool? = nil
+        ) -> Immutable {
+            return Immutable(
+                isValid: (isValid ?? self.isValid),
+                appVersion: (appVersion ?? self.appVersion),
+                buildNumber: (buildNumber ?? self.buildNumber),
+                commitHash: (commitHash ?? self.commitHash),
+                libSessionVersion: (libSessionVersion ?? self.libSessionVersion),
+                firstAppVersion: (firstAppVersion ?? self.firstAppVersion),
+                lastAppVersion: (lastAppVersion ?? self.lastAppVersion),
+                lastCompletedLaunchAppVersion: (lastCompletedLaunchAppVersion ?? self.lastCompletedLaunchAppVersion),
+                lastCompletedLaunchMainAppVersion: (lastCompletedLaunchMainAppVersion ?? self.lastCompletedLaunchMainAppVersion),
+                lastCompletedLaunchSAEAppVersion: (lastCompletedLaunchSAEAppVersion ?? self.lastCompletedLaunchSAEAppVersion),
+                isFirstLaunch: (isFirstLaunch ?? self.isFirstLaunch),
+                didJustUpdate: (didJustUpdate ?? self.didJustUpdate)
+            )
+        }
+    }
+    
     private let dependencies: Dependencies
-    public let isValid: Bool
-    public let appVersion: String
-    public let buildNumber: String
-    public let commitHash: String
-    public let libSessionVersion: String
+    @MainActor fileprivate var immutable: Immutable
+    @MainActor public var isValid: Bool { immutable.isValid }
+    @MainActor public var appVersion: String { immutable.appVersion }
+    @MainActor public var buildNumber: String { immutable.buildNumber }
+    @MainActor public var commitHash: String { immutable.commitHash }
+    @MainActor public var libSessionVersion: String { immutable.libSessionVersion }
     
-    public var firstAppVersion: String?
-    public var lastAppVersion: String?
-    public var lastCompletedLaunchAppVersion: String?
-    public var lastCompletedLaunchMainAppVersion: String?
-    public var lastCompletedLaunchSAEAppVersion: String?
+    @MainActor public var firstAppVersion: String? { immutable.firstAppVersion }
+    @MainActor public var lastAppVersion: String? { immutable.lastAppVersion }
+    @MainActor public var lastCompletedLaunchAppVersion: String? { immutable.lastCompletedLaunchAppVersion }
+    @MainActor public var lastCompletedLaunchMainAppVersion: String? { immutable.lastCompletedLaunchMainAppVersion }
+    @MainActor public var lastCompletedLaunchSAEAppVersion: String? { immutable.lastCompletedLaunchSAEAppVersion }
     
-    public var isFirstLaunch: Bool { self.firstAppVersion != nil }
-    public var didJustUpdate: Bool {
-        (lastAppVersion?.count ?? 0) > 0 &&
-        lastAppVersion != appVersion
-    }
-    public var versionInfo: String {
-        return [
-            "iOS \(UIDevice.current.systemVersion)",
-            [
-                "App: \(appVersion)",
-                [buildNumber.nullIfEmpty, commitHash.nullIfEmpty]
-                    .compactMap { $0 }
-                    .joined(separator: " - ")
-                    .nullIfEmpty
-                    .map { "(\($0))" }
-            ].compactMap { $0 }.joined(separator: " "),
-            "libSession: \(LibSession.version)"
-        ].joined(separator: ", ")
-    }
+    @MainActor public var isFirstLaunch: Bool { immutable.isFirstLaunch }
+    @MainActor public var didJustUpdate: Bool { immutable.didJustUpdate  }
+    @MainActor public var versionInfo: String { immutable.versionInfo }
     
     // MARK: - Initialization
     
     fileprivate init(using dependencies: Dependencies) {
-        self.dependencies = dependencies
-        
-        guard let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {
-            self.isValid = false
-            self.appVersion = ""
-            self.buildNumber = ""
-            self.commitHash = ""
-            self.libSessionVersion = ""
-            
-            self.firstAppVersion = nil
-            self.lastAppVersion = nil
-            self.lastCompletedLaunchAppVersion = nil
-            self.lastCompletedLaunchMainAppVersion = nil
-            self.lastCompletedLaunchSAEAppVersion = nil
-            return
-        }
-        
+        let appVersion: String? = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let oldFirstAppVersion: String? = dependencies[defaults: .appGroup, key: .firstAppVersion]
+        let lastAppVersion: String? = dependencies[defaults: .appGroup, key: .lastAppVersion]
         
-        self.isValid = true
-        self.appVersion = appVersion
-        self.buildNumber = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String).defaulting(to: "")
-        self.commitHash = (Bundle.main.infoDictionary?["GitCommitHash"] as? String).defaulting(to: "")
-        self.libSessionVersion = LibSession.version
-        
-        self.firstAppVersion = dependencies[defaults: .appGroup, key: .firstAppVersion]
-            .defaulting(to: appVersion)
-        self.lastAppVersion = dependencies[defaults: .appGroup, key: .lastAppVersion]
-        self.lastCompletedLaunchAppVersion = dependencies[defaults: .appGroup, key: .lastCompletedLaunchAppVersion]
-        self.lastCompletedLaunchMainAppVersion = dependencies[defaults: .appGroup, key: .lastCompletedLaunchMainAppVersion]
-        self.lastCompletedLaunchSAEAppVersion = dependencies[defaults: .appGroup, key: .lastCompletedLaunchSAEAppVersion]
+        self.dependencies = dependencies
+        self.immutable = Immutable(
+            isValid: (appVersion != nil),
+            appVersion: (appVersion ?? ""),
+            buildNumber: (Bundle.main.infoDictionary?["CFBundleVersion"] as? String).defaulting(to: ""),
+            commitHash: (Bundle.main.infoDictionary?["GitCommitHash"] as? String).defaulting(to: ""),
+            libSessionVersion: LibSession.version,
+            firstAppVersion: (oldFirstAppVersion ?? (appVersion ?? "")),
+            lastAppVersion: lastAppVersion,
+            lastCompletedLaunchAppVersion: dependencies[defaults: .appGroup, key: .lastCompletedLaunchAppVersion],
+            lastCompletedLaunchMainAppVersion: dependencies[defaults: .appGroup, key: .lastCompletedLaunchMainAppVersion],
+            lastCompletedLaunchSAEAppVersion: dependencies[defaults: .appGroup, key: .lastCompletedLaunchSAEAppVersion],
+            isFirstLaunch: (oldFirstAppVersion == nil),
+            didJustUpdate: (lastAppVersion?.isEmpty == false && lastAppVersion != appVersion)
+        )
 
         // Ensure the value for the "first launched version".
         if oldFirstAppVersion == nil {
@@ -97,24 +131,31 @@ public class AppVersion: AppVersionCacheType {
     
     // MARK: - Functions
     
-    private func anyLaunchDidComplete() {
-        lastCompletedLaunchAppVersion = appVersion
-
-        // Update the value for the "most recently launch-completed version".
-        dependencies[defaults: .appGroup, key: .lastCompletedLaunchAppVersion] = appVersion
+    private func anyLaunchDidComplete() async {
+        await MainActor.run { [dependencies] in
+            immutable = immutable.with(lastCompletedLaunchAppVersion: immutable.appVersion)
+            
+            // Update the value for the "most recently launch-completed version".
+            dependencies[defaults: .appGroup, key: .lastCompletedLaunchAppVersion] = immutable.appVersion
+        }
     }
 
-    public func mainAppLaunchDidComplete() {
-        lastCompletedLaunchMainAppVersion = appVersion
-        
-        dependencies[defaults: .appGroup, key: .lastCompletedLaunchMainAppVersion] = appVersion
-        anyLaunchDidComplete()
+    public func mainAppLaunchDidComplete() async {
+        await MainActor.run { [dependencies] in
+            immutable = immutable.with(lastCompletedLaunchMainAppVersion: immutable.appVersion)
+            
+            dependencies[defaults: .appGroup, key: .lastCompletedLaunchMainAppVersion] = appVersion
+        }
+        await anyLaunchDidComplete()
     }
 
-    public func saeLaunchDidComplete() {
-        lastCompletedLaunchSAEAppVersion = appVersion
-        dependencies[defaults: .appGroup, key: .lastCompletedLaunchSAEAppVersion] = appVersion
-        anyLaunchDidComplete()
+    public func saeLaunchDidComplete() async {
+        await MainActor.run { [dependencies] in
+            immutable = immutable.with(lastCompletedLaunchSAEAppVersion: immutable.appVersion)
+            
+            dependencies[defaults: .appGroup, key: .lastCompletedLaunchSAEAppVersion] = appVersion
+        }
+        await anyLaunchDidComplete()
     }
 }
 
@@ -159,15 +200,31 @@ public protocol AppVersionImmutableCacheType: ImmutableCacheType {
     var didJustUpdate: Bool { get }
     
     /// The full version information for the current version
-    var versionInfo: String { get }
+    @MainActor var versionInfo: String { get }
 }
 
-public protocol AppVersionCacheType: AppVersionImmutableCacheType, MutableCacheType {
+public protocol AppVersionCacheType: MutableCacheType {
     /// Function to call when the main app successfully completed a launch
-    func mainAppLaunchDidComplete()
+    func mainAppLaunchDidComplete() async
     
     /// Function to call when the share extension successfully completed a launch
-    func saeLaunchDidComplete()
+    func saeLaunchDidComplete() async
+    
+    // MARK: - AppVersionImmutableCacheType Access
+    
+    var isValid: Bool { get async }
+    var appVersion: String { get async }
+    var buildNumber: String { get async }
+    var commitHash: String { get async }
+    var libSessionVersion: String { get async }
+    var firstAppVersion: String? { get async }
+    var lastAppVersion: String? { get async }
+    var lastCompletedLaunchAppVersion: String? { get async }
+    var lastCompletedLaunchMainAppVersion: String? { get async }
+    var lastCompletedLaunchSAEAppVersion: String? { get async }
+    var isFirstLaunch: Bool { get async }
+    var didJustUpdate: Bool { get async }
+    @MainActor var versionInfo: String { get async }
 }
 
 // MARK: - UserDefaults Keys

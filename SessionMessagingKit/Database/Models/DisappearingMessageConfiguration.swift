@@ -314,7 +314,7 @@ public extension DisappearingMessagesConfiguration {
         let userSessionId: SessionId = dependencies[cache: .general].sessionId
         let wasRead: Bool = (
             authorId == userSessionId.hexString ||
-            dependencies.mutate(cache: .libSession) { cache in
+            dependencies.mutateSync(cache: .libSession) { cache in
                 cache.timestampAlreadyRead(
                     threadId: threadId,
                     threadVariant: threadVariant,

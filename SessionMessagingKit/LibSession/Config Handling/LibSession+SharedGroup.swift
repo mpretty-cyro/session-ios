@@ -147,7 +147,7 @@ internal extension LibSession {
         }
         
         // Now that everything has been populated correctly we can load the state into memory
-        dependencies.mutate(cache: .libSession) { cache in
+        dependencies.mutateSync(cache: .libSession) { cache in
             groupState.forEach { variant, config in
                 cache.setConfig(for: variant, sessionId: groupSessionId, to: config)
             }
@@ -296,7 +296,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) {
-        dependencies.mutate(cache: .libSession) { cache in
+        dependencies.mutateSync(cache: .libSession) { cache in
             cache.removeConfigs(for: groupSessionId)
         }
         
@@ -312,7 +312,7 @@ internal extension LibSession {
         using dependencies: Dependencies
     ) throws {
         // Create and save dumps for the configs
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try groupState.forEach { variant, config in
                 try cache.createDump(
                     config: config,
@@ -340,7 +340,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) -> Bool {
-        return dependencies.mutate(cache: .libSession) { cache in
+        return dependencies.mutateSync(cache: .libSession) { cache in
             return cache.isAdmin(groupSessionId: groupSessionId)
         }
     }

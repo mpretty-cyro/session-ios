@@ -224,7 +224,7 @@ public extension SessionThread {
             case .some(let existingThread): result = existingThread
             case .none:
                 let targetPriority: Int32 = dependencies
-                    .mutate(cache: .libSession) { $0.pinnedPriority(db, threadId: id, threadVariant: variant) }
+                    .mutateSync(cache: .libSession) { $0.pinnedPriority(db, threadId: id, threadVariant: variant) }
                     .defaulting(to: LibSession.defaultNewThreadPriority)
                 
                 result = try SessionThread(
@@ -265,7 +265,7 @@ public extension SessionThread {
                     )
             
             case (_, .useLibSession):                           // Create and save the config from libSession
-                let disappearingConfig: DisappearingMessagesConfiguration? = dependencies.mutate(cache: .libSession) { cache in
+                let disappearingConfig: DisappearingMessagesConfiguration? = dependencies.mutateSync(cache: .libSession) { cache in
                     cache.disappearingMessagesConfig(threadId: id, threadVariant: variant)
                 }
                 
@@ -290,7 +290,7 @@ public extension SessionThread {
         switch (values.pinnedPriority, values.shouldBeVisible) {
             case (.useLibSession, .useLibSession):
                 let targetPriority: Int32 = dependencies
-                    .mutate(cache: .libSession) { $0.pinnedPriority(db, threadId: id, threadVariant: variant) }
+                    .mutateSync(cache: .libSession) { $0.pinnedPriority(db, threadId: id, threadVariant: variant) }
                     .defaulting(to: LibSession.defaultNewThreadPriority)
                 let libSessionShouldBeVisible: Bool = LibSession.shouldBeVisible(priority: targetPriority)
                 

@@ -212,7 +212,11 @@ class HelpViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTa
         using dependencies: Dependencies,
         onShareComplete: (() -> ())? = nil
     ) {
-        Log.info(.version, "\(dependencies[cache: .appVersion].versionInfo)")
+        sync {
+            await MainActor.run {
+                Log.info(.version, "\(dependencies[cache: .appVersion].versionInfo)")
+            }
+        }
         Log.flush()
         
         guard

@@ -10,19 +10,28 @@ import SessionUtilitiesKit
 // MARK: - Cache
 
 public extension Cache {
-    static let libSessionNetwork: CacheConfig<LibSession.NetworkCacheType, LibSession.NetworkImmutableCacheType> = Dependencies.create(
-        identifier: "libSessionNetwork",
-        createInstance: { dependencies in
-            /// The `libSessionNetwork` cache gets warmed during startup and creates a network instance, populates the snode
-            /// cache and builds onion requests when created - when running unit tests we don't want to do any of that unless explicitly
-            /// desired within the test itself so instead we default to a `NoopNetworkCache` when running unit tests
-            guard !SNUtilitiesKit.isRunningTests else { return LibSession.NoopNetworkCache() }
-            
-            return LibSession.NetworkCache(using: dependencies)
-        },
-        mutableInstance: { $0 },
-        immutableInstance: { $0 }
-    )
+    static let libSessionNetwork: CacheConfig<LibSession.NetworkCacheType, LibSession.NetworkImmutableCacheType> = {
+        /// The `libSessionNetwork` cache gets warmed during startup and creates a network instance, populates the snode
+        /// cache and builds onion requests when created - when running unit tests we don't want to do any of that unless explicitly
+        /// desired within the test itself so instead we default to a `NoopNetworkCache` when running unit tests
+        guard !SNUtilitiesKit.isRunningTests else {
+            return Dependencies.create(
+                identifier: "libSessionNetwork",
+                createInstance: { _ in LibSession.NoopNetworkCache() },
+                mutableInstance: { $0 },
+                erasedInstance: { $0 },
+                immutableInstance: { _ in LibSession.NoopNetworkCache.Immutable() }
+            )
+        }
+        
+        return Dependencies.create(
+            identifier: "libSessionNetwork",
+            createInstance: { dependencies in LibSession.NetworkCache(using: dependencies) },
+            mutableInstance: { $0 },
+            erasedInstance: { $0 },
+            immutableInstance: { $0.immutable }
+        )
+    }()
 }
 
 // MARK: - Log.Category
@@ -48,7 +57,7 @@ class LibSessionNetwork: NetworkType {
         typealias Output = Result<Set<LibSession.Snode>, Error>
         
         return dependencies
-            .mutate(cache: .libSessionNetwork) { $0.getOrCreateNetwork() }
+            .mutatePublisher(cache: .libSessionNetwork) { try await $0.getOrCreateNetwork() }
             .tryMapCallbackWrapper(type: Output.self) { wrapper, network in
                 let sessionId: SessionId = try SessionId(from: swarmPublicKey)
                 
@@ -56,7 +65,7 @@ class LibSessionNetwork: NetworkType {
                     throw LibSessionError.invalidCConversion
                 }
                 
-                network_get_swarm(network, cSwarmPublicKey, { swarmPtr, swarmSize, ctx in
+                network_get_swarm(network.pointer, cSwarmPublicKey, { swarmPtr, swarmSize, ctx in
                     guard
                         swarmSize > 0,
                         let cSwarm: UnsafeMutablePointer<network_service_node> = swarmPtr
@@ -75,9 +84,9 @@ class LibSessionNetwork: NetworkType {
         typealias Output = Result<Set<LibSession.Snode>, Error>
         
         return dependencies
-            .mutate(cache: .libSessionNetwork) { $0.getOrCreateNetwork() }
+            .mutatePublisher(cache: .libSessionNetwork) { try await $0.getOrCreateNetwork() }
             .tryMapCallbackWrapper(type: Output.self) { wrapper, network in
-                network_get_random_nodes(network, UInt16(count), { nodesPtr, nodesSize, ctx in
+                network_get_random_nodes(network.pointer, UInt16(count), { nodesPtr, nodesSize, ctx in
                     guard
                         nodesSize > 0,
                         let cSwarm: UnsafeMutablePointer<network_service_node> = nodesPtr
@@ -183,14 +192,14 @@ class LibSessionNetwork: NetworkType {
         typealias Output = (success: Bool, timeout: Bool, statusCode: Int, headers: [String: String], data: Data?)
         
         return dependencies
-            .mutate(cache: .libSessionNetwork) { $0.getOrCreateNetwork() }
+            .mutatePublisher(cache: .libSessionNetwork) { try await $0.getOrCreateNetwork() }
             .tryMapCallbackWrapper(type: Output.self) { wrapper, network in
                 guard ed25519SecretKey.count == 64 else { throw LibSessionError.invalidCConversion }
                 
                 var cEd25519SecretKey: [UInt8] = Array(ed25519SecretKey)
                 
                 network_get_client_version(
-                    network,
+                    network.pointer,
                     CLIENT_PLATFORM_IOS,
                     &cEd25519SecretKey,
                     Int64(floor(Network.defaultTimeout * 1000)),
@@ -228,7 +237,7 @@ class LibSessionNetwork: NetworkType {
         typealias Output = (success: Bool, timeout: Bool, statusCode: Int, headers: [String: String], data: Data?)
         
         return dependencies
-            .mutate(cache: .libSessionNetwork) { $0.getOrCreateNetwork() }
+            .mutatePublisher(cache: .libSessionNetwork) { try await $0.getOrCreateNetwork() }
             .tryMapCallbackWrapper(type: Output.self) { wrapper, network in
                 // Prepare the parameters
                 let cPayloadBytes: [UInt8]
@@ -262,7 +271,7 @@ class LibSessionNetwork: NetworkType {
                         wrapper.addUnsafePointerToCleanup(cSwarmPublicKey)
                         
                         network_send_onion_request_to_snode_destination(
-                            network,
+                            network.pointer,
                             snode.cSnode,
                             cPayloadBytes,
                             cPayloadBytes.count,
@@ -280,7 +289,7 @@ class LibSessionNetwork: NetworkType {
                     
                     case .server:
                         network_send_onion_request_to_server_destination(
-                            network,
+                            network.pointer,
                             try wrapper.cServerDestination(destination),
                             cPayloadBytes,
                             cPayloadBytes.count,
@@ -299,7 +308,7 @@ class LibSessionNetwork: NetworkType {
                         guard !cPayloadBytes.isEmpty else { throw NetworkError.invalidPreparedRequest }
                         
                         network_upload_to_server(
-                            network,
+                            network.pointer,
                             try wrapper.cServerDestination(destination),
                             cPayloadBytes,
                             cPayloadBytes.count,
@@ -317,7 +326,7 @@ class LibSessionNetwork: NetworkType {
                     
                     case .serverDownload:
                         network_download_from_server(
-                            network,
+                            network.pointer,
                             try wrapper.cServerDestination(destination),
                             Int64(floor(requestTimeout * 1000)),
                             Int64(floor((requestAndPathBuildTimeout ?? 0) * 1000)),
@@ -490,7 +499,7 @@ private extension NetworkStatus {
 // MARK: - Snode
 
 extension LibSession {
-    public struct Snode: Hashable, CustomStringConvertible {
+    public struct Snode: Hashable, Sendable, CustomStringConvertible {
         public let ip: String
         public let quicPort: UInt16
         public let ed25519PubkeyHex: String
@@ -661,38 +670,92 @@ private extension LibSessionNetwork.CallbackWrapper {
 
 // MARK: - LibSession.NetworkCache
 
+//typealias NetworkPointer = UnsafeMutablePointer<network_object>
+//
+//extension NetworkPointer: @unchecked @retroactive Sendable/* where Pointee: Sendable*/ {}
+
 public extension LibSession {
-    class NetworkCache: NetworkCacheType {
+    struct NetworkObjectPointer: @unchecked Sendable {
+        public let pointer: UnsafeMutablePointer<network_object>
+    }
+    
+    actor NetworkCache: NetworkCacheType {
+        public struct Immutable: NetworkImmutableCacheType {
+            public var isSuspended: Bool
+            public var paths: AnyPublisher<[[Snode]], Never>
+            public var hasPaths: Bool
+            public var currentPaths: [[Snode]]
+            public var networkStatus: AnyPublisher<NetworkStatus, Never>
+            public var pathsDescription: String
+            
+            init(
+                isSuspended: Bool = false,
+                paths: AnyPublisher<[[Snode]], Never>,
+                hasPaths: Bool = false,
+                currentPaths: [[Snode]] = [],
+                networkStatus: AnyPublisher<NetworkStatus, Never>,
+                pathsDescription: String = ""
+            ) {
+                self.isSuspended = isSuspended
+                self.paths = paths
+                self.hasPaths = hasPaths
+                self.currentPaths = currentPaths
+                self.networkStatus = networkStatus
+                self.pathsDescription = pathsDescription
+            }
+            
+            func with(
+                isSuspended: Bool? = nil,
+                hasPaths: Bool? = nil,
+                currentPaths: [[Snode]]? = nil,
+                pathsDescription: String? = nil
+            ) -> Immutable {
+                return Immutable(
+                    isSuspended: (isSuspended ?? self.isSuspended),
+                    paths: paths,
+                    hasPaths: (hasPaths ?? self.hasPaths),
+                    currentPaths: (currentPaths ?? self.currentPaths),
+                    networkStatus: networkStatus,
+                    pathsDescription: (pathsDescription ?? self.pathsDescription)
+                )
+            }
+        }
         private static var snodeCachePath: String { "\(SessionFileManager.nonInjectedAppSharedDataDirectoryPath)/snodeCache" }
         
         private let dependencies: Dependencies
         private let dependenciesPtr: UnsafeMutableRawPointer
-        private var network: UnsafeMutablePointer<network_object>? = nil
+        private var network: NetworkObjectPointer? = nil
+        fileprivate var immutable: Immutable
         private let _paths: CurrentValueSubject<[[Snode]], Never> = CurrentValueSubject([])
         private let _networkStatus: CurrentValueSubject<NetworkStatus, Never> = CurrentValueSubject(.unknown)
         
-        public var isSuspended: Bool = false
-        public var networkStatus: AnyPublisher<NetworkStatus, Never> { _networkStatus.eraseToAnyPublisher() }
-        
-        public var paths: AnyPublisher<[[Snode]], Never> { _paths.eraseToAnyPublisher() }
-        public var hasPaths: Bool { !_paths.value.isEmpty }
-        public var currentPaths: [[Snode]] { _paths.value }
-        public var pathsDescription: String { _paths.value.prettifiedDescription }
+        public var isSuspended: Bool { immutable.isSuspended }
+        public var paths: AnyPublisher<[[Snode]], Never> { immutable.paths }
+        public var hasPaths: Bool { immutable.hasPaths }
+        public var currentPaths: [[Snode]] { immutable.currentPaths }
+        public var networkStatus: AnyPublisher<NetworkStatus, Never> { immutable.networkStatus }
+        public var pathsDescription: String { immutable.pathsDescription }
         
         // MARK: - Initialization
         
         public init(using dependencies: Dependencies) {
             self.dependencies = dependencies
             self.dependenciesPtr = Unmanaged.passRetained(dependencies).toOpaque()
+            self.immutable = Immutable(
+                paths: _paths.eraseToAnyPublisher(),
+                networkStatus: _networkStatus.eraseToAnyPublisher()
+            )
             
             // Create the network object
-            getOrCreateNetwork().sinkUntilComplete()
+            Task { try? await getOrCreateNetwork() }
             
             // If the app has been set to 'forceOffline' then we need to explicitly set the network status
             // to disconnected (because it'll never be set otherwise)
             if dependencies[feature: .forceOffline] {
-                DispatchQueue.global(qos: .default).async { [dependencies] in
-                    dependencies.mutate(cache: .libSessionNetwork) { $0.setNetworkStatus(status: .disconnected) }
+                Task {
+                    await dependencies.mutate(cache: .libSessionNetwork) {
+                        await $0.setNetworkStatus(status: .disconnected)
+                    }
                 }
             }
         }
@@ -707,9 +770,9 @@ public extension LibSession {
             switch network {
                 case .none: break
                 case .some(let network):
-                    network_set_status_changed_callback(network, nil, nil)
-                    network_set_paths_changed_callback(network, nil, nil)
-                    network_free(network)
+                    network_set_status_changed_callback(network.pointer, nil, nil)
+                    network_set_paths_changed_callback(network.pointer, nil, nil)
+                    network_free(network.pointer)
             }
             
             // Finally we need to make sure to clean up the unbalanced retain to the dependencies
@@ -718,132 +781,121 @@ public extension LibSession {
         
         // MARK: - Functions
         
-        public func suspendNetworkAccess() {
+        public func suspendNetworkAccess() async {
             Log.info(.network, "Network access suspended.")
-            isSuspended = true
+            immutable = immutable.with(isSuspended: true)
             
             switch network {
                 case .none: break
-                case .some(let network): network_suspend(network)
+                case .some(let network): network_suspend(network.pointer)
             }
         }
         
-        public func resumeNetworkAccess() {
-            isSuspended = false
+        public func resumeNetworkAccess() async {
+            immutable = immutable.with(isSuspended: false)
             Log.info(.network, "Network access resumed.")
             
             switch network {
                 case .none: break
-                case .some(let network): network_resume(network)
+                case .some(let network): network_resume(network.pointer)
             }
         }
         
-        public func getOrCreateNetwork() -> AnyPublisher<UnsafeMutablePointer<network_object>?, Error> {
-            guard !isSuspended else {
+        public func getOrCreateNetwork() async throws -> NetworkObjectPointer {
+            guard !immutable.isSuspended else {
                 Log.warn(.network, "Attempted to access suspended network.")
-                return Fail(error: NetworkError.suspended).eraseToAnyPublisher()
+                throw NetworkError.suspended
             }
             
             switch (network, dependencies[feature: .forceOffline]) {
                 case (_, true):
-                    return Fail(error: NetworkError.serviceUnavailable)
-                        .delay(for: .seconds(1), scheduler: DispatchQueue.global(qos: .userInitiated))
-                        .eraseToAnyPublisher()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    throw NetworkError.serviceUnavailable
                     
-                case (.some(let existingNetwork), _):
-                    return Just(existingNetwork)
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
+                case (.some(let existingNetwork), _): return existingNetwork
                 
                 case (.none, _):
                     let useTestnet: Bool = (dependencies[feature: .serviceNetwork] == .testnet)
                     let isMainApp: Bool = dependencies[singleton: .appContext].isMainApp
                     var error: [CChar] = [CChar](repeating: 0, count: 256)
-                    var network: UnsafeMutablePointer<network_object>?
+                    var maybeNetworkPtr: UnsafeMutablePointer<network_object>?
                     
                     guard let cCachePath: [CChar] = NetworkCache.snodeCachePath.cString(using: .utf8) else {
                         Log.error(.network, "Unable to create network object: \(LibSessionError.invalidCConversion)")
-                        return Fail(error: NetworkError.invalidState).eraseToAnyPublisher()
+                        throw NetworkError.invalidState
                     }
                     
-                    guard network_init(&network, cCachePath, useTestnet, !isMainApp, true, &error) else {
+                    guard
+                        network_init(&maybeNetworkPtr, cCachePath, useTestnet, !isMainApp, true, &error),
+                        let networkPtr: UnsafeMutablePointer<network_object> = maybeNetworkPtr
+                    else {
                         Log.error(.network, "Unable to create network object: \(String(cString: error))")
-                        return Fail(error: NetworkError.invalidState).eraseToAnyPublisher()
+                        throw NetworkError.invalidState
                     }
                     
                     // Store the newly created network
+                    let network: NetworkObjectPointer = NetworkObjectPointer(pointer: networkPtr)
                     self.network = network
                     
-                    /// Register the callbacks in the next run loop (this needs to happen in a subsequent run loop because it mutates the
-                    /// `libSessionNetwork` cache and this function gets called during init so could end up with weird order-of-execution issues)
-                    ///
-                    /// **Note:** We do it this way because `DispatchQueue.async` can be optimised out if the code is already running in a
-                    /// queue with the same `qos`, this approach ensures the code will run in a subsequent run loop regardless
-                    let concurrentQueue = DispatchQueue(label: "Network.callback.registration", attributes: .concurrent)
-                    concurrentQueue.async(flags: .barrier) { [weak self] in
-                        guard
-                            let network: UnsafeMutablePointer<network_object> = self?.network,
-                            let dependenciesPtr: UnsafeMutableRawPointer = self?.dependenciesPtr
-                        else { return }
+                    // Register for network status changes
+                    network_set_status_changed_callback(networkPtr, { cStatus, ctx in
+                        guard let ctx: UnsafeMutableRawPointer = ctx else { return }
                         
-                        // Register for network status changes
-                        network_set_status_changed_callback(network, { cStatus, ctx in
-                            guard let ctx: UnsafeMutableRawPointer = ctx else { return }
-                            
-                            let status: NetworkStatus = NetworkStatus(status: cStatus)
-                            let dependencies: Dependencies = Unmanaged<Dependencies>.fromOpaque(ctx).takeUnretainedValue()
-                            
-                            // Dispatch async so we don't hold up the libSession thread that triggered the update
-                            // or have a reentrancy issue with the mutable cache
-                            DispatchQueue.global(qos: .default).async {
-                                dependencies.mutate(cache: .libSessionNetwork) { $0.setNetworkStatus(status: status) }
-                            }
-                        }, dependenciesPtr)
+                        // Update the cache in an async Task so we don't hold up the libSession thread
+                        // that triggered the update or have a reentrancy issue with the mutable cache
+                        let status: NetworkStatus = NetworkStatus(status: cStatus)
+                        let dependencies: Dependencies = Unmanaged<Dependencies>.fromOpaque(ctx).takeUnretainedValue()
                         
-                        // Register for path changes
-                        network_set_paths_changed_callback(network, { pathsPtr, pathsLen, ctx in
-                            guard let ctx: UnsafeMutableRawPointer = ctx else { return }
-                            
-                            var paths: [[Snode]] = []
-                            
-                            if let cPathsPtr: UnsafeMutablePointer<onion_request_path> = pathsPtr {
-                                var cPaths: [onion_request_path] = []
-                                
-                                (0..<pathsLen).forEach { index in
-                                    cPaths.append(cPathsPtr[index])
-                                }
-                                
-                                // Copy the nodes over as the memory will be freed after the callback is run
-                                paths = cPaths.map { cPath in
-                                    var nodes: [Snode] = []
-                                    (0..<cPath.nodes_count).forEach { index in
-                                        nodes.append(Snode(cPath.nodes[index]))
-                                    }
-                                    return nodes
-                                }
-                                
-                                // Need to free the nodes within the path as we are the owner
-                                cPaths.forEach { cPath in
-                                    cPath.nodes.deallocate()
-                                }
+                        Task {
+                            await dependencies.mutate(cache: .libSessionNetwork) {
+                                await $0.setNetworkStatus(status: status)
                             }
-                            
-                            // Need to free the cPathsPtr as we are the owner
-                            pathsPtr?.deallocate()
-                            
-                            // Dispatch async so we don't hold up the libSession thread that triggered the update
-                            // or have a reentrancy issue with the mutable cache
-                            let dependencies: Dependencies = Unmanaged<Dependencies>.fromOpaque(ctx).takeUnretainedValue()
-                            
-                            DispatchQueue.global(qos: .default).async {
-                                dependencies.mutate(cache: .libSessionNetwork) { $0.setPaths(paths: paths) }
-                            }
-                        }, dependenciesPtr)
-                    }
+                        }
+                    }, dependenciesPtr)
                     
-                    return Just(network)
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
+                    // Register for path changes
+                    network_set_paths_changed_callback(networkPtr, { pathsPtr, pathsLen, ctx in
+                        guard let ctx: UnsafeMutableRawPointer = ctx else { return }
+                        
+                        var paths: [[Snode]] = []
+                        
+                        if let cPathsPtr: UnsafeMutablePointer<onion_request_path> = pathsPtr {
+                            var cPaths: [onion_request_path] = []
+                            
+                            (0..<pathsLen).forEach { index in
+                                cPaths.append(cPathsPtr[index])
+                            }
+                            
+                            // Copy the nodes over as the memory will be freed after the callback is run
+                            paths = cPaths.map { cPath in
+                                var nodes: [Snode] = []
+                                (0..<cPath.nodes_count).forEach { index in
+                                    nodes.append(Snode(cPath.nodes[index]))
+                                }
+                                return nodes
+                            }
+                            
+                            // Need to free the nodes within the path as we are the owner
+                            cPaths.forEach { cPath in
+                                cPath.nodes.deallocate()
+                            }
+                        }
+                        
+                        // Need to free the cPathsPtr as we are the owner
+                        pathsPtr?.deallocate()
+                        
+                        // Update the cache in an async Task so we don't hold up the libSession thread
+                        // that triggered the update or have a reentrancy issue with the mutable cache
+                        let dependencies: Dependencies = Unmanaged<Dependencies>.fromOpaque(ctx).takeUnretainedValue()
+                        
+                        Task { [paths] in
+                            await dependencies.mutate(cache: .libSessionNetwork) {
+                                await $0.setPaths(paths: paths)
+                            }
+                        }
+                    }, dependenciesPtr)
+                    
+                    return network
             }
         }
         
@@ -853,7 +905,7 @@ public extension LibSession {
                 
                 switch network {
                     case .none: return
-                    case .some(let network): return network_close_connections(network)
+                    case .some(let network): return network_close_connections(network.pointer)
                 }
             }
             
@@ -864,19 +916,24 @@ public extension LibSession {
         
         public func setPaths(paths: [[Snode]]) {
             // Notify any subscribers
+            immutable = immutable.with(
+                hasPaths: !paths.isEmpty,
+                currentPaths: paths,
+                pathsDescription: paths.prettifiedDescription
+            )
             _paths.send(paths)
         }
         
         public func clearSnodeCache() {
             switch network {
                 case .none: break
-                case .some(let network): network_clear_cache(network)
+                case .some(let network): network_clear_cache(network.pointer)
             }
         }
     }
     
     // MARK: - NetworkCacheType
-
+    
     /// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
     protocol NetworkImmutableCacheType: ImmutableCacheType {
         var isSuspended: Bool { get }
@@ -888,24 +945,46 @@ public extension LibSession {
         var pathsDescription: String { get }
     }
 
-    protocol NetworkCacheType: NetworkImmutableCacheType, MutableCacheType {
-        var isSuspended: Bool { get }
-        var networkStatus: AnyPublisher<NetworkStatus, Never> { get }
+    protocol NetworkCacheType: MutableCacheType {
+        func suspendNetworkAccess() async
+        func resumeNetworkAccess() async
+        func getOrCreateNetwork() async throws -> NetworkObjectPointer
+        func setNetworkStatus(status: NetworkStatus) async
+        func setPaths(paths: [[Snode]]) async
+        func clearSnodeCache() async
         
-        var paths: AnyPublisher<[[Snode]], Never> { get }
-        var hasPaths: Bool { get }
-        var currentPaths: [[Snode]] { get }
-        var pathsDescription: String { get }
+        // MARK: - NetworkImmutableCacheType Access
         
-        func suspendNetworkAccess()
-        func resumeNetworkAccess()
-        func getOrCreateNetwork() -> AnyPublisher<UnsafeMutablePointer<network_object>?, Error>
-        func setNetworkStatus(status: NetworkStatus)
-        func setPaths(paths: [[Snode]])
-        func clearSnodeCache()
+        var isSuspended: Bool { get async }
+        var paths: AnyPublisher<[[Snode]], Never> { get async }
+        var hasPaths: Bool { get async }
+        var currentPaths: [[Snode]] { get async }
+        var networkStatus: AnyPublisher<NetworkStatus, Never> { get async }
+        var pathsDescription: String { get async }
     }
     
-    class NoopNetworkCache: NetworkCacheType {
+    final class NoopNetworkCache: NetworkCacheType {
+        public struct Immutable: NetworkImmutableCacheType {
+            public var isSuspended: Bool = false
+            public var paths: AnyPublisher<[[Snode]], Never> = Just([]).eraseToAnyPublisher()
+            public var hasPaths: Bool = false
+            public var currentPaths: [[Snode]] = []
+            public var networkStatus: AnyPublisher<NetworkStatus, Never> = Just(NetworkStatus.unknown).eraseToAnyPublisher()
+            public var pathsDescription: String = ""
+        }
+        
+        public func suspendNetworkAccess() async {}
+        public func resumeNetworkAccess() async {}
+        public func getOrCreateNetwork() async throws -> NetworkObjectPointer {
+            throw NetworkError.invalidState
+        }
+        
+        public func setNetworkStatus(status: NetworkStatus) async {}
+        public func setPaths(paths: [[LibSession.Snode]]) async {}
+        public func clearSnodeCache() async {}
+        
+        // MARK: - NetworkImmutableCacheType Access
+        
         public var isSuspended: Bool { return false }
         public var networkStatus: AnyPublisher<NetworkStatus, Never> {
             Just(NetworkStatus.unknown).eraseToAnyPublisher()
@@ -915,16 +994,5 @@ public extension LibSession {
         public var hasPaths: Bool { return false }
         public var currentPaths: [[LibSession.Snode]] { [] }
         public var pathsDescription: String { "" }
-        
-        public func suspendNetworkAccess() {}
-        public func resumeNetworkAccess() {}
-        public func getOrCreateNetwork() -> AnyPublisher<UnsafeMutablePointer<network_object>?, Error> {
-            return Fail(error: NetworkError.invalidState)
-                .eraseToAnyPublisher()
-        }
-        
-        public func setNetworkStatus(status: NetworkStatus) {}
-        public func setPaths(paths: [[LibSession.Snode]]) {}
-        public func clearSnodeCache() {}
     }
 }

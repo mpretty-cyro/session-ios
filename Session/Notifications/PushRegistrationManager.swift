@@ -280,7 +280,7 @@ public class PushRegistrationManager: NSObject, PKPushRegistryDelegate {
         }
         
         dependencies[singleton: .storage].resumeDatabaseAccess()
-        dependencies.mutate(cache: .libSessionNetwork) { $0.resumeNetworkAccess() }
+        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.resumeNetworkAccess() }
         
         let maybeCall: SessionCall? = dependencies[singleton: .storage].write { [dependencies] db -> SessionCall? in
             do {

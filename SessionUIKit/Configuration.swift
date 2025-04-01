@@ -11,8 +11,8 @@ public enum SNUIKit {
         
         func themeChanged(_ theme: Theme, _ primaryColor: Theme.PrimaryColor, _ matchSystemNightModeSetting: Bool)
         func persistentTopBannerChanged(warningKey: String?)
-        func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Any]?
-        func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Any)
+        func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Sendable]?
+        func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Sendable)
         func removeCachedContextualActionInfo(tableViewHash: Int, keys: [String])
         func placeholderIconCacher(cacheKey: String, generator: @escaping () -> UIImage) -> UIImage
         func localizedString(for key: String) -> String

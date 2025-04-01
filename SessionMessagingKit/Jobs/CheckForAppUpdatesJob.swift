@@ -71,12 +71,16 @@ public enum CheckForAppUpdatesJob: JobExecutor {
                     success(updatedJob, false)
                 },
                 receiveValue: { _, versionInfo in
-                    switch versionInfo.prerelease {
-                        case .none:
-                            Log.info(.cat, "Latest version: \(versionInfo.version) (Current: \(dependencies[cache: .appVersion].versionInfo))")
-                            
-                        case .some(let prerelease):
-                            Log.info(.cat, "Latest version: \(versionInfo.version), pre-release version: \(prerelease.version) (Current: \(dependencies[cache: .appVersion].versionInfo))")
+                    Task {
+                        await MainActor.run {
+                            switch versionInfo.prerelease {
+                                case .none:
+                                    Log.info(.cat, "Latest version: \(versionInfo.version) (Current: \(dependencies[cache: .appVersion].versionInfo))")
+                                    
+                                case .some(let prerelease):
+                                    Log.info(.cat, "Latest version: \(versionInfo.version), pre-release version: \(prerelease.version) (Current: \(dependencies[cache: .appVersion].versionInfo))")
+                            }
+                        }
                     }
                 }
             )

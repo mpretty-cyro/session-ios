@@ -1476,7 +1476,7 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigatableStateHolder, Ob
                 receiveOutput: { [dependencies] existingFileName in
                     // Remove any cached avatar image value
                     if let existingFileName: String = existingFileName {
-                        dependencies.mutate(cache: .displayPicture) { $0.imageData[existingFileName] = nil }
+                        dependencies.mutateSync(cache: .displayPicture) { $0.imageData[existingFileName] = nil }
                     }
                 }
             )

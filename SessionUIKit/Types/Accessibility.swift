@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct Accessibility: Hashable, Equatable {
+public struct Accessibility: Sendable, Hashable, Equatable {
     public let identifier: String?
     public let label: String?
     

@@ -606,7 +606,7 @@ public enum MessageReceiver {
             
             // Note: 'sentTimestamp' is in milliseconds so convert it
             let messageSentTimestamp: TimeInterval = TimeInterval((message.sentTimestampMs ?? 0) / 1000)
-            let deletionInfo: (deleteBefore: TimeInterval, deleteAttachmentsBefore: TimeInterval) = dependencies.mutate(cache: .libSession) { cache in
+            let deletionInfo: (deleteBefore: TimeInterval, deleteAttachmentsBefore: TimeInterval) = dependencies.mutateSync(cache: .libSession) { cache in
                 let config: LibSession.Config? = cache.config(for: .groupInfo, sessionId: SessionId(.group, hex: threadId))
                 
                 return (

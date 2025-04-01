@@ -398,7 +398,7 @@ internal extension LibSession {
         // If we only updated the current user contact then no need to continue
         guard !targetContacts.isEmpty else { return updated }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .contacts, sessionId: userSessionId) { config in
                 guard case .contacts(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -476,7 +476,7 @@ internal extension LibSession {
         
         // Update the user profile first (if needed)
         if let updatedUserProfile: Profile = updatedProfiles.first(where: { $0.id == userSessionId.hexString }) {
-            try dependencies.mutate(cache: .libSession) { cache in
+            try dependencies.mutateSync(cache: .libSession) { cache in
                 try cache.performAndPushChange(db, for: .userProfile, sessionId: userSessionId) { config in
                     try LibSession.update(
                         profile: updatedUserProfile,
@@ -486,7 +486,7 @@ internal extension LibSession {
             }
         }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .contacts, sessionId: userSessionId) { config in
                 try LibSession
                     .upsert(
@@ -537,7 +537,7 @@ internal extension LibSession {
         
         // Update the note to self disappearing messages config first (if needed)
         if let updatedUserDisappearingConfig: DisappearingMessagesConfiguration = targetUpdatedConfigs.first(where: { $0.id == userSessionId.hexString }) {
-            try dependencies.mutate(cache: .libSession) { cache in
+            try dependencies.mutateSync(cache: .libSession) { cache in
                 try cache.performAndPushChange(db, for: .userProfile, sessionId: userSessionId) { config in
                     try LibSession.updateNoteToSelf(
                         disappearingMessagesConfig: updatedUserDisappearingConfig,
@@ -547,7 +547,7 @@ internal extension LibSession {
             }
         }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .contacts, sessionId: userSessionId) { config in
                 try LibSession
                     .upsert(
@@ -571,7 +571,7 @@ public extension LibSession {
         contactIds: [String],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .contacts, sessionId: dependencies[cache: .general].sessionId) { config in
                 // Mark the contacts as hidden
                 try LibSession.upsert(
@@ -596,7 +596,7 @@ public extension LibSession {
     ) throws {
         guard !contactIds.isEmpty else { return }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .contacts, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .contacts(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -620,7 +620,7 @@ public extension LibSession {
         
         switch sessionId {
             case userSessionId.hexString:
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.performAndPushChange(db, for: .userProfile, sessionId: userSessionId) { config in
                         try LibSession.updateNoteToSelf(
                             disappearingMessagesConfig: disappearingMessagesConfig,
@@ -630,7 +630,7 @@ public extension LibSession {
                 }
                 
             default:
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.performAndPushChange(db, for: .contacts, sessionId: userSessionId) { config in
                         try LibSession
                             .upsert(

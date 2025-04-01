@@ -57,7 +57,7 @@ public enum ConfigMessageReceiveJob: JobExecutor {
         
         dependencies[singleton: .storage].writeAsync(
             updates: { db in
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.handleConfigMessages(
                         db,
                         swarmPublicKey: swarmPublicKey,

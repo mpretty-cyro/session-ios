@@ -50,7 +50,7 @@ public enum MessageSendJob: JobExecutor {
                     let variant: ConfigDump.Variant = details.requiredConfigSyncVariant
                 else { return failure(job, JobRunnerError.missingRequiredDetails, true) }
                 
-                let needsPush: Bool? = dependencies.mutate(cache: .libSession) { cache in
+                let needsPush: Bool? = dependencies.mutateSync(cache: .libSession) { cache in
                     cache.config(for: variant, sessionId: sessionId)?.needsPush
                 }
                 

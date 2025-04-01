@@ -127,7 +127,7 @@ struct PNModeScreen: View {
     
     private func register() {
         // Store whether we want to use APNS
-        dependencies.mutate(cache: .onboarding) { $0.setUserAPNS(currentSelection == .fast) }
+        dependencies.mutateSync(cache: .onboarding) { await $0.setUserAPNS(currentSelection == .fast) }
         
         // If we are registering then we can just continue on
         guard dependencies[cache: .onboarding].initialFlow != .register else {
@@ -150,7 +150,7 @@ struct PNModeScreen: View {
     }
     
     private func completeRegistration() {
-        dependencies.mutate(cache: .onboarding) { [dependencies] onboarding in
+        dependencies.mutateSync(cache: .onboarding) { [dependencies] onboarding in
             let shouldSyncPushTokens: Bool = onboarding.useAPNS
             
             onboarding.completeRegistration {

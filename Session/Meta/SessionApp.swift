@@ -141,9 +141,9 @@ public class SessionApp: SessionAppType {
         homeViewController = nil
         LibSession.clearLoggers()
         dependencies.remove(cache: .libSession)
-        dependencies.mutate(cache: .libSessionNetwork) {
-            $0.clearSnodeCache()
-            $0.suspendNetworkAccess()
+        dependencies.mutateSync(cache: .libSessionNetwork) {
+            await $0.clearSnodeCache()
+            await $0.suspendNetworkAccess()
         }
         dependencies[singleton: .storage].resetAllStorage()
         dependencies[singleton: .displayPictureManager].resetStorage()

@@ -191,7 +191,7 @@ extension MessageSender {
                     
                     // Start polling
                     dependencies
-                        .mutate(cache: .groupPollers) { $0.getOrCreatePoller(for: thread.id) }
+                        .mutateSync(cache: .groupPollers) { $0.getOrCreatePoller(for: thread.id) }
                         .startIfNeeded()
                     
                     // Subscribe for push notifications (if PNs are enabled)
@@ -207,7 +207,7 @@ extension MessageSender {
                             .compactMap { member -> (GroupMember, GroupInviteMemberJob.Details)? in
                                 // Generate authData for the removed member
                                 guard
-                                    let memberAuthInfo: Authentication.Info = try? dependencies.mutate(cache: .libSession, { cache in
+                                    let memberAuthInfo: Authentication.Info = try? dependencies.mutateSync(cache: .libSession, { cache in
                                         try dependencies[singleton: .crypto].tryGenerate(
                                             .memberAuthData(
                                                 config: cache.config(for: .groupKeys, sessionId: groupSessionId),
@@ -281,7 +281,7 @@ extension MessageSender {
                 let changeTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                 
                 /// Perform the config changes without triggering a config sync (we will trigger one manually as part of the process)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         var groupChanges: [ConfigColumnAssignment] = []
                         
@@ -381,7 +381,7 @@ extension MessageSender {
                 let changeTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                 
                 /// Perform the config changes without triggering a config sync (we will trigger one manually as part of the process)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         switch displayPictureUpdate {
                             case .groupRemove:
@@ -486,7 +486,7 @@ extension MessageSender {
                 let currentOffsetTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
             
                 /// Perform the config changes without triggering a config sync (we will trigger one manually as part of the process)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         /// Update the local state
                         try updatedConfig.upserted(db)
@@ -585,7 +585,7 @@ extension MessageSender {
                 var maybeSupplementalKeyRequest: Network.PreparedRequest<Void>?
                 
                 /// Perform the config changes without triggering a config sync (we will trigger one manually as part of the process)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         /// Add the members to the `GROUP_MEMBERS` config
                         try LibSession.addMembers(
@@ -662,7 +662,7 @@ extension MessageSender {
                 let memberJobData: [MemberJobData] = (try? members
                     .map { id, profile in
                         // Generate authData for the newly added member
-                        let memberInfo: (token: [UInt8], details: GroupInviteMemberJob.Details) = try dependencies.mutate(cache: .libSession) { cache in
+                        let memberInfo: (token: [UInt8], details: GroupInviteMemberJob.Details) = try dependencies.mutateSync(cache: .libSession) { cache in
                             return (
                                 try dependencies[singleton: .crypto].tryGenerate(
                                     .tokenSubaccount(
@@ -815,7 +815,7 @@ extension MessageSender {
                 var maybeSupplementalKeyRequest: Network.PreparedRequest<Void>?
                 
                 /// Perform the config changes without triggering a config sync (we will do so manually after the process completes)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         try memberIds.forEach { memberId in
                             try LibSession.updateMemberStatus(
@@ -891,7 +891,7 @@ extension MessageSender {
                 
                 let memberInfo: [(token: [UInt8], details: GroupInviteMemberJob.Details)] = try memberIds
                     .map { memberId in
-                        try dependencies.mutate(cache: .libSession) { cache in
+                        try dependencies.mutateSync(cache: .libSession) { cache in
                             return (
                                 try dependencies[singleton: .crypto].tryGenerate(
                                     .tokenSubaccount(
@@ -993,7 +993,7 @@ extension MessageSender {
                 else { throw MessageSenderError.invalidClosedGroupUpdate }
                 
                 /// Perform the config changes without triggering a config sync (we will do so manually after the process completes)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: sessionId) {
                         /// Flag the members for removal
                         try LibSession.flagMembersForRemoval(
@@ -1129,7 +1129,7 @@ extension MessageSender {
                     .sortedById(userSessionId: userSessionId)
                 
                 /// Perform the config changes without triggering a config sync (we will do so manually after the process completes)
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: groupSessionId) {
                         try members.forEach { memberId, profile in
                             try LibSession.updateMemberStatus(

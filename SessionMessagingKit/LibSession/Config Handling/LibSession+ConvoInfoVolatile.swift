@@ -283,7 +283,7 @@ internal extension LibSession {
             )
         }
 
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: userSessionId) { config in
                 try upsert(
                     convoInfoVolatileChanges: changes,
@@ -298,7 +298,7 @@ internal extension LibSession {
         volatileContactIds: [String],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .convoInfoVolatile(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -317,7 +317,7 @@ internal extension LibSession {
         volatileLegacyGroupIds: [String],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .convoInfoVolatile(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -338,7 +338,7 @@ internal extension LibSession {
         volatileGroupSessionIds: [SessionId],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .convoInfoVolatile(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -359,7 +359,7 @@ internal extension LibSession {
         volatileCommunityInfo: [OpenGroupUrlInfo],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .convoInfoVolatile(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -385,7 +385,7 @@ public extension LibSession {
         lastReadTimestampMs: Int64,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .convoInfoVolatile, sessionId: dependencies[cache: .general].sessionId) { config in
                 try upsert(
                     convoInfoVolatileChanges: [

@@ -1554,11 +1554,12 @@ extension ConversationVC:
             return
         }
         
-        viewModel.dependencies.mutate(cache: .general) {
-            $0.recentReactionTimestamps = Array($0.recentReactionTimestamps
-                .suffix(19))
-                .appending(sentTimestampMs)
-        }
+        // TODO: [ACTOR CHANGES] Fix this
+//        viewModel.dependencies.mutateSync(cache: .general) {
+//            $0.recentReactionTimestamps = Array($0.recentReactionTimestamps
+//                .suffix(19))
+//                .appending(sentTimestampMs)
+//        }
         
         typealias OpenGroupInfo = (
             pendingReaction: Reaction?,

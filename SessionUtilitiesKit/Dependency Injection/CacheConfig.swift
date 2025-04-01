@@ -8,26 +8,26 @@ public class Cache {}
 
 // MARK: - Cache Types
 
-public protocol MutableCacheType: AnyObject {}  // Needs to be a class to be mutable
-public protocol ImmutableCacheType {}
+public protocol ImmutableCacheType: Sendable {}
+public protocol MutableCacheType: AnyObject, Sendable {}
 
 // MARK: - CacheInfo
 
 public class CacheConfig<M, I>: Cache {
     public let identifier: String
     public let createInstance: (Dependencies) -> M
-    public let mutableInstance: (M) -> MutableCacheType
-    public let immutableInstance: (M) -> I
+    internal let erasedInstance: (Dependencies, M) -> MutableCacheType
+    internal let immutableInstance: (Dependencies, M) async -> I
     
     fileprivate init(
         identifier: String,
         createInstance: @escaping (Dependencies) -> M,
-        mutableInstance: @escaping (M) -> MutableCacheType,
-        immutableInstance: @escaping (M) -> I
+        erasedInstance: @escaping (Dependencies, M) -> MutableCacheType,
+        immutableInstance: @escaping (Dependencies, M) async -> I
     ) {
         self.identifier = identifier
         self.createInstance = createInstance
-        self.mutableInstance = mutableInstance
+        self.erasedInstance = erasedInstance
         self.immutableInstance = immutableInstance
     }
 }
@@ -35,17 +35,22 @@ public class CacheConfig<M, I>: Cache {
 // MARK: - Creation
 
 public extension Dependencies {
-    static func create<M, I>(
+    static func create<M, I, ActorType>(
         identifier: String,
-        createInstance: @escaping (Dependencies) -> M,
-        mutableInstance: @escaping (M) -> MutableCacheType,
-        immutableInstance: @escaping (M) -> I
+        createInstance: @escaping (Dependencies) -> ActorType,
+        mutableInstance: @escaping (ActorType) -> M,
+        erasedInstance: @escaping (ActorType) -> MutableCacheType,
+        immutableInstance: @escaping (ActorType) async -> I
     ) -> CacheConfig<M, I> {
         return CacheConfig(
             identifier: identifier,
-            createInstance: createInstance,
-            mutableInstance: mutableInstance,
-            immutableInstance: immutableInstance
+            createInstance: { dependencies in mutableInstance(createInstance(dependencies)) },
+            erasedInstance: { dependencies, instance in
+                erasedInstance(((instance as? ActorType)) ?? createInstance(dependencies))
+            },
+            immutableInstance: { dependencies, instance in
+                await immutableInstance(((instance as? ActorType)) ?? createInstance(dependencies))
+            }
         )
     }
 }

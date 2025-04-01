@@ -92,7 +92,7 @@ internal extension LibSession {
                     // If the 'Note to Self' conversation is pinned then we need to custom handle it
                     // first as it's part of the UserProfile config
                     if let noteToSelf: SessionThread = threads.first(where: { $0.id == userSessionId.hexString }) {
-                        try dependencies.mutate(cache: .libSession) { cache in
+                        try dependencies.mutateSync(cache: .libSession) { cache in
                             try cache.performAndPushChange(db, for: .userProfile, sessionId: userSessionId) { config in
                                 try LibSession.updateNoteToSelf(
                                     priority: {
@@ -113,7 +113,7 @@ internal extension LibSession {
                     
                     guard !remainingThreads.isEmpty else { return }
                     
-                    try dependencies.mutate(cache: .libSession) { cache in
+                    try dependencies.mutateSync(cache: .libSession) { cache in
                         try cache.performAndPushChange(db, for: .contacts, sessionId: userSessionId) { config in
                             try LibSession.upsert(
                                 contactData: remainingThreads
@@ -136,7 +136,7 @@ internal extension LibSession {
                     }
                     
                 case .community:
-                    try dependencies.mutate(cache: .libSession) { cache in
+                    try dependencies.mutateSync(cache: .libSession) { cache in
                         try cache.performAndPushChange(db, for: .userGroups, sessionId: userSessionId) { config in
                             try LibSession.upsert(
                                 communities: threads
@@ -156,7 +156,7 @@ internal extension LibSession {
                     }
                     
                 case .legacyGroup:
-                    try dependencies.mutate(cache: .libSession) { cache in
+                    try dependencies.mutateSync(cache: .libSession) { cache in
                         try cache.performAndPushChange(db, for: .userGroups, sessionId: userSessionId) { config in
                             try LibSession.upsert(
                                 legacyGroups: threads
@@ -174,7 +174,7 @@ internal extension LibSession {
                     }
                 
                 case .group:
-                    try dependencies.mutate(cache: .libSession) { cache in
+                    try dependencies.mutateSync(cache: .libSession) { cache in
                         try cache.performAndPushChange(db, for: .userGroups, sessionId: userSessionId) { config in
                             try LibSession.upsert(
                                 groups: threads
@@ -207,7 +207,7 @@ internal extension LibSession {
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch key {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                return dependencies.mutate(cache: .libSession) { cache in
+                return dependencies.mutateSync(cache: .libSession) { cache in
                     let config: LibSession.Config? = cache.config(for: .userProfile, sessionId: userSessionId)
                     
                     return (((try? LibSession.rawBlindedMessageRequestValue(in: config)) ?? 0) >= 0)
@@ -230,7 +230,7 @@ internal extension LibSession {
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch updatedSetting.id {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.performAndPushChange(db, for: .userProfile, sessionId: userSessionId) { config in
                         try LibSession.updateSettings(
                             checkForCommunityMessageRequests: updatedSetting.unsafeValue(as: Bool.self),
@@ -538,7 +538,7 @@ public extension LibSession {
             }
         }()
         
-        return dependencies.mutate(cache: .libSession) { cache in
+        return dependencies.mutateSync(cache: .libSession) { cache in
             guard var cThreadId: [CChar] = threadId.cString(using: .utf8) else { return false }
             
             switch (threadVariant, cache.config(for: configVariant, sessionId: userSessionId)) {

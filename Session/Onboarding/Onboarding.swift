@@ -14,6 +14,7 @@ public extension Cache {
         identifier: "onboarding",
         createInstance: { dependencies in Onboarding.Cache(flow: .none, using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
@@ -304,8 +305,8 @@ extension Onboarding {
         func completeRegistration(onComplete: @escaping (() -> Void)) {
             DispatchQueue.global(qos: .userInitiated).async(using: dependencies) { [weak self, initialFlow, userSessionId, ed25519KeyPair, x25519KeyPair, useAPNS, displayName, userProfileConfigMessage, dependencies] in
                 /// Cache the users session id (so we don't need to fetch it from the database every time)
-                dependencies.mutate(cache: .general) {
-                    $0.setCachedSessionId(sessionId: userSessionId)
+                dependencies.mutateSync(cache: .general) {
+                    await $0.setCachedSessionId(sessionId: userSessionId)
                 }
                 
                 /// If we had a proper `initialFlow` then create a new `libSession` cache for the user
@@ -351,7 +352,7 @@ extension Onboarding {
                         )
                         
                         /// Load the initial `libSession` state (won't have been created on launch due to lack of ed25519 key)
-                        dependencies.mutate(cache: .libSession) {
+                        dependencies.mutateSync(cache: .libSession) {
                             $0.loadState(db)
                             
                             /// If we have a `userProfileConfigMessage` then we should try to handle it here as if we don't then

@@ -13,6 +13,7 @@ public extension Cache {
         identifier: "libSession",
         createInstance: { dependencies in NoopLibSessionCache(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }

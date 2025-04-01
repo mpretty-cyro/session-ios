@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct SessionId: Equatable, Hashable, CustomStringConvertible {
+public struct SessionId: Sendable, Equatable, Hashable, CustomStringConvertible {
     public static let byteCount: Int = 33
     public static let invalid: SessionId = SessionId(.standard, publicKey: [])
     

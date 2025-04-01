@@ -22,6 +22,7 @@ public extension Cache {
         identifier: "openGroupManager",
         createInstance: { dependencies in OpenGroupManager.Cache(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
@@ -279,7 +280,7 @@ public final class OpenGroupManager {
                         case .finished:
                             // (Re)start the poller if needed (want to force it to poll immediately in the next
                             // run loop to avoid a big delay before the next poll)
-                            dependencies.mutate(cache: .communityPollers) { cache in
+                            dependencies.mutateSync(cache: .communityPollers) { cache in
                                 let poller: CommunityPollerType = cache.getOrCreatePoller(for: server.lowercased())
                                 poller.stop()
                                 poller.startIfNeeded()
@@ -320,7 +321,7 @@ public final class OpenGroupManager {
             .defaulting(to: 1)
         
         if numActiveRooms == 1, let server: String = server?.lowercased() {
-            dependencies.mutate(cache: .communityPollers) {
+            dependencies.mutateSync(cache: .communityPollers) {
                 $0.stopAndRemovePoller(for: server)
             }
         }
@@ -639,7 +640,7 @@ public final class OpenGroupManager {
             .updateAll(db, OpenGroup.Columns.sequenceNumber.set(to: largestValidSeqNo))
 
         // Update pendingChange cache based on the `largestValidSeqNo` value
-        dependencies.mutate(cache: .openGroupManager) {
+        dependencies.mutateSync(cache: .openGroupManager) {
             $0.pendingChanges = $0.pendingChanges
                 .filter { $0.seqNo == nil || $0.seqNo! > largestValidSeqNo }
         }
@@ -790,7 +791,7 @@ public final class OpenGroupManager {
             )
         )
         
-        dependencies.mutate(cache: .openGroupManager) {
+        dependencies.mutateSync(cache: .openGroupManager) {
             $0.pendingChanges.append(pendingChange)
         }
         
@@ -798,7 +799,7 @@ public final class OpenGroupManager {
     }
     
     public func updatePendingChange(_ pendingChange: OpenGroupAPI.PendingChange, seqNo: Int64?) {
-        dependencies.mutate(cache: .openGroupManager) {
+        dependencies.mutateSync(cache: .openGroupManager) {
             if let index = $0.pendingChanges.firstIndex(of: pendingChange) {
                 $0.pendingChanges[index].seqNo = seqNo
             }
@@ -806,7 +807,7 @@ public final class OpenGroupManager {
     }
     
     public func removePendingChange(_ pendingChange: OpenGroupAPI.PendingChange) {
-        dependencies.mutate(cache: .openGroupManager) {
+        dependencies.mutateSync(cache: .openGroupManager) {
             if let index = $0.pendingChanges.firstIndex(of: pendingChange) {
                 $0.pendingChanges.remove(at: index)
             }

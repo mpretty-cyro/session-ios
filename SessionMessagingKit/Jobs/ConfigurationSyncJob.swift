@@ -68,7 +68,7 @@ public enum ConfigurationSyncJob: JobExecutor {
         guard
             let swarmPublicKey: String = job.threadId,
             let pendingChanges: LibSession.PendingChanges = dependencies[singleton: .storage].read({ db in
-                try dependencies.mutate(cache: .libSession) {
+                try dependencies.mutateSync(cache: .libSession) {
                     try $0.pendingChanges(db, swarmPubkey: swarmPublicKey)
                 }
             })
@@ -179,7 +179,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                         
                         /// Since this change was successful we need to mark it as pushed and generate any config dumps
                         /// which need to be stored
-                        return dependencies.mutate(cache: .libSession) { cache in
+                        return dependencies.mutateSync(cache: .libSession) { cache in
                             cache.markingAsPushed(
                                 seqNo: pushData.seqNo,
                                 serverHash: sendMessageResponse.hash,

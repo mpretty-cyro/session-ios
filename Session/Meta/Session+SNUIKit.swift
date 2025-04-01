@@ -33,45 +33,40 @@ internal struct SessionSNUIKitConfig: SNUIKit.ConfigType {
         dependencies[defaults: .appGroup, key: .topBannerWarningToShow] = warningKey
     }
     
-    func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Any]? {
+    func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Sendable]? {
         dependencies[cache: .general].contextualActionLookupMap
             .getting(tableViewHash)?
             .getting(sideKey)
     }
     
-    func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Any) {
-        dependencies.mutate(cache: .general) { cache in
-            let updatedLookup = (cache.contextualActionLookupMap[tableViewHash] ?? [:])
-                .setting(
-                    sideKey,
-                    ((cache.contextualActionLookupMap[tableViewHash] ?? [:]).getting(sideKey) ?? [:])
-                        .setting(actionIndex, actionInfo)
-                )
-            
-            cache.contextualActionLookupMap[tableViewHash] = updatedLookup
+    func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Sendable) {
+        dependencies.mutateSync(cache: .general) { cache in
+            await cache.updateContextualActionLookupMap(
+                tableViewHash: tableViewHash,
+                value: (cache.contextualActionLookupMap[tableViewHash] ?? [:])
+                    .setting(
+                        sideKey,
+                        ((cache.contextualActionLookupMap[tableViewHash] ?? [:]).getting(sideKey) ?? [:])
+                            .setting(actionIndex, actionInfo)
+                    )
+            )
         }
     }
     
     func removeCachedContextualActionInfo(tableViewHash: Int, keys: [String]) {
-        dependencies.mutate(cache: .general) { cache in
-            keys.forEach { key in
-                cache.contextualActionLookupMap[tableViewHash]?[key] = nil
-            }
-            
-            if cache.contextualActionLookupMap[tableViewHash]?.isEmpty == true {
-                cache.contextualActionLookupMap[tableViewHash] = nil
-            }
+        dependencies.mutateSync(cache: .general) { cache in
+            await cache.removeCachedContextualActionInfo(tableViewHash: tableViewHash, keys: keys)
         }
     }
     
     func placeholderIconCacher(cacheKey: String, generator: @escaping () -> UIImage) -> UIImage {
-        if let cachedIcon: UIImage = dependencies[cache: .general].placeholderCache.object(forKey: cacheKey as NSString) {
+        if let cachedIcon: UIImage = dependencies[cache: .general].cahcedPlaceholder(for: cacheKey) {
             return cachedIcon
         }
         
         let generatedImage: UIImage = generator()
-        dependencies.mutate(cache: .general) {
-            $0.placeholderCache.setObject(generatedImage, forKey: cacheKey as NSString)
+        dependencies.mutateSync(cache: .general) {
+            await $0.placeholderCache.set(key: cacheKey, value: generatedImage)
         }
         
         return generatedImage

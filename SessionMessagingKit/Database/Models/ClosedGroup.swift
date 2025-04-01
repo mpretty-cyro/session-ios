@@ -234,7 +234,7 @@ public extension ClosedGroup {
         }
         
         /// Load the group state into the `LibSession.Cache` if needed
-        dependencies.mutate(cache: .libSession) { cache in
+        dependencies.mutateSync(cache: .libSession) { cache in
             let groupSessionId: SessionId = .init(.group, hex: group.id)
             
             guard
@@ -251,7 +251,7 @@ public extension ClosedGroup {
         }
         
         /// Start the poller
-        dependencies.mutate(cache: .groupPollers) { $0.getOrCreatePoller(for: group.id).startIfNeeded() }
+        dependencies.mutateSync(cache: .groupPollers) { $0.getOrCreatePoller(for: group.id).startIfNeeded() }
         
         /// Subscribe for group push notifications
         if let token: String = dependencies[defaults: .standard, key: .deviceToken] {
@@ -301,7 +301,7 @@ public extension ClosedGroup {
         if !dataToRemove.asSet().intersection([.poller, .pushNotifications, .libSessionState]).isEmpty {
             threadIds.forEach { threadId in
                 if dataToRemove.contains(.poller) {
-                    dependencies.mutate(cache: .groupPollers) { $0.stopAndRemovePoller(for: threadId) }
+                    dependencies.mutateSync(cache: .groupPollers) { $0.stopAndRemovePoller(for: threadId) }
                 }
                 
                 if dataToRemove.contains(.pushNotifications) {

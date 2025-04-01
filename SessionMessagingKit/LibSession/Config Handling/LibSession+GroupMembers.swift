@@ -158,7 +158,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> Set<GroupMember> {
-        return try dependencies.mutate(cache: .libSession) { cache in
+        return try dependencies.mutateSync(cache: .libSession) { cache in
             guard case .groupMembers(let conf) = cache.config(for: .groupMembers, sessionId: groupSessionId) else {
                 throw LibSessionError.invalidConfigObject
             }
@@ -174,7 +174,7 @@ internal extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) throws -> [String: GROUP_MEMBER_STATUS] {
-        return try dependencies.mutate(cache: .libSession) { cache in
+        return try dependencies.mutateSync(cache: .libSession) { cache in
             guard case .groupMembers(let conf) = cache.config(for: .groupMembers, sessionId: groupSessionId) else {
                 throw LibSessionError.invalidConfigObject
             }
@@ -193,7 +193,7 @@ internal extension LibSession {
         allowAccessToHistoricMessages: Bool,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                 guard case .groupMembers(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -241,7 +241,7 @@ internal extension LibSession {
         profile: Profile?,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                 try LibSession.updateMemberStatus(memberId: memberId, role: role, status: status, in: config)
                 try LibSession.updateMemberProfile(memberId: memberId, profile: profile, in: config)
@@ -284,7 +284,7 @@ internal extension LibSession {
         profile: Profile?,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                 try LibSession.updateMemberProfile(memberId: memberId, profile: profile, in: config)
             }
@@ -324,7 +324,7 @@ internal extension LibSession {
         removeMessages: Bool,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                 guard case .groupMembers(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -344,7 +344,7 @@ internal extension LibSession {
         memberIds: Set<String>,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                 guard case .groupMembers(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -379,7 +379,7 @@ internal extension LibSession {
         
         // Loop through each of the groups and update their settings
         try targetMembers.forEach { member in
-            try dependencies.mutate(cache: .libSession) { cache in
+            try dependencies.mutateSync(cache: .libSession) { cache in
                 try cache.performAndPushChange(db, for: .groupMembers, sessionId: groupSessionId) { config in
                     try LibSession.updateMemberStatus(
                         memberId: member.profileId,
@@ -413,7 +413,7 @@ internal extension LibSession {
         memberId: String,
         using dependencies: Dependencies
     ) -> Bool {
-        return dependencies.mutate(cache: .libSession) { cache in
+        return dependencies.mutateSync(cache: .libSession) { cache in
             var member: config_group_member = config_group_member()
             
             guard

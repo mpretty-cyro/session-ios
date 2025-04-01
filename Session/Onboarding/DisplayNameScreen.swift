@@ -114,12 +114,12 @@ struct DisplayNameScreen: View {
         }
         
         // Store the new name in the onboarding cache
-        dependencies.mutate(cache: .onboarding) { $0.setDisplayName(displayName) }
+        dependencies.mutateSync(cache: .onboarding) { $0.setDisplayName(displayName) }
         
         // If we are not in the registration flow then we are finished and should go straight
         // to the home screen
         guard dependencies[cache: .onboarding].initialFlow == .register else {
-            return dependencies.mutate(cache: .onboarding) { [dependencies] onboarding in
+            return dependencies.mutateSync(cache: .onboarding) { [dependencies] onboarding in
                 // If the `initialFlow` is `none` then it means the user is just providing a missing displayName
                 // and so shouldn't change the APNS setting, otherwise we should base it on the users selection
                 // during the onboarding process

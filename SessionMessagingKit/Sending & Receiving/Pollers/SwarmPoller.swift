@@ -96,8 +96,8 @@ public class SwarmPoller: SwarmPollerType & PollerType {
     /// for cases where we need explicit/custom behaviours to occur (eg. Onboarding)
     public func poll(forceSynchronousProcessing: Bool) -> AnyPublisher<PollResult, Error> {
         let pollerQueue: DispatchQueue = self.pollerQueue
-        let configHashes: [String] = dependencies.mutate(cache: .libSession) { cache in
-            cache.configHashes(for: pollerDestination.target)
+        let configHashes: [String] = dependencies.mutateSync(cache: .libSession) { cache in
+            cache.configHashes(for: self.pollerDestination.target)
         }
         
         /// Fetch the messages
@@ -224,7 +224,7 @@ public class SwarmPoller: SwarmPollerType & PollerType {
                             if namespace.isConfigNamespace {
                                 do {
                                     /// Process config messages all at once in case they are multi-part messages
-                                    try dependencies.mutate(cache: .libSession) {
+                                    try dependencies.mutateSync(cache: .libSession) {
                                         try $0.handleConfigMessages(
                                             db,
                                             swarmPublicKey: pollerDestination.target,

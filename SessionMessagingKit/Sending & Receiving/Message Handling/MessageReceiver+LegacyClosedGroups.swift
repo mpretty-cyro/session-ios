@@ -253,7 +253,7 @@ extension MessageReceiver {
         
         // Start polling
         dependencies
-            .mutate(cache: .groupPollers) { $0.getOrCreatePoller(for: legacyGroupSessionId) }
+            .mutateSync(cache: .groupPollers) { $0.getOrCreatePoller(for: legacyGroupSessionId) }
             .startIfNeeded()
         
         // Resubscribe for group push notifications

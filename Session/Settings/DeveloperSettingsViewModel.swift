@@ -935,9 +935,9 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
         dependencies.remove(cache: .communityPollers)
         
         /// Reset the network
-        dependencies.mutate(cache: .libSessionNetwork) {
-            $0.setPaths(paths: [])
-            $0.setNetworkStatus(status: .unknown)
+        dependencies.mutateSync(cache: .libSessionNetwork) {
+            await $0.setPaths(paths: [])
+            await $0.setNetworkStatus(status: .unknown)
         }
         dependencies.remove(cache: .libSessionNetwork)
         
@@ -1015,7 +1015,7 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
         
         // Stop and restart the group pollers now that the flag has been updated (legacy groups
         // will/won't be started based on the flag)
-        dependencies.mutate(cache: .groupPollers) {
+        dependencies.mutateSync(cache: .groupPollers) {
             $0.stopAndRemoveAllPollers()
             $0.startAllPollers()
         }
@@ -1025,9 +1025,9 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
         updateFlag(for: .forceOffline, to: !current)
         
         // Reset the network cache
-        dependencies.mutate(cache: .libSessionNetwork) {
-            $0.setPaths(paths: [])
-            $0.setNetworkStatus(status: current ? .unknown : .disconnected)
+        dependencies.mutateSync(cache: .libSessionNetwork) {
+            await $0.setPaths(paths: [])
+            await $0.setNetworkStatus(status: current ? .unknown : .disconnected)
         }
         dependencies.remove(cache: .libSessionNetwork)
     }
@@ -1047,7 +1047,7 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
                         dependencies.remove(cache: .snodeAPI)
                         
                         /// Clear the snode cache
-                        dependencies.mutate(cache: .libSessionNetwork) { $0.clearSnodeCache() }
+                        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.clearSnodeCache() }
                     }
                 )
             ),
@@ -1341,7 +1341,7 @@ class DeveloperSettingsViewModel: SessionTableViewModel, NavigatableStateHolder,
                     LibSession.clearLoggers()
                     dependencies[singleton: .jobRunner].stopAndClearPendingJobs()
                     dependencies.remove(cache: .libSession)
-                    dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+                    dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
                     dependencies[singleton: .storage].suspendDatabaseAccess()
                     try dependencies[singleton: .storage].closeDatabase()
                     

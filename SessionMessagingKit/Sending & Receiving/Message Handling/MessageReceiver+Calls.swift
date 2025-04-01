@@ -247,7 +247,7 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: messageSentTimestampMs,
-            wasRead: dependencies.mutate(cache: .libSession) { cache in
+            wasRead: dependencies.mutateSync(cache: .libSession) { cache in
                 cache.timestampAlreadyRead(
                     threadId: thread.id,
                     threadVariant: thread.variant,
@@ -339,7 +339,7 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: timestampMs,
-            wasRead: dependencies.mutate(cache: .libSession) { cache in
+            wasRead: dependencies.mutateSync(cache: .libSession) { cache in
                 cache.timestampAlreadyRead(
                     threadId: thread.id,
                     threadVariant: thread.variant,

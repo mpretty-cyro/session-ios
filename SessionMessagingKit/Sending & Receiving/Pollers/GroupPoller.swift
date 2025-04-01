@@ -13,6 +13,7 @@ public extension Cache {
         identifier: "groupPollers",
         createInstance: { dependencies in GroupPoller.Cache(using: dependencies) },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
@@ -44,7 +45,7 @@ public final class GroupPoller: SwarmPoller {
         else { return }
         
         let numKeys: Int = dependencies
-            .mutate(cache: .libSession) { $0.config(for: .groupKeys, sessionId: sessionId)?.count }
+            .mutateSync(cache: .libSession) { $0.config(for: .groupKeys, sessionId: sessionId)?.count }
             .defaulting(to: 0)
         
         /// If the keys generation is greated than `0` then it means we have a valid config so shouldn't continue
@@ -102,12 +103,12 @@ public final class GroupPoller: SwarmPoller {
             }
             .defaulting(to: dependencies.dateNow.addingTimeInterval(-5 * 60))
         let lastReadDate: Date = dependencies
-            .mutate(cache: .libSession) { cache in
+            .mutateSync(cache: .libSession) { cache in
                 cache.conversationLastRead(
-                    threadId: pollerDestination.target,
+                    threadId: self.pollerDestination.target,
                     // FIXME: Remove this check when legacy groups are deprecated (leaving the feature flag commented out to make it easier to find)
                     // dependencies[feature: .legacyGroupsDeprecated]
-                    threadVariant: ((try? SessionId.Prefix(from: pollerDestination.target)) != .standard ?
+                    threadVariant: ((try? SessionId.Prefix(from: self.pollerDestination.target)) != .standard ?
                         .group :
                         .legacyGroup
                     ),

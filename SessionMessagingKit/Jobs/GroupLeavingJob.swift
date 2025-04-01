@@ -138,7 +138,7 @@ public enum GroupLeavingJob: JobExecutor {
                         let groupSessionId: SessionId = SessionId(.group, hex: threadId)
                         
                         /// Skip the automatic config sync because we want to perform it synchronously as part of this job
-                        try dependencies.mutate(cache: .libSession) { cache in
+                        try dependencies.mutateSync(cache: .libSession) { cache in
                             try cache.withCustomBehaviour(.skipAutomaticConfigSync, for: groupSessionId) {
                                 try cache.deleteGroupForEveryone(db, groupSessionId: groupSessionId)
                             }

@@ -96,7 +96,7 @@ public extension Crypto.Generator {
             id: "ciphertextForGroupMessage",
             args: [groupSessionId, message]
         ) { dependencies in
-            return try dependencies.mutate(cache: .libSession) { cache in
+            return try dependencies.mutateSync(cache: .libSession) { cache in
                 guard case .groupKeys(let conf, _, _) = cache.config(for: .groupKeys, sessionId: groupSessionId) else {
                     throw LibSessionError.invalidConfigObject
                 }
@@ -130,7 +130,7 @@ public extension Crypto.Generator {
             id: "plaintextForGroupMessage",
             args: [groupSessionId, ciphertext]
         ) { dependencies in
-            return try dependencies.mutate(cache: .libSession) { cache in
+            return try dependencies.mutateSync(cache: .libSession) { cache in
                 guard case .groupKeys(let conf, _, _) = cache.config(for: .groupKeys, sessionId: groupSessionId) else {
                     throw LibSessionError.invalidConfigObject
                 }

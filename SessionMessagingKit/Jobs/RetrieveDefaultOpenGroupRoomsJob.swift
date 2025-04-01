@@ -164,7 +164,7 @@ public enum RetrieveDefaultOpenGroupRoomsJob: JobExecutor {
                     }
                     
                     /// Update the `openGroupManager` cache to have the default rooms
-                    dependencies.mutate(cache: .openGroupManager) { cache in
+                    dependencies.mutateSync(cache: .openGroupManager) { cache in
                         cache.setDefaultRoomInfo(defaultRooms ?? [])
                     }
                 }

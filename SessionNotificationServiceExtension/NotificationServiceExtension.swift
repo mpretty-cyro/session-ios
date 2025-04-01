@@ -144,7 +144,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                 switch processedMessage {
                     /// Custom handle config messages (as they don't get handled by the normal `MessageReceiver.handle` call
                     case .config(let swarmPublicKey, let namespace, let serverHash, let serverTimestampMs, let data):
-                        try dependencies.mutate(cache: .libSession) { cache in
+                        try dependencies.mutateSync(cache: .libSession) { cache in
                             try cache.handleConfigMessages(
                                 db,
                                 swarmPublicKey: swarmPublicKey,

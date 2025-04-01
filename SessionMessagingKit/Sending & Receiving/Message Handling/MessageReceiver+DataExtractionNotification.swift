@@ -25,7 +25,7 @@ extension MessageReceiver {
             dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
         )
         
-        let wasRead: Bool = dependencies.mutate(cache: .libSession) { cache in
+        let wasRead: Bool = dependencies.mutateSync(cache: .libSession) { cache in
             cache.timestampAlreadyRead(
                 threadId: threadId,
                 threadVariant: threadVariant,

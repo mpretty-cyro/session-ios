@@ -176,7 +176,7 @@ extension MessageSender {
                     
                     // Start polling
                     dependencies
-                        .mutate(cache: .groupPollers) { $0.getOrCreatePoller(for: thread.id) }
+                        .mutateSync(cache: .groupPollers) { $0.getOrCreatePoller(for: thread.id) }
                         .startIfNeeded()
                 }
             )

@@ -125,7 +125,7 @@ public enum DisplayPictureDownloadJob: JobExecutor {
                     
                     // Update the cache first (in case the DBWrite thread is blocked, this way other threads
                     // can retrieve from the cache and avoid triggering a download)
-                    dependencies.mutate(cache: .displayPicture) { cache in
+                    dependencies.mutateSync(cache: .displayPicture) { cache in
                         cache.imageData[finalFileName] = decryptedData
                     }
                     

@@ -643,7 +643,7 @@ public final class SnodeAPI {
                 // Assume we've fetched the networkTime in order to send a message to the specified snode, in
                 // which case we want to update the 'clockOffsetMs' value for subsequent requests
                 let offset = (Int64(response.timestamp) - Int64(floor(dependencies.dateNow.timeIntervalSince1970 * 1000)))
-                dependencies.mutate(cache: .snodeAPI) { $0.setClockOffsetMs(offset) }
+                dependencies.mutateSync(cache: .snodeAPI) { await $0.setClockOffsetMs(offset) }
 
                 return response.timestamp
             }
@@ -676,22 +676,25 @@ public final class SnodeAPI {
                         // Update the network offset based on the response so subsequent requests have
                         // the correct network offset time
                         let offset = (Int64(snodeResponse.timeOffset) - Int64(floor(dependencies.dateNow.timeIntervalSince1970 * 1000)))
-                        dependencies.mutate(cache: .snodeAPI) {
-                            $0.setClockOffsetMs(offset)
+                        dependencies.mutateSync(cache: .snodeAPI) {
+                            await $0.setClockOffsetMs(offset)
                             
                             // Extract and store hard fork information if returned
                             guard snodeResponse.hardForkVersion.count > 1 else { return }
                             
-                            if snodeResponse.hardForkVersion[1] > $0.softfork {
-                                $0.softfork = snodeResponse.hardForkVersion[1]
-                                dependencies[defaults: .standard, key: .hardfork] = $0.softfork
+                            let currentSoftfork: Int = await $0.softfork
+                            let currentHardfork: Int = await $0.hardfork
+                            
+                            if snodeResponse.hardForkVersion[1] > currentSoftfork {
+                                await $0.setSoftfork(snodeResponse.hardForkVersion[1])
+                                await dependencies[defaults: .standard, key: .hardfork] = $0.softfork
                             }
                             
-                            if snodeResponse.hardForkVersion[0] > $0.hardfork {
-                                $0.hardfork = snodeResponse.hardForkVersion[0]
-                                dependencies[defaults: .standard, key: .hardfork] = $0.hardfork
-                                $0.softfork = snodeResponse.hardForkVersion[1]
-                                dependencies[defaults: .standard, key: .softfork] = $0.softfork
+                            if snodeResponse.hardForkVersion[0] > currentHardfork {
+                                await $0.setHardfork(snodeResponse.hardForkVersion[0])
+                                await $0.setSoftfork(snodeResponse.hardForkVersion[1])
+                                await dependencies[defaults: .standard, key: .hardfork] = $0.hardfork
+                                await dependencies[defaults: .standard, key: .softfork] = $0.softfork
                             }
                         }
                         
@@ -787,31 +790,82 @@ public extension Publisher where Output == Set<LibSession.Snode> {
 // MARK: - SnodeAPI Cache
 
 public extension SnodeAPI {
-    class Cache: SnodeAPICacheType {
-        private let dependencies: Dependencies
-        public var hardfork: Int
-        public var softfork: Int
-        public var clockOffsetMs: Int64 = 0
-        
-        init(using dependencies: Dependencies) {
-            self.dependencies = dependencies
-            self.hardfork = dependencies[defaults: .standard, key: .hardfork]
-            self.softfork = dependencies[defaults: .standard, key: .softfork]
-        }
-        
-        public func currentOffsetTimestampMs<T: Numeric>() -> T {
-            let timestampNowMs: Int64 = (Int64(floor(dependencies.dateNow.timeIntervalSince1970 * 1000)) + clockOffsetMs)
+    actor Cache: SnodeAPICacheType {
+        public struct Immutable: SnodeAPIImmutableCacheType {
+            private let dependencies: Dependencies
+            public let hardfork: Int
+            public let softfork: Int
+            public let clockOffsetMs: Int64
             
-            guard let convertedTimestampNowMs: T = T(exactly: timestampNowMs) else {
-                Log.critical("[SnodeAPI.Cache] Failed to convert the timestamp to the desired type: \(type(of: T.self)).")
-                return 0
+            public func currentOffsetTimestampMs<T: Numeric>() -> T {
+                let timestampNowMs: Int64 = (Int64(floor(dependencies.dateNow.timeIntervalSince1970 * 1000)) + clockOffsetMs)
+                
+                guard let convertedTimestampNowMs: T = T(exactly: timestampNowMs) else {
+                    Log.critical("[SnodeAPI.Cache] Failed to convert the timestamp to the desired type: \(type(of: T.self)).")
+                    return 0
+                }
+                
+                return convertedTimestampNowMs
             }
             
-            return convertedTimestampNowMs
+            fileprivate init(
+                dependencies: Dependencies,
+                hardfork: Int,
+                softfork: Int,
+                clockOffsetMs: Int64
+            ) {
+                self.dependencies = dependencies
+                self.hardfork = hardfork
+                self.softfork = softfork
+                self.clockOffsetMs = clockOffsetMs
+            }
+            
+            public func with(
+                hardfork: Int? = nil,
+                softfork: Int? = nil,
+                clockOffsetMs: Int64? = nil
+            ) -> Immutable {
+                return Immutable(
+                    dependencies: self.dependencies,
+                    hardfork: (hardfork ?? self.hardfork),
+                    softfork: (softfork ?? self.softfork),
+                    clockOffsetMs: (clockOffsetMs ?? self.clockOffsetMs)
+                )
+            }
         }
         
-        public func setClockOffsetMs(_ clockOffsetMs: Int64) {
-            self.clockOffsetMs = clockOffsetMs
+        fileprivate var immutable: Immutable
+        public var hardfork: Int { immutable.hardfork }
+        public var softfork: Int { immutable.softfork }
+        public var clockOffsetMs: Int64 { immutable.clockOffsetMs }
+        
+        // MARK: - Initialization
+        
+        init(using dependencies: Dependencies) {
+            self.immutable = Immutable(
+                dependencies: dependencies,
+                hardfork: dependencies[defaults: .standard, key: .hardfork],
+                softfork: dependencies[defaults: .standard, key: .softfork],
+                clockOffsetMs: 0
+            )
+        }
+        
+        // MARK: - Functions
+        
+        public func setHardfork(_ hardfork: Int) async {
+            immutable = immutable.with(hardfork: hardfork)
+        }
+        
+        public func setSoftfork(_ softfork: Int) async {
+            immutable = immutable.with(softfork: softfork)
+        }
+        
+        public func setClockOffsetMs(_ clockOffsetMs: Int64) async {
+            immutable = immutable.with(clockOffsetMs: clockOffsetMs)
+        }
+        
+        public func currentOffsetTimestampMs<T>() async -> T where T: Numeric {
+            return immutable.currentOffsetTimestampMs()
         }
     }
 }
@@ -821,7 +875,8 @@ public extension Cache {
         identifier: "snodeAPI",
         createInstance: { dependencies in SnodeAPI.Cache(using: dependencies) },
         mutableInstance: { $0 },
-        immutableInstance: { $0 }
+        erasedInstance: { $0 },
+        immutableInstance: { $0.immutable }
     )
 }
 
@@ -844,13 +899,20 @@ public protocol SnodeAPIImmutableCacheType: ImmutableCacheType {
     func currentOffsetTimestampMs<T: Numeric>() -> T
 }
 
-public protocol SnodeAPICacheType: SnodeAPIImmutableCacheType, MutableCacheType {
-    /// The last seen storage server hard fork version.
-    var hardfork: Int { get set }
+public protocol SnodeAPICacheType: MutableCacheType {
+    /// Updates the cached hard fork version
+    func setHardfork(_ hardfork: Int) async
     
-    /// The last seen storage server soft fork version.
-    var softfork: Int { get set }
-
+    /// Updates the cached soft fork version
+    func setSoftfork(_ softfork: Int) async
+    
     /// A function to update the offset between the user's clock and the Service Node's clock.
-    func setClockOffsetMs(_ clockOffsetMs: Int64)
+    func setClockOffsetMs(_ clockOffsetMs: Int64) async
+    
+    // MARK: - SnodeAPIImmutableCacheType Access
+    
+    var hardfork: Int { get async }
+    var softfork: Int { get async }
+    var clockOffsetMs: Int64 { get async }
+    func currentOffsetTimestampMs<T: Numeric>() async -> T
 }

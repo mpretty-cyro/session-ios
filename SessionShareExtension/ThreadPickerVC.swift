@@ -130,7 +130,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         
         // When the thread picker disappears it means the user has left the screen (this will be called
         // whether the user has sent the message or cancelled sending)
-        viewModel.dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+        viewModel.dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
         viewModel.dependencies[singleton: .storage].suspendDatabaseAccess()
         Log.flush()
     }
@@ -279,7 +279,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         
         ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "sending".localized()) { [dependencies = viewModel.dependencies] activityIndicator in
             dependencies[singleton: .storage].resumeDatabaseAccess()
-            dependencies.mutate(cache: .libSessionNetwork) { $0.resumeNetworkAccess() }
+            dependencies.mutateSync(cache: .libSessionNetwork) { await $0.resumeNetworkAccess() }
             
             /// When we prepare the message we set the timestamp to be the `dependencies[cache: .snodeAPI].currentOffsetTimestampMs()`
             /// but won't actually have a value because the share extension won't have talked to a service node yet which can cause
@@ -420,7 +420,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
                     receiveCompletion: { [weak self] result in
-                        dependencies.mutate(cache: .libSessionNetwork) { $0.suspendNetworkAccess() }
+                        dependencies.mutateSync(cache: .libSessionNetwork) { await $0.suspendNetworkAccess() }
                         dependencies[singleton: .storage].suspendDatabaseAccess()
                         Log.flush()
                         activityIndicator.dismiss { }

@@ -760,7 +760,7 @@ internal extension LibSession {
         guard !targetGroups.isEmpty else { return updated }
         
         // Apply the changes
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: userSessionId) { config in
                 try upsert(
                     groups: targetGroups.map { group -> GroupUpdateInfo in
@@ -794,7 +794,7 @@ public extension LibSession {
         publicKey: String,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.upsert(
                     communities: [
@@ -819,7 +819,7 @@ public extension LibSession {
         roomToken: String,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .userGroups(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -861,7 +861,7 @@ public extension LibSession {
         admins: Set<String>,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .userGroups(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -926,7 +926,7 @@ public extension LibSession {
         admins: Set<String>? = nil,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.upsert(
                     legacyGroups: [
@@ -976,7 +976,7 @@ public extension LibSession {
         disappearingConfigs: [DisappearingMessagesConfiguration],
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.upsert(
                     legacyGroups: disappearingConfigs.map {
@@ -1002,7 +1002,7 @@ public extension LibSession {
     ) throws {
         guard !legacyGroupIds.isEmpty else { return }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .userGroups(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -1031,7 +1031,7 @@ public extension LibSession {
         invited: Bool,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.upsert(
                     groups: [
@@ -1060,7 +1060,7 @@ public extension LibSession {
         invited: Bool? = nil,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 try LibSession.upsert(
                     groups: [
@@ -1086,7 +1086,7 @@ public extension LibSession {
     ) throws {
         guard !groupSessionIds.isEmpty else { return }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.markAsKicked(db, groupSessionIds: groupSessionIds, using: dependencies)
         }
     }
@@ -1095,7 +1095,7 @@ public extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) -> Bool {
-        return dependencies.mutate(cache: .libSession) { cache in
+        return dependencies.mutateSync(cache: .libSession) { cache in
             guard
                 case .userGroups(let conf) = cache.config(for: .userGroups, sessionId: dependencies[cache: .general].sessionId),
                 var cGroupId: [CChar] = groupSessionId.hexString.cString(using: .utf8)
@@ -1114,7 +1114,7 @@ public extension LibSession {
         groupSessionId: SessionId,
         using dependencies: Dependencies
     ) -> Bool {
-        return dependencies.mutate(cache: .libSession) { cache in
+        return dependencies.mutateSync(cache: .libSession) { cache in
             guard
                 case .userGroups(let conf) = cache.config(for: .userGroups, sessionId: dependencies[cache: .general].sessionId),
                 var cGroupId: [CChar] = groupSessionId.hexString.cString(using: .utf8)
@@ -1136,7 +1136,7 @@ public extension LibSession {
     ) throws {
         guard !groupSessionIds.isEmpty else { return }
         
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .userGroups, sessionId: dependencies[cache: .general].sessionId) { config in
                 guard case .userGroups(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 

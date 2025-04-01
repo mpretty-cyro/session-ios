@@ -16,6 +16,7 @@ final class MainAppContext: AppContext {
         switch Thread.isMainThread {
             case true: result = (UIApplication.shared.applicationState == .active)
             case false:
+                // TODO: [ACTOR CHANGES] This is resulting in a deadlock when the 'SessionBackgroundTaskManager' initialisation is getting called (because it's already waiting on the main thread)
                 DispatchQueue.main.sync {
                     result = (UIApplication.shared.applicationState == .active)
                 }

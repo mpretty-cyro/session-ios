@@ -12,7 +12,8 @@ internal extension Cache {
         identifier: "transactionObserver",
         createInstance: { dependencies in Storage.TransactionObserverCache(using: dependencies) },
         mutableInstance: { $0 },
-        immutableInstance: { $0 }
+        erasedInstance: { $0 },
+        immutableInstance: { $0.immutable }
     )
 }
 
@@ -27,36 +28,44 @@ public extension Database {
     /// **Note:** GRDB doesn't notify read-only transactions to transaction observers
     func afterNextTransactionNested(
         using dependencies: Dependencies,
-        onCommit: @escaping (Database) -> Void,
-        onRollback: @escaping (Database) -> Void = { _ in }
+        onCommit: @escaping @Sendable (Database) -> Void,
+        onRollback: @escaping @Sendable (Database) -> Void = { _ in }
     ) {
-        dependencies.mutate(cache: .transactionObserver) {
-            $0.add(self, dedupeId: UUID().uuidString, onCommit: onCommit, onRollback: onRollback)
-        }
+        guard
+            let handler: TransactionHandler = dependencies.mutateSync(cache: .transactionObserver, {
+                await $0.add(dedupeId: UUID().uuidString, onCommit: onCommit, onRollback: onRollback)
+            })
+        else { return }
+        // TODO: [REFACTOR] Need to test this!!!
+        self.add(transactionObserver: handler, extent: .nextTransaction)
     }
     
     func afterNextTransactionNestedOnce(
         dedupeId: String,
         using dependencies: Dependencies,
-        onCommit: @escaping (Database) -> Void,
-        onRollback: @escaping (Database) -> Void = { _ in }
+        onCommit: @escaping @Sendable (Database) -> Void,
+        onRollback: @escaping @Sendable (Database) -> Void = { _ in }
     ) {
-        dependencies.mutate(cache: .transactionObserver) {
-            $0.add(self, dedupeId: dedupeId, onCommit: onCommit, onRollback: onRollback)
-        }
+        guard
+            let handler: TransactionHandler = dependencies.mutateSync(cache: .transactionObserver, {
+                await $0.add(dedupeId: dedupeId, onCommit: onCommit, onRollback: onRollback)
+            })
+        else { return }
+        // TODO: [REFACTOR] Need to test this!!!
+        self.add(transactionObserver: handler, extent: .nextTransaction)
     }
 }
 
-internal class TransactionHandler: TransactionObserver {
+internal final class TransactionHandler: TransactionObserver, Sendable {
     private let dependencies: Dependencies
     private let identifier: String
-    private let onCommit: (Database) -> Void
-    private let onRollback: (Database) -> Void
+    private let onCommit: @Sendable (Database) -> Void
+    private let onRollback: @Sendable (Database) -> Void
 
     init(
         identifier: String,
-        onCommit: @escaping (Database) -> Void,
-        onRollback: @escaping (Database) -> Void,
+        onCommit: @escaping @Sendable (Database) -> Void,
+        onRollback: @escaping @Sendable (Database) -> Void,
         using dependencies: Dependencies
     ) {
         self.dependencies = dependencies
@@ -70,7 +79,9 @@ internal class TransactionHandler: TransactionObserver {
     func databaseDidChange(with event: DatabaseEvent) { }
     
     func databaseDidCommit(_ db: Database) {
-        dependencies.mutate(cache: .transactionObserver) { $0.remove(for: identifier) }
+        dependencies.mutateSync(cache: .transactionObserver) { [identifier = self.identifier] observer in
+            await observer.remove(for: identifier)
+        }
         
         do {
             try db.inTransaction {
@@ -84,7 +95,9 @@ internal class TransactionHandler: TransactionObserver {
     }
     
     func databaseDidRollback(_ db: Database) {
-        dependencies.mutate(cache: .transactionObserver) { $0.remove(for: identifier) }
+        dependencies.mutateSync(cache: .transactionObserver) { [identifier = self.identifier] observer in
+            await observer.remove(for: identifier)
+        }
         onRollback(db)
     }
 }
@@ -92,28 +105,33 @@ internal class TransactionHandler: TransactionObserver {
 // MARK: - TransactionObserver Cache
 
 internal extension Storage {
-    class TransactionObserverCache: TransactionObserverCacheType {
-        private let dependencies: Dependencies
-        public var registeredHandlers: [String: TransactionHandler] = [:]
+    actor TransactionObserverCache: TransactionObserverCacheType {
+        public struct Immutable: TransactionObserverImmutableCacheType {
+            public var registeredHandlers: [String: TransactionHandler] = [:]
+        }
+        
+        fileprivate let dependencies: Dependencies
+        fileprivate var immutable: Immutable
+        public var registeredHandlers: [String: TransactionHandler] { immutable.registeredHandlers }
         
         // MARK: - Initialization
         
         public init(using dependencies: Dependencies) {
             self.dependencies = dependencies
+            self.immutable = Immutable(registeredHandlers: [:])
         }
         
         // MARK: - Functions
         
         public func add(
-            _ db: Database,
             dedupeId: String,
-            onCommit: @escaping (Database) -> Void,
-            onRollback: @escaping (Database) -> Void
-        ) {
+            onCommit: @escaping @Sendable (Database) -> Void,
+            onRollback: @escaping @Sendable (Database) -> Void
+        ) async -> TransactionHandler? {
             // Only allow a single observer per `dedupeId` per transaction, this allows us to
             // schedule an action to run at most once per transaction (eg. auto-scheduling a ConfigSyncJob
             // when receiving messages)
-            guard registeredHandlers[dedupeId] == nil else { return }
+            guard immutable.registeredHandlers[dedupeId] == nil else { return nil }
             
             let observer: TransactionHandler = TransactionHandler(
                 identifier: dedupeId,
@@ -121,12 +139,12 @@ internal extension Storage {
                 onRollback: onRollback,
                 using: dependencies
             )
-            db.add(transactionObserver: observer, extent: .nextTransaction)
-            registeredHandlers[dedupeId] = observer
+            immutable = Immutable(registeredHandlers: immutable.registeredHandlers.setting(dedupeId, observer))
+            return observer
         }
         
-        public func remove(for identifier: String) {
-            registeredHandlers.removeValue(forKey: identifier)
+        public func remove(for identifier: String) async {
+            immutable = Immutable(registeredHandlers: immutable.registeredHandlers.removingValue(forKey: identifier))
         }
     }
 }
@@ -138,14 +156,15 @@ internal protocol TransactionObserverImmutableCacheType: ImmutableCacheType {
     var registeredHandlers: [String: TransactionHandler] { get }
 }
 
-internal protocol TransactionObserverCacheType: TransactionObserverImmutableCacheType, MutableCacheType {
-    var registeredHandlers: [String: TransactionHandler] { get }
-    
+internal protocol TransactionObserverCacheType: MutableCacheType {
     func add(
-        _ db: Database,
         dedupeId: String,
-        onCommit: @escaping (Database) -> Void,
-        onRollback: @escaping (Database) -> Void
-    )
-    func remove(for identifier: String)
+        onCommit: @escaping @Sendable (Database) -> Void,
+        onRollback: @escaping @Sendable (Database) -> Void
+    ) async -> TransactionHandler?
+    func remove(for identifier: String) async
+    
+    // MARK: - TransactionObserverImmutableCacheType Access
+    
+    var registeredHandlers: [String: TransactionHandler] { get async }
 }

@@ -122,7 +122,7 @@ public class DisplayPictureManager {
             return nil
         }
         
-        dependencies.mutate(cache: .displayPicture) { $0.imageData[fileName] = data }
+        dependencies.mutateSync(cache: .displayPicture) { $0.imageData[fileName] = data }
         return data
     }
     
@@ -193,7 +193,7 @@ public class DisplayPictureManager {
             .throttle(for: .milliseconds(250), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
             .sink(
                 receiveValue: { [dependencies] _ in
-                    let pendingInfo: Set<DownloadInfo> = dependencies.mutate(cache: .displayPicture) { cache in
+                    let pendingInfo: Set<DownloadInfo> = dependencies.mutateSync(cache: .displayPicture) { cache in
                         let result: Set<DownloadInfo> = cache.downloadsToSchedule
                         cache.downloadsToSchedule.removeAll()
                         return result
@@ -223,7 +223,7 @@ public class DisplayPictureManager {
     }
     
     private func scheduleDownload(for owner: Owner, currentFileInvalid invalid: Bool) {
-        dependencies.mutate(cache: .displayPicture) { cache in
+        dependencies.mutateSync(cache: .displayPicture) { cache in
             cache.downloadsToSchedule.insert(DownloadInfo(owner: owner, currentFileInvalid: invalid))
         }
         scheduleDownloads.send(())
@@ -367,7 +367,7 @@ public class DisplayPictureManager {
                 let downloadUrl: String = Network.FileServer.downloadUrlString(for: fileUploadResponse.id)
                 
                 // Update the cached avatar image value
-                dependencies.mutate(cache: .displayPicture) {
+                dependencies.mutateSync(cache: .displayPicture) {
                     $0.imageData[fileName] = finalImageData
                 }
                 
@@ -457,6 +457,7 @@ public extension Cache {
         identifier: "displayPicture",
         createInstance: { _ in DisplayPictureManager.Cache() },
         mutableInstance: { $0 },
+        erasedInstance: { $0 },
         immutableInstance: { $0 }
     )
 }

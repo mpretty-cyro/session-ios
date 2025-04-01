@@ -127,8 +127,8 @@ public enum GroupPromoteMemberJob: JobExecutor {
                             }
                             
                             // Notify about the failure
-                            dependencies.mutate(cache: .groupPromoteMemberJob) { cache in
-                                cache.addFailure(groupId: threadId, memberId: details.memberSessionIdHexString)
+                            dependencies.mutateSync(cache: .groupPromoteMemberJob) { cache in
+                                await cache.addFailure(groupId: threadId, memberId: details.memberSessionIdHexString)
                             }
                             
                             // Register the failure
@@ -193,50 +193,59 @@ public extension GroupPromoteMemberJob {
         let memberId: String
     }
     
-    class Cache: GroupPromoteMemberJobCacheType {
+    actor Cache: GroupPromoteMemberJobCacheType {
+        struct Immutable: GroupPromoteMemberJobImmutableCacheType {
+            public var failures: Set<Failure> = []
+        }
+        
         public var failedMemberIds: Set<String> = []
         
         private static let notificationDebounceDuration: DispatchQueue.SchedulerTimeType.Stride = .milliseconds(3000)
         
         private let dependencies: Dependencies
+        fileprivate var immutable: Immutable = Immutable()
         private let failedNotificationTrigger: PassthroughSubject<(), Never> = PassthroughSubject()
         private var disposables: Set<AnyCancellable> = Set()
-        public private(set) var failures: Set<Failure> = []
+        public var failures: Set<Failure> { immutable.failures }
         
         // MARK: - Initialiation
         
         init(using dependencies: Dependencies) {
             self.dependencies = dependencies
             
-            setupFailureListener()
+            Task { await self.setupFailureListener() }
         }
         
         // MARK: - Functions
         
-        public func addFailure(groupId: String, memberId: String) {
-            failures.insert(Failure(groupId: groupId, memberId: memberId))
+        public func addFailure(groupId: String, memberId: String) async {
+            immutable = Immutable(
+                failures: immutable.failures.inserting(Failure(groupId: groupId, memberId: memberId))
+            )
             failedNotificationTrigger.send(())
         }
         
-        public func clearPendingFailures(for groupId: String) {
-            failures = failures.filter { $0.groupId != groupId }
+        public func clearPendingFailures(for groupId: String) async {
+            immutable = Immutable(failures: immutable.failures.filter { $0.groupId != groupId })
         }
         
         // MARK: - Internal Functions
         
-        private func setupFailureListener() {
+        private func setupFailureListener() async {
             failedNotificationTrigger
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
                 .debounce(
                     for: Cache.notificationDebounceDuration,
                     scheduler: DispatchQueue.global(qos: .userInitiated)
                 )
-                .map { [dependencies] _ -> (failures: Set<Failure>, groupId: String) in
-                    dependencies.mutate(cache: .groupPromoteMemberJob) { cache in
-                        guard let targetGroupId: String = cache.failures.first?.groupId else { return ([], "") }
+                .flatMap { [dependencies] _ -> AnyPublisher<(failures: Set<Failure>, groupId: String), Never> in
+                    dependencies.mutatePublisher(cache: .groupPromoteMemberJob) { cache in
+                        guard let targetGroupId: String = await cache.failures.first?.groupId else {
+                            return ([], "")
+                        }
                         
-                        let result: Set<Failure> = cache.failures.filter { $0.groupId == targetGroupId }
-                        cache.clearPendingFailures(for: targetGroupId)
+                        let result: Set<Failure> = await cache.failures.filter { $0.groupId == targetGroupId }
+                        await cache.clearPendingFailures(for: targetGroupId)
                         return (result, targetGroupId)
                     }
                 }
@@ -301,7 +310,8 @@ public extension Cache {
         identifier: "groupPromoteMemberJob",
         createInstance: { dependencies in GroupPromoteMemberJob.Cache(using: dependencies) },
         mutableInstance: { $0 },
-        immutableInstance: { $0 }
+        erasedInstance: { $0 },
+        immutableInstance: { $0.immutable }
     )
 }
 
@@ -312,11 +322,13 @@ public protocol GroupPromoteMemberJobImmutableCacheType: ImmutableCacheType {
     var failures: Set<GroupPromoteMemberJob.Failure> { get }
 }
 
-public protocol GroupPromoteMemberJobCacheType: GroupPromoteMemberJobImmutableCacheType, MutableCacheType {
-    var failures: Set<GroupPromoteMemberJob.Failure> { get }
+public protocol GroupPromoteMemberJobCacheType: MutableCacheType {
+    func addFailure(groupId: String, memberId: String) async
+    func clearPendingFailures(for groupId: String) async
     
-    func addFailure(groupId: String, memberId: String)
-    func clearPendingFailures(for groupId: String)
+    // MARK: - GroupPromoteMemberJobImmutableCacheType Access
+    
+    var failures: Set<GroupPromoteMemberJob.Failure> { get async }
 }
 
 // MARK: - GroupPromoteMemberJob.Details

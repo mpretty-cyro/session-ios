@@ -115,7 +115,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         /// **Note:** We only want to do this if the app is active and ready for app extensions to run
         if dependencies[singleton: .appContext].isAppForegroundAndActive && dependencies[singleton: .storage, key: .isReadyForAppExtensions] {
             dependencies[singleton: .storage].writeAsync { [dependencies] db in
-                dependencies.mutate(cache: .libSession) { $0.syncAllPendingChanges(db) }
+                dependencies.mutateSync(cache: .libSession) { $0.syncAllPendingChanges(db) }
             }
         }
 
@@ -136,7 +136,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         // Note that this does much more than set a flag;
         // it will also run all deferred blocks.
         dependencies[singleton: .appReadiness].setAppReady()
-        dependencies.mutate(cache: .appVersion) { $0.saeLaunchDidComplete() }
+        dependencies.mutateSync(cache: .appVersion) { await $0.saeLaunchDidComplete() }
 
         showLockScreenOrMainContent()
     }
@@ -741,25 +741,25 @@ private struct SAESNUIKitConfig: SNUIKit.ConfigType {
         dependencies[defaults: .appGroup, key: .topBannerWarningToShow] = warningKey
     }
     
-    func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Any]? {
+    func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Sendable]? {
         Log.warn("[SAESNUIKitConfig] Attempted to retrieve ContextualActionInfo when it's not supported.")
         return nil
     }
     
-    func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Any) {
+    func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Sendable) {
         Log.warn("[SAESNUIKitConfig] Attempted to cache ContextualActionInfo when it's not supported.")
     }
     
     func removeCachedContextualActionInfo(tableViewHash: Int, keys: [String]) {}
     
     func placeholderIconCacher(cacheKey: String, generator: @escaping () -> UIImage) -> UIImage {
-        if let cachedIcon: UIImage = dependencies[cache: .general].placeholderCache.object(forKey: cacheKey as NSString) {
+        if let cachedIcon: UIImage = dependencies[cache: .general].cahcedPlaceholder(for: cacheKey) {
             return cachedIcon
         }
         
         let generatedImage: UIImage = generator()
-        dependencies.mutate(cache: .general) {
-            $0.placeholderCache.setObject(generatedImage, forKey: cacheKey as NSString)
+        dependencies.mutateSync(cache: .general) {
+            await $0.placeholderCache.set(key: cacheKey, value: generatedImage)
         }
         
         return generatedImage

@@ -317,7 +317,7 @@ internal extension LibSession {
         
         // Loop through each of the groups and update their settings
         try targetGroups.forEach { group in
-            try dependencies.mutate(cache: .libSession) { cache in
+            try dependencies.mutateSync(cache: .libSession) { cache in
                 let groupSessionId: SessionId = SessionId(.group, hex: group.threadId)
                 
                 /// Don't update the group info if the current user isn't an admin (doing so would throw which would revert this database
@@ -381,7 +381,7 @@ internal extension LibSession {
         try existingGroupIds
             .compactMap { groupId in targetUpdatedConfigs.first(where: { $0.id == groupId }).map { (groupId, $0) } }
             .forEach { groupId, updatedConfig in
-                try dependencies.mutate(cache: .libSession) { cache in
+                try dependencies.mutateSync(cache: .libSession) { cache in
                     try cache.performAndPushChange(db, for: .groupInfo, sessionId: SessionId(.group, hex: groupId)) { config in
                         guard case .groupInfo(let conf) = config else { throw LibSessionError.invalidConfigObject }
                         
@@ -403,7 +403,7 @@ public extension LibSession {
         disappearingConfig: DisappearingMessagesConfiguration?,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupInfo, sessionId: groupSessionId) { config in
                 guard case .groupInfo(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -420,7 +420,7 @@ public extension LibSession {
         timestamp: TimeInterval,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupInfo, sessionId: groupSessionId) { config in
                 guard case .groupInfo(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 
@@ -438,7 +438,7 @@ public extension LibSession {
         timestamp: TimeInterval,
         using dependencies: Dependencies
     ) throws {
-        try dependencies.mutate(cache: .libSession) { cache in
+        try dependencies.mutateSync(cache: .libSession) { cache in
             try cache.performAndPushChange(db, for: .groupInfo, sessionId: groupSessionId) { config in
                 guard case .groupInfo(let conf) = config else { throw LibSessionError.invalidConfigObject }
                 

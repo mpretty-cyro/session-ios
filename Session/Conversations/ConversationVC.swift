@@ -101,12 +101,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
 
     lazy var mnemonic: String = { ((try? Identity.mnemonic(using: viewModel.dependencies)) ?? "") }()
 
-    // FIXME: Would be good to create a Swift-based cache and replace this
-    lazy var mediaCache: NSCache<NSString, AnyObject> = {
-        let result = NSCache<NSString, AnyObject>()
-        result.countLimit = 40
-        return result
-    }()
+    let mediaCache: LRUCache<String, Any> = LRUCache(maxCacheSize: 40)
 
     lazy var recordVoiceMessageActivity = AudioActivity(
         audioDescription: "Voice message",  // stringlint:ignore
@@ -618,7 +613,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         
-        mediaCache.removeAllObjects()
+        Task { await mediaCache.clear() }
         hasReloadedThreadDataAfterDisappearance = false
         viewIsDisappearing = false
         
