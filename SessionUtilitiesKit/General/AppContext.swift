@@ -15,19 +15,20 @@ public extension Singleton {
 
 public protocol AppContext: AnyObject {
     var isValid: Bool { get }
-    var appLaunchTime: Date { get }
-    var isMainApp: Bool { get }
-    var isMainAppAndActive: Bool { get }
-    var isShareExtension: Bool { get }
-    var reportedApplicationState: UIApplication.State { get }
-    var mainWindow: UIWindow? { get }
-    var frontMostViewController: UIViewController? { get }
-    var backgroundTimeRemaining: TimeInterval { get }
+    var appLaunchTime: Date { get async }
+    var isMainApp: Bool { get async }
+    var isShareExtension: Bool { get async }
+    var mainWindow: UIWindow? { get async }
+    var isMainAppAndActive: Bool { get async }
+    var reportedApplicationState: UIApplication.State { get async }
+    @MainActor var frontMostViewController: UIViewController? { get }
+    @MainActor var backgroundTimeRemaining: TimeInterval { get }
     
-    func setMainWindow(_ mainWindow: UIWindow)
-    func ensureSleepBlocking(_ shouldBeBlocking: Bool, blockingObjects: [Any])
-    func beginBackgroundTask(expirationHandler: @escaping () -> ()) -> UIBackgroundTaskIdentifier
-    func endBackgroundTask(_ backgroundTaskIdentifier: UIBackgroundTaskIdentifier)
+    func setMainWindow(_ mainWindow: UIWindow) async
+    func setReportedApplicationState(_ state: UIApplication.State) async
+    @MainActor func ensureSleepBlocking(_ shouldBeBlocking: Bool, blockingObjects: [Any])
+    @MainActor func beginBackgroundTask(expirationHandler: @escaping @Sendable () -> ()) -> UIBackgroundTaskIdentifier
+    @MainActor func endBackgroundTask(_ backgroundTaskIdentifier: UIBackgroundTaskIdentifier)
 }
 
 // MARK: - Defaults
@@ -42,9 +43,9 @@ public extension AppContext {
     var backgroundTimeRemaining: TimeInterval { 0 }
     
     // Note: CallKit will make the app state as .inactive
-    var isInBackground: Bool { reportedApplicationState == .background }
-    var isNotInForeground: Bool { reportedApplicationState != .active }
-    var isAppForegroundAndActive: Bool { reportedApplicationState == .active }
+    var isInBackground: Bool { get async { await reportedApplicationState == .background } }
+    var isNotInForeground: Bool { get async { await reportedApplicationState != .active } }
+    var isAppForegroundAndActive: Bool { get async { await reportedApplicationState == .active } }
     
     // MARK: - Functions
     

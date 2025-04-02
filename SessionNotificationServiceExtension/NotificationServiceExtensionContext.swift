@@ -12,7 +12,6 @@ final class NotificationServiceExtensionContext: AppContext {
     let reportedApplicationState: UIApplication.State = .background
     
     var openSystemSettingsAction: UIAlertAction?
-    var wasWokenUpByPushNotification = true
     var shouldProcessIncomingMessages: Bool { true }
 
     func canPresentNotifications() -> Bool { true }

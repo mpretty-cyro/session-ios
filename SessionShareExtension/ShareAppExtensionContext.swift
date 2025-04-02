@@ -16,7 +16,6 @@ final class ShareAppExtensionContext: AppContext {
     var frontMostViewController: UIViewController? { rootViewController.findFrontMostViewController(ignoringAlerts: true) }
     
     var mainWindow: UIWindow?
-    var wasWokenUpByPushNotification: Bool = false
     
     var statusBarHeight: CGFloat { return 20 }
     var openSystemSettingsAction: UIAlertAction?
@@ -32,86 +31,60 @@ final class ShareAppExtensionContext: AppContext {
         )
     }
     
+    @MainActor private var observers: [NSObjectProtocol] = []
+    
     // MARK: - Initialization
 
-    init(rootViewController: UIViewController, using dependencies: Dependencies) {
+    @MainActor init(rootViewController: UIViewController, using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.rootViewController = rootViewController
         self.reportedApplicationState = .active
         
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(extensionHostDidBecomeActive(notification:)),
-            name: .NSExtensionHostDidBecomeActive,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(extensionHostWillResignActive(notification:)),
-            name: .NSExtensionHostWillResignActive,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(extensionHostDidEnterBackground(notification:)),
-            name: .NSExtensionHostDidEnterBackground,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(extensionHostWillEnterForeground(notification:)),
-            name: .NSExtensionHostWillEnterForeground,
-            object: nil
-        )
+        setupObservers()
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
     
-    // MARK: - Notifications
+    // MARK: - Functions
     
-    @objc private func extensionHostDidBecomeActive(notification: NSNotification) {
-        Log.assertOnMainThread()
-
+    @MainActor private func setupObservers() {
         self.reportedApplicationState = .active
         
-        NotificationCenter.default.post(
-            name: .sessionDidBecomeActive,
-            object: nil
-        )
-    }
-    
-    @objc private func extensionHostWillResignActive(notification: NSNotification) {
-        Log.assertOnMainThread()
-
-        self.reportedApplicationState = .inactive
-        
-        NotificationCenter.default.post(
-            name: .sessionWillResignActive,
-            object: nil
-        )
-    }
-
-    @objc private func extensionHostDidEnterBackground(notification: NSNotification) {
-        Log.assertOnMainThread()
-
-        self.reportedApplicationState = .background
-
-        NotificationCenter.default.post(
-            name: .sessionDidEnterBackground,
-            object: nil
-        )
-    }
-
-    @objc private func extensionHostWillEnterForeground(notification: NSNotification) {
-        Log.assertOnMainThread()
-
-        self.reportedApplicationState = .inactive
-
-        NotificationCenter.default.post(
-            name: .sessionWillEnterForeground,
-            object: nil
-        )
+        self.observers = [
+            NotificationCenter.default.addObserver(
+                forName: .NSExtensionHostDidBecomeActive,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                Task { @MainActor in self?.reportedApplicationState = .active }
+                NotificationCenter.default.post(name: .sessionDidBecomeActive, object: nil)
+            },
+            NotificationCenter.default.addObserver(
+                forName: .NSExtensionHostWillResignActive,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                Task { @MainActor in self?.reportedApplicationState = .inactive }
+                NotificationCenter.default.post(name: .sessionWillResignActive, object: nil)
+            },
+            NotificationCenter.default.addObserver(
+                forName: .NSExtensionHostDidEnterBackground,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                Task { @MainActor in self?.reportedApplicationState = .background }
+                NotificationCenter.default.post(name: .sessionDidEnterBackground, object: nil)
+            },
+            NotificationCenter.default.addObserver(
+                forName: .NSExtensionHostWillEnterForeground,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                Task { @MainActor in self?.reportedApplicationState = .inactive }
+                NotificationCenter.default.post(name: .sessionWillEnterForeground, object: nil)
+            }
+        ]
     }
 }

@@ -55,10 +55,10 @@ public actor LRUCache<KeyType: Hashable & Equatable, ValueType> {
 
 private extension LRUCache {
     class NotificationObserver {
-        private let tokens: [NSObjectProtocol]
+        private let observers: [NSObjectProtocol]
         
         init(handler: @escaping () -> Void) {
-            tokens = [
+            observers = [
                 NotificationCenter.default.addObserver(
                     forName: UIApplication.didReceiveMemoryWarningNotification,
                     object: nil,
@@ -73,7 +73,7 @@ private extension LRUCache {
         }
         
         deinit {
-            tokens.forEach { NotificationCenter.default.removeObserver($0) }
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
         }
     }
 }

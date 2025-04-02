@@ -451,23 +451,22 @@ open class Storage {
                     }
                     
                 default:
-                    // Because we use kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, the keychain will be inaccessible
-                    // after device restart until device is unlocked for the first time. If the app receives a push
-                    // notification, we won't be able to access the keychain to process that notification, so we should
-                    // just terminate by throwing an uncaught exception
-                    if dependencies[singleton: .appContext].isMainApp || dependencies[singleton: .appContext].isInBackground {
-                        let appState: UIApplication.State = dependencies[singleton: .appContext].reportedApplicationState
-                        Log.error(.storage, "CipherKeySpec inaccessible. New install or no unlock since device restart?, ApplicationState: \(appState.name)")
+                    /// Because we use kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, the keychain will be inaccessible after
+                    /// device restart until device is unlocked for the first time. If the app receives a push notification, we won't be
+                    /// able to access the keychain to process that notification, so we should just terminate by throwing an uncaught exception
+                    sync { [dependencies] in
+                        await MainActor.run {
+                            if dependencies[singleton: .appContext].isMainApp || dependencies[singleton: .appContext].isInBackground {
+                                let appState: UIApplication.State = dependencies[singleton: .appContext].reportedApplicationState
+                                Log.error(.storage, "CipherKeySpec inaccessible. New install or no unlock since device restart?, ApplicationState: \(appState.name)")
+                                return
+                            }
+                        }
                         
-                        // In this case we should have already detected the situation earlier and exited
-                        // gracefully (in the app delegate) using isDatabasePasswordAccessible(using:), but we
-                        // want to stop the app running here anyway
-                        Thread.sleep(forTimeInterval: 5)    // Sleep to allow any background behaviours to complete
-                        throw StorageError.keySpecInaccessible
+                        Log.error(.storage, "CipherKeySpec inaccessible; not main app.")
                     }
                     
-                    Log.error(.storage, "CipherKeySpec inaccessible; not main app.")
-                    Thread.sleep(forTimeInterval: 5)    // Sleep to allow any background behaviours to complete
+                    Thread.sleep(forTimeInterval: 5)    /// Sleep to allow any background behaviours to complete
                     throw StorageError.keySpecInaccessible
             }
         }

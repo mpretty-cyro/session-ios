@@ -150,14 +150,20 @@ public class SessionFileManager: FileManagerType {
     // MARK: - Functions
     
     public func clearOldTemporaryDirectories() {
-        // We use the lowest priority queue for this, and wait N seconds
-        // to avoid interfering with app startup.
-        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + .seconds(3), using: dependencies) { [temporaryDirectory, fileManager, dependencies] in
+        // We use a low priority task for this, and wait N seconds to avoid interfering with app startup.
+        Task(priority: .low) { [temporaryDirectory, fileManager, dependencies] in
+            try await Task.sleep(for: .seconds(3))
+            
             // Abort if app not active
-            guard dependencies[singleton: .appContext].isAppForegroundAndActive else { return }
+            guard
+                let thresholdDate: Date = await MainActor.run(body: {
+                    guard dependencies[singleton: .appContext].isAppForegroundAndActive else { return nil }
+                    
+                    return dependencies[singleton: .appContext].appLaunchTime
+                })
+            else { return }
             
             // Ignore the "current" temp directory.
-            let thresholdDate: Date = dependencies[singleton: .appContext].appLaunchTime
             let currentTempDirName: String = URL(fileURLWithPath: temporaryDirectory).lastPathComponent
             let dirPath: String = NSTemporaryDirectory()
             

@@ -38,7 +38,7 @@ public class SessionBackgroundTaskManager {
     /// Note that this flag is set a little early in "will resign active".
     ///
     /// This property should only be accessed while synchronized on this instance.
-    private var isAppActive: Bool
+    private var isAppActive: Bool = false
     
     /// This property should only be accessed while synchronized on this instance.
     private var expirationMap: [UInt64: () -> ()] = [:]
@@ -56,7 +56,13 @@ public class SessionBackgroundTaskManager {
     
     fileprivate init(using dependencies: Dependencies) {
         self.dependencies = dependencies
-        self.isAppActive = dependencies[singleton: .appContext].isMainAppAndActive
+        
+        /// Update the `isAppActive` value on the main thread (but don't block this thread)
+        Task { [weak self] in
+            await MainActor.run { [weak self] in
+                self?.isAppActive = dependencies[singleton: .appContext].isMainAppAndActive
+            }
+        }
     }
     
     deinit {
@@ -192,7 +198,12 @@ public class SessionBackgroundTaskManager {
         }
         
         if let backgroundTaskId: UIBackgroundTaskIdentifier = maybeBackgroundTaskId, backgroundTaskId != .invalid {
-            dependencies[singleton: .appContext].endBackgroundTask(backgroundTaskId)
+            Task { [dependencies] in
+                await MainActor.run {
+                    dependencies[singleton: .appContext].endBackgroundTask(backgroundTaskId)
+                }
+            }
+            
         }
         
         return true
@@ -204,14 +215,18 @@ public class SessionBackgroundTaskManager {
     private func startOverarchingBackgroundTask() -> Bool {
         guard dependencies[singleton: .appContext].isMainApp else { return false }
         
-        self.backgroundTaskId = dependencies[singleton: .appContext].beginBackgroundTask { [weak self] in
-            /// Supposedly `[UIApplication beginBackgroundTaskWithExpirationHandler]`'s handler
-            /// will always be called on the main thread, but in practice we've observed otherwise.
-            ///
-            /// See:
-            /// https://developer.apple.com/documentation/uikit/uiapplication/1623031-beginbackgroundtaskwithexpiratio)
-            self?.queue.sync {
-                self?.backgroundTaskExpired()
+        self.backgroundTaskId = sync { [dependencies] in
+            await MainActor.run {
+                dependencies[singleton: .appContext].beginBackgroundTask { [weak self] in
+                    /// Supposedly `[UIApplication beginBackgroundTaskWithExpirationHandler]`'s handler
+                    /// will always be called on the main thread, but in practice we've observed otherwise.
+                    ///
+                    /// See:
+                    /// https://developer.apple.com/documentation/uikit/uiapplication/1623031-beginbackgroundtaskwithexpiratio)
+                    self?.queue.sync {
+                        self?.backgroundTaskExpired()
+                    }
+                }
             }
         }
         
@@ -235,14 +250,16 @@ public class SessionBackgroundTaskManager {
         /// will always be called on the main thread, but in practice we've observed otherwise.  SessionBackgroundTask's
         /// API guarantees that completionBlock will always be called on the main thread, so we use DispatchSyncMainThreadSafe()
         /// to ensure that.  We thereby ensure that we don't end the background task until all of the completion blocks have completed.
-        Threading.dispatchSyncMainThreadSafe { [dependencies] in
-            expirationMap.values.forEach { expirationBlock in
-                expirationBlock()
-            }
-            
-            /// Apparently we need to "end" even expired background tasks.
-            if backgroundTaskId != .invalid {
-                dependencies[singleton: .appContext].endBackgroundTask(backgroundTaskId)
+        Task { [dependencies] in
+            await MainActor.run {
+                expirationMap.values.forEach { expirationBlock in
+                    expirationBlock()
+                }
+                
+                /// Apparently we need to "end" even expired background tasks.
+                if backgroundTaskId != .invalid {
+                    dependencies[singleton: .appContext].endBackgroundTask(backgroundTaskId)
+                }
             }
         }
     }
@@ -266,7 +283,9 @@ public class SessionBackgroundTaskManager {
         
         guard dependencies[singleton: .appContext].isMainApp else { return }
         
-        let backgroundTimeRemaining: TimeInterval = dependencies[singleton: .appContext].backgroundTimeRemaining
+        let backgroundTimeRemaining: TimeInterval = sync { [dependencies] in
+            await MainActor.run { dependencies[singleton: .appContext].backgroundTimeRemaining }
+        }
         
         /// It takes the OS a little while to update the 'backgroundTimeRemaining' value so if it hasn't been updated yet then don't do anything
         guard self.hasGottenValidBackgroundTimeRemaining == true || backgroundTimeRemaining != .greatestFiniteMagnitude else {
