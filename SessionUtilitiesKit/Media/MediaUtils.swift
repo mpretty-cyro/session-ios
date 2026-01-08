@@ -10,7 +10,7 @@ import AVFoundation
 public extension Singleton {
     static let mediaDecoder: SingletonConfig<MediaDecoderType> = Dependencies.create(
         identifier: "mediaDecoder",
-        createInstance: { _ in MediaDecoder() }
+        createInstance: { _, _ in MediaDecoder() }
     )
 }
 
@@ -336,6 +336,7 @@ public enum MediaUtils {
             
             /// Load the image source and use that initializer to extract the metadata
             guard
+                utType?.isVisualMedia == true,
                 let fileSize: UInt64 = dependencies[singleton: .fileManager].fileSize(of: path),
                 let imageSource = dependencies[singleton: .mediaDecoder].source(forPath: path),
                 let metadata: MediaMetadata = MediaMetadata(source: imageSource, fileSize: fileSize)

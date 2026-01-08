@@ -52,7 +52,9 @@ public enum SyncPushTokensJob: JobExecutor {
             // it again immediately which is pointless)
             let updatedJob: Job? = dependencies[singleton: .storage].write { db in
                 try job
-                    .with(nextRunTimestamp: dependencies.dateNow.timeIntervalSince1970 + maxRunFrequency)
+                    .with(nextRunTimestamp: .set(
+                        to: dependencies.dateNow.timeIntervalSince1970 + maxRunFrequency
+                    ))
                     .upserted(db)
             }
             

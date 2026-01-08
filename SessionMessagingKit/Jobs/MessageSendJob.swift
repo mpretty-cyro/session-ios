@@ -190,7 +190,9 @@ public enum MessageSendJob: JobExecutor {
                     // Defer the job by 1s to give it a little more time to receive updated keys
                     let updatedJob: Job? = dependencies[singleton: .storage].write { db in
                         try job
-                            .with(nextRunTimestamp: dependencies.dateNow.timeIntervalSince1970 + deferalDuration)
+                            .with(nextRunTimestamp: .set(
+                                to: dependencies.dateNow.timeIntervalSince1970 + deferalDuration
+                            ))
                             .upserted(db)
                     }
                     
@@ -224,7 +226,7 @@ public enum MessageSendJob: JobExecutor {
                     using: dependencies
                 )
             })
-            .tryFlatMap { authMethod in
+            .tryMap { authMethod in
                 try MessageSender.preparedSend(
                     message: details.message,
                     to: details.destination,
@@ -234,8 +236,9 @@ public enum MessageSendJob: JobExecutor {
                     authMethod: authMethod,
                     onEvent: MessageSender.standardEventHandling(using: dependencies),
                     using: dependencies
-                ).send(using: dependencies)
+                )
             }
+            .flatMap { $0.send(using: dependencies) }
             .subscribe(on: scheduler, using: dependencies)
             .receive(on: scheduler, using: dependencies)
             .sinkUntilComplete(

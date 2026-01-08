@@ -9,7 +9,7 @@ import Nimble
 
 @testable import SessionNetworkingKit
 
-class PreparedRequestSendingSpec: QuickSpec {
+class PreparedRequestSendingSpec: AsyncSpec {
     override class func spec() {
         // MARK: Configuration
         
@@ -44,7 +44,7 @@ class PreparedRequestSendingSpec: QuickSpec {
             // MARK: -- when sending
             context("when sending") {
                 beforeEach {
-                    mockNetwork
+                    try await mockNetwork
                         .when {
                             $0.send(
                                 endpoint: MockEndpoint.any,
@@ -359,7 +359,7 @@ class PreparedRequestSendingSpec: QuickSpec {
                         @TestState var receivedCompletion: Subscribers.Completion<Error>? = nil
                         
                         beforeEach {
-                            mockNetwork
+                            try await mockNetwork
                                 .when {
                                     $0.send(
                                         endpoint: MockEndpoint.any,

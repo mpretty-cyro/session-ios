@@ -12,7 +12,7 @@ import SessionUtilitiesKit
 public extension Singleton {
     static let sessionProManager: SingletonConfig<SessionProManagerType> = Dependencies.create(
         identifier: "sessionProManager",
-        createInstance: { dependencies in SessionProManager(using: dependencies) }
+        createInstance: { dependencies, _ in SessionProManager(using: dependencies) }
     )
 }
 

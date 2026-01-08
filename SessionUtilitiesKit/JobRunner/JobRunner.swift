@@ -11,7 +11,7 @@ import GRDB
 public extension Singleton {
     static let jobRunner: SingletonConfig<JobRunnerType> = Dependencies.create(
         identifier: "jobRunner",
-        createInstance: { dependencies in JobRunner(using: dependencies) }
+        createInstance: { dependencies, _ in JobRunner(using: dependencies) }
     )
 }
 
@@ -29,6 +29,7 @@ public protocol JobRunnerType: AnyObject {
     func setExecutor(_ executor: JobExecutor.Type, for variant: Job.Variant)
     func canStart(queue: JobQueue?) -> Bool
     func afterBlockingQueue(callback: @escaping () -> ())
+    func didCompleteJob(id: Int64, result: JobRunner.JobResult)
     func queue(for variant: Job.Variant) -> DispatchQueue?
         
     // MARK: - State Management
@@ -52,6 +53,7 @@ public protocol JobRunnerType: AnyObject {
     func enqueueDependenciesIfNeeded(_ jobs: [Job])
     func manuallyTriggerResult(_ job: Job?, result: JobRunner.JobResult)
     func afterJob(_ job: Job?, state: JobRunner.JobState) -> AnyPublisher<JobRunner.JobResult, Never>
+    func awaitResult(for job: Job?) async -> JobRunner.JobResult
     func removePendingJob(_ job: Job?)
     
     func registerRecurringJobs(scheduleInfo: [JobRunner.ScheduleInfo])
@@ -242,6 +244,7 @@ public final class JobRunner: JobRunnerType {
     @ThreadSafeObject internal var perSessionJobsCompleted: Set<Int64> = []
     @ThreadSafe internal var hasCompletedInitialBecomeActive: Bool = false
     @ThreadSafeObject internal var shutdownBackgroundTask: SessionBackgroundTask? = nil
+    @ThreadSafeObject internal var resultStreams: [Int64: CancellationAwareAsyncStream<JobRunner.JobResult>] = [:]
     
     private var canStartNonBlockingQueue: Bool {
         _blockingQueue.performMap {
@@ -427,6 +430,16 @@ public final class JobRunner: JobRunnerType {
         _blockingQueueDrainCallback.performUpdate { $0.appending(callback) }
     }
     
+    public func didCompleteJob(id: Int64, result: JobRunner.JobResult) {
+        if let stream: CancellationAwareAsyncStream<JobRunner.JobResult> = _resultStreams.performMap({ $0[id] }) {
+            Task {
+                await stream.send(result)
+                await stream.finishCurrentStreams()
+                _resultStreams.performUpdate { $0.removingValue(forKey: id) }
+            }
+        }
+    }
+    
     public func queue(for variant: Job.Variant) -> DispatchQueue? {
         return queues[variant]?.targetQueue()
     }
@@ -565,7 +578,7 @@ public final class JobRunner: JobRunnerType {
                     // If the job is a `recurringOnLaunch` job then we reset the `nextRunTimestamp`
                     // value on the instance because the assumption is that `recurringOnLaunch` will
                     // run a job regardless of how many times it previously failed
-                    return job.with(nextRunTimestamp: 0)
+                    return job.with(nextRunTimestamp: .set(to: 0))
                 },
                 canStart: true
             )
@@ -584,7 +597,7 @@ public final class JobRunner: JobRunnerType {
                     // If the job is a `recurringOnLaunch` job then we reset the `nextRunTimestamp`
                     // value on the instance because the assumption is that `recurringOnLaunch` will
                     // run a job regardless of how many times it previously failed
-                    return job.with(nextRunTimestamp: 0)
+                    return job.with(nextRunTimestamp: .set(to: 0))
                 },
                 canStart: false
             )
@@ -651,7 +664,7 @@ public final class JobRunner: JobRunnerType {
                         // We reset the `nextRunTimestamp` value on the instance because the
                         // assumption is that `recurringOnActive` will run a job regardless
                         // of how many times it previously failed
-                        job.with(nextRunTimestamp: 0)
+                        job.with(nextRunTimestamp: .set(to: 0))
                     },
                     canStart: !blockingQueueIsRunning
                 )
@@ -883,6 +896,10 @@ public final class JobRunner: JobRunnerType {
             case .deferred: queue.handleJobDeferred(job)
             case .failed(let error, let permanent): queue.handleJobFailed(job, error: error, permanentFailure: permanent)
         }
+        
+        if let jobId: Int64 = job.id {
+            didCompleteJob(id: jobId, result: result)
+        }
     }
     
     public func afterJob(_ job: Job?, state: JobRunner.JobState) -> AnyPublisher<JobRunner.JobResult, Never> {
@@ -891,6 +908,31 @@ public final class JobRunner: JobRunnerType {
         }
         
         return queue.afterJob(jobId, state: state)
+    }
+    
+    public func awaitResult(for job: Job?) async -> JobRunner.JobResult {
+        guard
+            let job: Job = job,
+            let jobId: Int64 = job.id,
+            let queue: JobQueue = queues[job.variant],
+            queue.infoForAllCurrentlyRunningJobs()[jobId] != nil
+        else { return .notFound }
+        
+        /// Get or create a stream for the job
+        let stream: CancellationAwareAsyncStream<JobRunner.JobResult> = _resultStreams.performUpdateAndMap { streams in
+            let result = streams[jobId, default: CancellationAwareAsyncStream()]
+            var updatedStreams = streams
+            updatedStreams[jobId] = result
+            return (updatedStreams, result)
+        }
+        
+        /// Await the first result from the stream
+        for await result in stream.stream {
+            return result
+        }
+
+        /// If the stream finishes without a result, something went wrong
+        return .notFound
     }
     
     public func removePendingJob(_ job: Job?) {
@@ -1860,8 +1902,8 @@ public final class JobQueue: Hashable {
             
             try job
                 .with(
-                    failureCount: updatedFailureCount,
-                    nextRunTimestamp: nextRunTimestamp
+                    failureCount: .set(to: updatedFailureCount),
+                    nextRunTimestamp: .set(to: nextRunTimestamp)
                 )
                 .upserted(db)
             
@@ -1958,6 +2000,10 @@ public final class JobQueue: Hashable {
         
         // Notify any listeners of the job result
         jobCompletedSubject.send((job.id, result))
+        
+        if let jobId: Int64 = job.id {
+            dependencies[singleton: .jobRunner].didCompleteJob(id: jobId, result: result)
+        }
     }
 }
 

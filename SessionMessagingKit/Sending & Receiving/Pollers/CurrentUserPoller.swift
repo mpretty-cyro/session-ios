@@ -11,7 +11,7 @@ import SessionUtilitiesKit
 public extension Singleton {
     static let currentUserPoller: SingletonConfig<any PollerType> = Dependencies.create(
         identifier: "currentUserPoller",
-        createInstance: { dependencies in
+        createInstance: { dependencies, _ in
             /// After polling a given snode 6 times we always switch to a new one.
             ///
             /// The reason for doing this is that sometimes a snode will be giving us successful responses while

@@ -119,7 +119,7 @@ public enum AttachmentUploadJob: JobExecutor {
                     /// If this upload is related to sending a message then trigger the `handleFailedMessageSend` logic
                     /// as we want to ensure the message has the correct delivery status
                     guard
-                        let sendJob: Job = try Job.fetchOne(db, id: details.messageSendJobId),
+                        let sendJob: Job = try? Job.fetchOne(db, id: details.messageSendJobId),
                         let sendJobDetails: Data = sendJob.details,
                         let details: MessageSendJob.Details = try? JSONDecoder(using: dependencies)
                             .decode(MessageSendJob.Details.self, from: sendJobDetails)
@@ -130,7 +130,7 @@ public enum AttachmentUploadJob: JobExecutor {
                         threadId: threadId,
                         message: details.message,
                         destination: nil,
-                        error: .sendFailure(.cat, "Failed", error),
+                        error: .sendFailure(.cat, "Failed", error), // stringlint:ignore
                         interactionId: interactionId,
                         using: dependencies
                     )

@@ -78,7 +78,7 @@ public enum SendReadReceiptsJob: JobExecutor {
                                     !dependencies[singleton: .jobRunner].isCurrentlyRunning(existingJob)
                                 {
                                     try existingJob
-                                        .with(nextRunTimestamp: nextRunTimestamp)
+                                        .with(nextRunTimestamp: .set(to: nextRunTimestamp))
                                         .upserted(db)
                                     shouldFinishCurrentJob = true
                                     return job
@@ -87,7 +87,7 @@ public enum SendReadReceiptsJob: JobExecutor {
                                 return try job
                                     .with(details: Details(destination: details.destination, timestampMsValues: []))
                                     .defaulting(to: job)
-                                    .with(nextRunTimestamp: nextRunTimestamp)
+                                    .with(nextRunTimestamp: .set(to: nextRunTimestamp))
                                     .upserted(db)
                             }
                             

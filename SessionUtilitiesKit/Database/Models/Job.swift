@@ -619,19 +619,20 @@ extension Job {
 
 public extension Job {
     func with(
-        failureCount: UInt = 0,
-        nextRunTimestamp: TimeInterval
+        id: Update<Int64?> = .useExisting,
+        failureCount: Update<UInt> = .useExisting,
+        nextRunTimestamp: Update<TimeInterval> = .useExisting
     ) -> Job {
         return Job(
-            id: self.id,
+            id: id.or(self.id),
             priority: self.priority,
-            failureCount: failureCount,
+            failureCount: failureCount.or(self.failureCount),
             variant: self.variant,
             behaviour: self.behaviour,
             shouldBlock: self.shouldBlock,
             shouldBeUnique: (self.uniqueHashValue != nil),
             shouldSkipLaunchBecomeActive: self.shouldSkipLaunchBecomeActive,
-            nextRunTimestamp: nextRunTimestamp,
+            nextRunTimestamp: nextRunTimestamp.or(self.nextRunTimestamp),
             threadId: self.threadId,
             interactionId: self.interactionId,
             details: self.details,

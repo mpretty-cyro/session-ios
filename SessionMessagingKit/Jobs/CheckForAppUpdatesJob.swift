@@ -36,8 +36,10 @@ public enum CheckForAppUpdatesJob: JobExecutor {
         
         guard shouldCheckForUpdates else {
             var updatedJob: Job = job.with(
-                failureCount: 0,
-                nextRunTimestamp: (dependencies.dateNow.timeIntervalSince1970 + updateCheckFrequency)
+                failureCount: .set(to: 0),
+                nextRunTimestamp: .set(
+                    to: (dependencies.dateNow.timeIntervalSince1970 + updateCheckFrequency)
+                )
             )
             dependencies[singleton: .storage].write { db in
                 try updatedJob.upsert(db)
@@ -54,8 +56,10 @@ public enum CheckForAppUpdatesJob: JobExecutor {
             .sinkUntilComplete(
                 receiveCompletion: { _ in
                     var updatedJob: Job = job.with(
-                        failureCount: 0,
-                        nextRunTimestamp: (dependencies.dateNow.timeIntervalSince1970 + updateCheckFrequency)
+                        failureCount: .set(to: 0),
+                        nextRunTimestamp: .set(
+                            to: (dependencies.dateNow.timeIntervalSince1970 + updateCheckFrequency)
+                        )
                     )
                     
                     dependencies[singleton: .storage].write { db in

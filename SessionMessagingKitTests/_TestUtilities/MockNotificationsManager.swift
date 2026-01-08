@@ -81,14 +81,14 @@ public class MockNotificationsManager: Mock<NotificationsManagerType>, Notificat
 // MARK: - Convenience
 
 extension Mock where T == NotificationsManagerType {
-    func defaultInitialSetup() {
-        self
+    func defaultInitialSetup() async throws {
+        try await self
             .when { $0.notificationUserInfo(threadId: .any, threadVariant: .any) }
             .thenReturn([:])
-        self
+        try await self
             .when { $0.notificationShouldPlaySound(applicationState: .any) }
             .thenReturn(false)
-        self
+        try await self
             .when {
                 $0.addNotificationRequest(
                     content: .any,
@@ -97,10 +97,10 @@ extension Mock where T == NotificationsManagerType {
                 )
             }
             .thenReturn(())
-        self
+        try await self
             .when { $0.cancelNotifications(identifiers: .any) }
             .thenReturn(())
-        self
+        try await self
             .when { $0.settings(threadId: .any, threadVariant: .any) }
             .thenReturn(
                 Preferences.NotificationSettings(
@@ -110,7 +110,7 @@ extension Mock where T == NotificationsManagerType {
                     mutedUntil: nil
                 )
             )
-        self
+        try await self
             .when {
                 $0.updateSettings(
                     threadId: .any,

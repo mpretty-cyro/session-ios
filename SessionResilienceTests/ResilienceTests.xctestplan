@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "28A4CD50-5BF5-400B-9431-7968FE7659C7",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FD1DD8C42EF4B65A009F2C1B",
+        "name" : "SessionResilienceTests"
+      }
+    }
+  ],
+  "version" : 1
+}

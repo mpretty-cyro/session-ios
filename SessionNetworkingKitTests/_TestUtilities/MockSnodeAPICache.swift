@@ -33,16 +33,16 @@ class MockSnodeAPICache: Mock<SnodeAPICacheType>, SnodeAPICacheType {
 // MARK: - Convenience
 
 extension Mock where T == SnodeAPICacheType {
-    func defaultInitialSetup() {
-        self.when { $0.hardfork }.thenReturn(0)
-        self.when { $0.hardfork = .any }.thenReturn(())
-        self.when { $0.softfork }.thenReturn(0)
-        self.when { $0.softfork = .any }.thenReturn(())
-        self.when { $0.clockOffsetMs }.thenReturn(0)
-        self.when { $0.setClockOffsetMs(.any) }.thenReturn(())
-        self.when { $0.currentOffsetTimestampMs() }.thenReturn(Double(1234567890000))
-        self.when { $0.currentOffsetTimestampMs() }.thenReturn(Int(1234567890000))
-        self.when { $0.currentOffsetTimestampMs() }.thenReturn(Int64(1234567890000))
-        self.when { $0.currentOffsetTimestampMs() }.thenReturn(UInt64(1234567890000))
+    func defaultInitialSetup() async throws {
+        try await self.when { $0.hardfork }.thenReturn(0)
+        try await self.when { $0.hardfork = .any }.thenReturn(())
+        try await self.when { $0.softfork }.thenReturn(0)
+        try await self.when { $0.softfork = .any }.thenReturn(())
+        try await self.when { $0.clockOffsetMs }.thenReturn(0)
+        try await self.when { $0.setClockOffsetMs(.any) }.thenReturn(())
+        try await self.when { $0.currentOffsetTimestampMs() }.thenReturn(Double(1234567890000))
+        try await self.when { $0.currentOffsetTimestampMs() }.thenReturn(Int(1234567890000))
+        try await self.when { $0.currentOffsetTimestampMs() }.thenReturn(Int64(1234567890000))
+        try await self.when { $0.currentOffsetTimestampMs() }.thenReturn(UInt64(1234567890000))
     }
 }

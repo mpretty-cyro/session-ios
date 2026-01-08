@@ -21,6 +21,10 @@ class MockJobRunner: Mock<JobRunnerType>, JobRunnerType {
         mockNoReturn()
     }
     
+    func didCompleteJob(id: Int64, result: JobRunner.JobResult) {
+        mockNoReturn(args: [id, result])
+    }
+    
     func queue(for variant: Job.Variant) -> DispatchQueue? { DispatchQueue.main }
     
     // MARK: - State Management
@@ -62,6 +66,10 @@ class MockJobRunner: Mock<JobRunnerType>, JobRunnerType {
     
     func afterJob(_ job: Job?, state: JobRunner.JobState) -> AnyPublisher<JobRunner.JobResult, Never> {
         mock(args: [job, state])
+    }
+    
+    func awaitResult(for job: Job?) async -> JobRunner.JobResult {
+        return mock(args: [job])
     }
     
     func manuallyTriggerResult(_ job: Job?, result: JobRunner.JobResult) {

@@ -54,41 +54,47 @@ public enum AttachmentDownloadJob: JobExecutor {
                     /// If we ever make attachment downloads concurrent this will prevent us from downloading the same attachment
                     /// multiple times at the same time (it also adds a "clean up" mechanism if an attachment ends up stuck in a
                     /// "downloading" state incorrectly
-                    guard attachment.state != .downloading else {
-                        let otherCurrentJobAttachmentIds: Set<String> = dependencies[singleton: .jobRunner]
-                            .jobInfoFor(state: .running, variant: .attachmentDownload)
-                            .filter { key, _ in key != job.id }
-                            .values
-                            .compactMap { info -> String? in
-                                guard let data: Data = info.detailsData else { return nil }
-                                
-                                return (try? JSONDecoder(using: dependencies).decode(Details.self, from: data))?
-                                    .attachmentId
+                    ///
+                    /// **Note:** We have a feature flag to allow duplicate downloads (for tests) so skip this check if that is set
+                    if !dependencies[feature: .allowDuplicateDownloads] {
+                        guard attachment.state != .downloading else {
+                            let otherCurrentJobAttachmentIds: Set<String> = dependencies[singleton: .jobRunner]
+                                .jobInfoFor(state: .running, variant: .attachmentDownload)
+                                .filter { key, _ in key != job.id }
+                                .values
+                                .compactMap { info -> String? in
+                                    guard let data: Data = info.detailsData else { return nil }
+                                    
+                                    return (try? JSONDecoder(using: dependencies).decode(Details.self, from: data))?
+                                        .attachmentId
+                                }
+                                .asSet()
+                            
+                            /// If there isn't another currently running `attachmentDownload` job downloading this attachment
+                            /// then we should update the state of the attachment to be failed to avoid having attachments appear in
+                            /// an endlessly downloading state
+                            if !otherCurrentJobAttachmentIds.contains(attachment.id) {
+                                _ = try Attachment
+                                    .filter(id: attachment.id)
+                                    .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedDownload))
+                                db.addAttachmentEvent(
+                                    id: attachment.id,
+                                    messageId: job.interactionId,
+                                    type: .updated(.state(.failedDownload))
+                                )
                             }
-                            .asSet()
-                        
-                        /// If there isn't another currently running `attachmentDownload` job downloading this attachment
-                        /// then we should update the state of the attachment to be failed to avoid having attachments appear in
-                        /// an endlessly downloading state
-                        if !otherCurrentJobAttachmentIds.contains(attachment.id) {
-                            _ = try Attachment
-                                .filter(id: attachment.id)
-                                .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedDownload))
-                            db.addAttachmentEvent(
-                                id: attachment.id,
-                                messageId: job.interactionId,
-                                type: .updated(.state(.failedDownload))
+                            
+                            /// **Note:** The only ways we should be able to get into this state are if we enable concurrent
+                            /// downloads or if the app was closed/crashed while an `attachmentDownload` job was in
+                            /// progress
+                            ///
+                            /// If there is another current job then just fail this one permanently, otherwise let it retry (if there
+                            /// are more retry attempts available) and in the next retry it's state should be 'failedDownload' so
+                            /// we won't get stuck in a loop
+                            throw JobRunnerError.possibleDuplicateJob(
+                                permanentFailure: otherCurrentJobAttachmentIds.contains(attachment.id)
                             )
                         }
-                        
-                        /// **Note:** The only ways we should be able to get into this state are if we enable concurrent downloads
-                        /// or if the app was closed/crashed while an `attachmentDownload` job was in progress
-                        /// If there is another current job then just fail this one permanently, otherwise let it retry (if there are more
-                        /// retry attempts available) and in the next retry it's state should be 'failedDownload' so we won't get stuck
-                        /// in a loop
-                        throw JobRunnerError.possibleDuplicateJob(
-                            permanentFailure: otherCurrentJobAttachmentIds.contains(attachment.id)
-                        )
                     }
                     
                     /// Update to the 'downloading' state (no need to update the 'attachment' instance)

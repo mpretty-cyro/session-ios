@@ -45,7 +45,7 @@ public enum DisappearingMessagesJob: JobExecutor {
             // to 'updateNextRunIfNeeded' returns 'nil' then it doesn't need to re-run so
             // should have it's 'nextRunTimestamp' cleared)
             return try updateNextRunIfNeeded(db, using: dependencies)
-                .defaulting(to: job.with(nextRunTimestamp: 0))
+                .defaulting(to: job.with(nextRunTimestamp: .set(to: 0)))
                 .upserted(db)
         }
         
@@ -114,7 +114,9 @@ public extension DisappearingMessagesJob {
         return try? Job
             .filter(Job.Columns.variant == Job.Variant.disappearingMessages)
             .fetchOne(db)?
-            .with(nextRunTimestamp: ceil((nextExpirationTimestampMs - Double(clockOffsetMs)) / 1000))
+            .with(nextRunTimestamp: .set(
+                to: ceil((nextExpirationTimestampMs - Double(clockOffsetMs)) / 1000)
+            ))
             .upserted(db)
     }
     

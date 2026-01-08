@@ -12,7 +12,7 @@ import SessionUtilitiesKit
 public extension Cache {
     static let libSessionNetwork: CacheConfig<LibSession.NetworkCacheType, LibSession.NetworkImmutableCacheType> = Dependencies.create(
         identifier: "libSessionNetwork",
-        createInstance: { dependencies in
+        createInstance: { dependencies, _ in
             /// The `libSessionNetwork` cache gets warmed during startup and creates a network instance, populates the snode
             /// cache and builds onion requests when created - when running unit tests we don't want to do any of that unless explicitly
             /// desired within the test itself so instead we default to a `NoopNetworkCache` when running unit tests
@@ -641,10 +641,11 @@ private extension LibSessionNetwork.CallbackWrapper {
 
 public extension LibSession {
     class NetworkCache: NetworkCacheType {
-        private static var snodeCachePath: String { "\(SessionFileManager.nonInjectedAppSharedDataDirectoryPath)/snodeCache" }
+        internal static var snodeCachePath: String { "\(SessionFileManager.nonInjectedAppSharedDataDirectoryPath)/snodeCache" }
         
         private let dependencies: Dependencies
         private let dependenciesPtr: UnsafeMutableRawPointer
+        private let customCachePath: String?
         private var network: UnsafeMutablePointer<network_object>? = nil
         private let _paths: CurrentValueSubject<[[Snode]], Never> = CurrentValueSubject([])
         private let _networkStatus: CurrentValueSubject<NetworkStatus, Never> = CurrentValueSubject(.unknown)
@@ -661,18 +662,23 @@ public extension LibSession {
         
         // MARK: - Initialization
         
-        public init(using dependencies: Dependencies) {
+        public init(customCachePath: String? = nil, using dependencies: Dependencies) {
             self.dependencies = dependencies
             self.dependenciesPtr = Unmanaged.passRetained(dependencies).toOpaque()
+            self.customCachePath = customCachePath
             
-            // Create the network object
-            getOrCreateNetwork().sinkUntilComplete()
-            
-            // If the app has been set to 'forceOffline' then we need to explicitly set the network status
-            // to disconnected (because it'll never be set otherwise)
-            if dependencies[feature: .forceOffline] {
-                DispatchQueue.global(qos: .default).async { [dependencies] in
-                    dependencies.mutate(cache: .libSessionNetwork) { $0.setNetworkStatus(status: .disconnected) }
+            // Create the network object (need to do this async to prevent a race condition
+            // where the network cache might not be set before 'getOrCreateNetwork' wants
+            // to mutate it
+            DispatchQueue.global(qos: .default).async { [weak self] in
+                self?.getOrCreateNetwork().sinkUntilComplete()
+                
+                DispatchQueue.global(qos: .default).async {
+                    // If the app has been set to 'forceOffline' then we need to explicitly set the
+                    // network status to disconnected (because it'll never be set otherwise)
+                    if dependencies[feature: .forceOffline] {
+                        dependencies.mutate(cache: .libSessionNetwork) { $0.setNetworkStatus(status: .disconnected) }
+                    }
                 }
             }
         }
@@ -741,12 +747,13 @@ public extension LibSession {
                         .eraseToAnyPublisher()
                 
                 case (.none, _):
+                    let targetCachePath: String = (customCachePath ?? NetworkCache.snodeCachePath)
                     let useTestnet: Bool = (dependencies[feature: .serviceNetwork] == .testnet)
                     let isMainApp: Bool = dependencies[singleton: .appContext].isMainApp
                     var error: [CChar] = [CChar](repeating: 0, count: 256)
                     var network: UnsafeMutablePointer<network_object>?
                     
-                    guard let cCachePath: [CChar] = NetworkCache.snodeCachePath.cString(using: .utf8) else {
+                    guard let cCachePath: [CChar] = targetCachePath.cString(using: .utf8) else {
                         Log.error(.network, "Unable to create network object: \(LibSessionError.invalidCConversion)")
                         return Fail(error: NetworkError.invalidState).eraseToAnyPublisher()
                     }

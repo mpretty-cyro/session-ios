@@ -12,7 +12,7 @@ import SessionUtilitiesKit
 public extension Cache {
     static let communityPollers: CacheConfig<CommunityPollerCacheType, CommunityPollerImmutableCacheType> = Dependencies.create(
         identifier: "communityPollers",
-        createInstance: { dependencies in CommunityPoller.Cache(using: dependencies) },
+        createInstance: { dependencies, _ in CommunityPoller.Cache(using: dependencies) },
         mutableInstance: { $0 },
         immutableInstance: { $0 }
     )

@@ -8,7 +8,7 @@ import Nimble
 
 @testable import SessionNetworkingKit
 
-class SOGSMessageSpec: QuickSpec {
+class SOGSMessageSpec: AsyncSpec {
     override class func spec() {
         // MARK: Configuration
         
@@ -198,7 +198,7 @@ class SOGSMessageSpec: QuickSpec {
                         
                         // MARK: -------- succeeds if it succeeds verification
                         it("succeeds if it succeeds verification") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signature(message: .any, publicKey: .any, signature: .any)) }
                                 .thenReturn(true)
                             
@@ -210,13 +210,13 @@ class SOGSMessageSpec: QuickSpec {
                         
                         // MARK: -------- provides the correct values as parameters
                         it("provides the correct values as parameters") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signature(message: .any, publicKey: .any, signature: .any)) }
                                 .thenReturn(true)
                             
                             _ = try? decoder.decode(Network.SOGS.Message.self, from: messageData)
                             
-                            expect(mockCrypto)
+                            await expect(mockCrypto)
                                 .to(call(matchingParameters: .all) {
                                     $0.verify(
                                         .signature(
@@ -230,7 +230,7 @@ class SOGSMessageSpec: QuickSpec {
                         
                         // MARK: -------- throws if it fails verification
                         it("throws if it fails verification") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signature(message: .any, publicKey: .any, signature: .any)) }
                                 .thenReturn(false)
                             
@@ -245,7 +245,7 @@ class SOGSMessageSpec: QuickSpec {
                     context("that is unblinded") {
                         // MARK: -------- succeeds if it succeeds verification
                         it("succeeds if it succeeds verification") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signatureXed25519(.any, curve25519PublicKey: .any, data: .any)) }
                                 .thenReturn(true)
                             
@@ -257,13 +257,13 @@ class SOGSMessageSpec: QuickSpec {
                         
                         // MARK: -------- provides the correct values as parameters
                         it("provides the correct values as parameters") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signatureXed25519(.any, curve25519PublicKey: .any, data: .any)) }
                                 .thenReturn(true)
                             
                             _ = try? decoder.decode(Network.SOGS.Message.self, from: messageData)
                             
-                            expect(mockCrypto)
+                            await expect(mockCrypto)
                                 .to(call(matchingParameters: .all) {
                                     $0.verify(
                                         .signatureXed25519(
@@ -277,7 +277,7 @@ class SOGSMessageSpec: QuickSpec {
                         
                         // MARK: -------- throws if it fails verification
                         it("throws if it fails verification") {
-                            mockCrypto
+                            try await mockCrypto
                                 .when { $0.verify(.signatureXed25519(.any, curve25519PublicKey: .any, data: .any)) }
                                 .thenReturn(false)
                             

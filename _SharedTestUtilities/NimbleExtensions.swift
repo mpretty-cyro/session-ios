@@ -41,10 +41,10 @@ public func call<M, T, R>(
     matchingParameters: ParameterMatchType = .none,
     exclusive: Bool = false,
     functionBlock: @escaping (inout T) async throws -> R
-) -> Matcher<M> where M: Mock<T> {
-    return Matcher.define { actualExpression in
+) -> AsyncMatcher<M> where M: Mock<T> {
+    return AsyncMatcher.define { actualExpression in
         /// First generate the call info
-        let callInfo: CallInfo = generateCallInfo(actualExpression, functionBlock)
+        let callInfo: CallInfo = try await generateCallInfo(actualExpression, functionBlock)
         let expectedDescription: String = {
             let timesDescription: String? = {
                 switch amount {
@@ -283,9 +283,9 @@ fileprivate struct CallInfo {
 }
 
 fileprivate func generateCallInfo<M, T, R>(
-    _ actualExpression: Nimble.Expression<M>,
+    _ actualExpression: Nimble.AsyncExpression<M>,
     _ functionBlock: @escaping (inout T) async throws -> R
-) -> CallInfo where M: Mock<T> {
+) async throws -> CallInfo where M: Mock<T> {
     var maybeTargetFunction: MockFunction?
     var allFunctionsCalled: [FunctionConsumer.Key] = []
     var allCallDetails: [CallDetails] = []
@@ -293,7 +293,7 @@ fileprivate func generateCallInfo<M, T, R>(
     
     // Just hope for the best and if there is a force-cast there's not much we can do
     do {
-        guard let validInstance: M = try actualExpression.evaluate() else {
+        guard let validInstance: M = try await actualExpression.evaluate() else {
             throw TestError.unableToEvaluateExpression
         }
         
@@ -304,7 +304,7 @@ fileprivate func generateCallInfo<M, T, R>(
         // to build)
         if !allFunctionsCalled.isEmpty {
             validInstance.functionConsumer.trackCalls = false
-            maybeTargetFunction = try MockFunctionBuilder.mockFunctionWith(validInstance, functionBlock)
+            maybeTargetFunction = try await MockFunctionBuilder.mockFunctionWith(validInstance, functionBlock)
             
             let key: FunctionConsumer.Key = FunctionConsumer.Key(
                 name: (maybeTargetFunction?.name ?? ""),

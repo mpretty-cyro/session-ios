@@ -113,22 +113,22 @@ class MockFileManager: Mock<FileManagerType>, FileManagerType {
 // MARK: - Convenience
 
 extension Mock where T == FileManagerType {
-    func defaultInitialSetup() {
-        self.when { $0.appSharedDataDirectoryPath }.thenReturn("/test")
-        self.when { try $0.ensureDirectoryExists(at: .any, fileProtectionType: .any) }.thenReturn(())
-        self.when { try $0.protectFileOrFolder(at: .any, fileProtectionType: .any) }.thenReturn(())
-        self.when { $0.fileExists(atPath: .any) }.thenReturn(false)
-        self.when { $0.fileExists(atPath: .any, isDirectory: .any) }.thenReturn(false)
-        self.when { $0.fileSize(of: .any) }.thenReturn(1024)
-        self.when { $0.isLocatedInTemporaryDirectory(.any) }.thenReturn(false)
-        self.when { $0.temporaryFilePath(fileExtension: .any) }.thenReturn("tmpFile")
-        self.when { $0.createFile(atPath: .any, contents: .any, attributes: .any) }.thenReturn(true)
-        self.when { try $0.write(dataToTemporaryFile: .any) }.thenReturn("tmpFile")
-        self.when { try $0.write(data: .any, toPath: .any) }.thenReturn(())
-        self.when { try $0.setAttributes(.any, ofItemAtPath: .any) }.thenReturn(())
-        self.when { try $0.copyItem(atPath: .any, toPath: .any) }.thenReturn(())
-        self.when { try $0.moveItem(atPath: .any, toPath: .any) }.thenReturn(())
-        self.when {
+    func defaultInitialSetup() async throws {
+        try await self.when { $0.appSharedDataDirectoryPath }.thenReturn("/test")
+        try await self.when { try $0.ensureDirectoryExists(at: .any, fileProtectionType: .any) }.thenReturn(())
+        try await self.when { try $0.protectFileOrFolder(at: .any, fileProtectionType: .any) }.thenReturn(())
+        try await self.when { $0.fileExists(atPath: .any) }.thenReturn(false)
+        try await self.when { $0.fileExists(atPath: .any, isDirectory: .any) }.thenReturn(false)
+        try await self.when { $0.fileSize(of: .any) }.thenReturn(1024)
+        try await self.when { $0.isLocatedInTemporaryDirectory(.any) }.thenReturn(false)
+        try await self.when { $0.temporaryFilePath(fileExtension: .any) }.thenReturn("tmpFile")
+        try await self.when { $0.createFile(atPath: .any, contents: .any, attributes: .any) }.thenReturn(true)
+        try await self.when { try $0.write(dataToTemporaryFile: .any) }.thenReturn("tmpFile")
+        try await self.when { try $0.write(data: .any, toPath: .any) }.thenReturn(())
+        try await self.when { try $0.setAttributes(.any, ofItemAtPath: .any) }.thenReturn(())
+        try await self.when { try $0.copyItem(atPath: .any, toPath: .any) }.thenReturn(())
+        try await self.when { try $0.moveItem(atPath: .any, toPath: .any) }.thenReturn(())
+        try await self.when {
             _ = try $0.replaceItem(
                 atPath: .any,
                 withItemAtPath: .any,
@@ -136,7 +136,7 @@ extension Mock where T == FileManagerType {
                 options: .any
             )
         }.thenReturn(nil)
-        self.when {
+        try await self.when {
             _ = try $0.replaceItemAt(
                 .any,
                 withItemAt: .any,
@@ -144,17 +144,17 @@ extension Mock where T == FileManagerType {
                 options: .any
             )
         }.thenReturn(nil)
-        self.when { try $0.removeItem(atPath: .any) }.thenReturn(())
-        self.when { try $0.contents(atPath: .any) }.thenReturn(Data([1, 2, 3]))
-        self.when { try $0.contentsOfDirectory(at: .any) }.thenReturn([])
-        self.when { try $0.contentsOfDirectory(atPath: .any) }.thenReturn([])
-        self.when {
+        try await self.when { try $0.removeItem(atPath: .any) }.thenReturn(())
+        try await self.when { try $0.contents(atPath: .any) }.thenReturn(Data([1, 2, 3]))
+        try await self.when { try $0.contentsOfDirectory(at: .any) }.thenReturn([])
+        try await self.when { try $0.contentsOfDirectory(atPath: .any) }.thenReturn([])
+        try await self.when {
             try $0.createDirectory(
                 atPath: .any,
                 withIntermediateDirectories: .any,
                 attributes: .any
             )
         }.thenReturn(())
-        self.when { $0.isDirectoryEmpty(atPath: .any) }.thenReturn(true)
+        try await self.when { $0.isDirectoryEmpty(atPath: .any) }.thenReturn(true)
     }
 }

@@ -29,7 +29,9 @@ func anyAny() -> Any { 0 }
 extension Mocked { static var any: Self { mock } }
 
 extension Int: Mocked { static var mock: Int { 0 } }
+extension Int32: Mocked { static var mock: Int32 { 0 } }
 extension Int64: Mocked { static var mock: Int64 { 0 } }
+extension UInt: Mocked { static var mock: UInt { 0 } }
 extension UInt64: Mocked { static var mock: UInt64 { 0 } }
 extension Dictionary: Mocked { static var mock: Self { [:] } }
 extension Array: Mocked { static var mock: Self { [] } }
@@ -49,29 +51,8 @@ extension Error { static var any: Error { TestError.mock } }
 
 extension UIApplication.State { static var any: UIApplication.State { .active } }
 extension TimeInterval { static var any: TimeInterval { 0 } }
-extension SessionId { static var any: SessionId { SessionId.invalid } }
-extension Dependencies {
-    static var any: Dependencies {
-        TestDependencies { dependencies in
-            dependencies.dateNow = Date(timeIntervalSince1970: 1234567890)
-            dependencies.forceSynchronous = true
-        }
-    }
-}
 
 // MARK: - Conformance
-
-extension ObservingDatabase: Mocked {
-    static var mock: Self {
-        var result: Database!
-        try! DatabaseQueue().read { result = $0 }
-        return ObservingDatabase.create(result!, using: .any) as! Self
-    }
-}
-
-extension ObservedEvent: Mocked {
-    static var mock: ObservedEvent = ObservedEvent(key: "mock", value: nil)
-}
 
 extension UUID: Mocked {
     static var mock: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
@@ -95,61 +76,10 @@ extension AnyPublisher: MockedGeneric where Failure == Error {
     }
 }
 
-extension KeyPair: Mocked {
-    static var mock: KeyPair = KeyPair(
-        publicKey: Data(hex: TestConstants.publicKey).bytes,
-        secretKey: Data(hex: TestConstants.edSecretKey).bytes
-    )
-}
-
-extension Job: Mocked {
-    static var mock: Job = Job(variant: .mock)
-}
-
-extension Job.Variant: Mocked {
-    static var mock: Job.Variant = .messageSend
-}
-
-extension JobRunner.JobResult: Mocked {
-    static var mock: JobRunner.JobResult = .succeeded
-}
-
 extension FileProtectionType: Mocked {
     static var mock: FileProtectionType = .complete
 }
 
-extension Log.Category: Mocked {
-    static var mock: Log.Category = .create("mock", defaultLevel: .debug)
-}
-
-extension Setting.BoolKey: Mocked {
-    static var mock: Setting.BoolKey = "mockBool"
-}
-
-extension Setting.EnumKey: Mocked {
-    static var mock: Setting.EnumKey = "mockEnum"
-}
-
 extension FileManager.ItemReplacementOptions: Mocked {
     static var mock: FileManager.ItemReplacementOptions = FileManager.ItemReplacementOptions()
-}
-
-// MARK: - Encodable Convenience
-
-extension Mocked where Self: Encodable {
-    func encoded(using dependencies: Dependencies) -> Data {
-        try! JSONEncoder(using: dependencies).with(outputFormatting: .sortedKeys).encode(self)
-    }
-}
-
-extension MockedGeneric where Self: Encodable {
-    func encoded(using dependencies: Dependencies) -> Data {
-        try! JSONEncoder(using: dependencies).with(outputFormatting: .sortedKeys).encode(self)
-    }
-}
-
-extension Array where Element: Encodable {
-    func encoded(using dependencies: Dependencies) -> Data {
-        try! JSONEncoder(using: dependencies).with(outputFormatting: .sortedKeys).encode(self)
-    }
 }

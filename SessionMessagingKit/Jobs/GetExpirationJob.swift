@@ -113,7 +113,9 @@ public enum GetExpirationJob: JobExecutor {
                     guard hashesWithNoExiprationInfo.isEmpty else {
                         let updatedJob: Job? = dependencies[singleton: .storage].write { db in
                             try job
-                                .with(nextRunTimestamp: dependencies.dateNow.timeIntervalSince1970 + minRunFrequency)
+                                .with(nextRunTimestamp: .set(
+                                    to: dependencies.dateNow.timeIntervalSince1970 + minRunFrequency
+                                ))
                                 .upserted(db)
                         }
                         

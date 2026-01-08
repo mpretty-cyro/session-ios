@@ -17,19 +17,19 @@ class MockMediaDecoder: Mock<MediaDecoderType>, MediaDecoderType {
 }
 
 extension Mock where T == MediaDecoderType {
-    func defaultInitialSetup() {
+    func defaultInitialSetup() async throws {
         let options: CFDictionary = [
             kCGImageSourceShouldCache: false,
             kCGImageSourceShouldCacheImmediately: false
         ] as CFDictionary
         
-        self.when { $0.defaultImageOptions }.thenReturn(options)
-        self.when { $0.defaultThumbnailOptions(maxDimension: .any) }.thenReturn(options)
+        try await self.when { $0.defaultImageOptions }.thenReturn(options)
+        try await self.when { $0.defaultThumbnailOptions(maxDimension: .any) }.thenReturn(options)
         
-        self
+        try await self
             .when { $0.source(for: URL.any) }
             .thenReturn(CGImageSourceCreateWithData(TestConstants.validImageData as CFData, options))
-        self
+        try await self
             .when { $0.source(for: Data.any) }
             .thenReturn(CGImageSourceCreateWithData(TestConstants.validImageData as CFData, options))
     }

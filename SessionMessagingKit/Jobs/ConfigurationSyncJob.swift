@@ -54,7 +54,9 @@ public enum ConfigurationSyncJob: JobExecutor {
             // it again immediately which is pointless)
             let updatedJob: Job? = dependencies[singleton: .storage].write { db in
                 try job
-                    .with(nextRunTimestamp: dependencies.dateNow.timeIntervalSince1970 + maxRunFrequency)
+                    .with(nextRunTimestamp: .set(
+                        to: dependencies.dateNow.timeIntervalSince1970 + maxRunFrequency
+                    ))
                     .upserted(db)
             }
             
@@ -269,7 +271,9 @@ public enum ConfigurationSyncJob: JobExecutor {
                                     .defaulting(to: false)
                                 
                                 try existingJob
-                                    .with(nextRunTimestamp: (jobWasManualTrigger ? 0 : nextRunTimestamp))
+                                    .with(nextRunTimestamp: .set(
+                                        to: (jobWasManualTrigger ? 0 : nextRunTimestamp)
+                                    ))
                                     .upserted(db)
                             }
                             
@@ -279,7 +283,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                         }
                         
                         return try job
-                            .with(nextRunTimestamp: nextRunTimestamp)
+                            .with(nextRunTimestamp: .set(to: nextRunTimestamp))
                             .upserted(db)
                     }
                     

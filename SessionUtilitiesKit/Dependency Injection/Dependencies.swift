@@ -65,7 +65,8 @@ public class Dependencies {
                 /// This code path should never happen (and is essentially invalid if it does) but in order to avoid neeing to return
                 /// a nullable type or force-casting this is how we need to do things)
                 Log.critical("Failed to convert erased cache value for '\(cache.identifier)' to expected type: \(M.self)")
-                let fallbackValue: M = cache.createInstance(self)
+                let key: Dependencies.Key = Dependencies.Key.Variant.cache.key(cache.identifier)
+                let fallbackValue: M = cache.createInstance(self, key)
                 return mutation(fallbackValue)
             }
             
@@ -82,7 +83,8 @@ public class Dependencies {
                 /// This code path should never happen (and is essentially invalid if it does) but in order to avoid neeing to return
                 /// a nullable type or force-casting this is how we need to do things)
                 Log.critical("Failed to convert erased cache value for '\(cache.identifier)' to expected type: \(M.self)")
-                let fallbackValue: M = cache.createInstance(self)
+                let key: Dependencies.Key = Dependencies.Key.Variant.cache.key(cache.identifier)
+                let fallbackValue: M = cache.createInstance(self, key)
                 return try mutation(fallbackValue)
             }
             
@@ -151,6 +153,13 @@ public class Dependencies {
         removeValue(cache.identifier, of: .cache)
     }
     
+    public func removeAll() {
+        _storage.performUpdate { storage in
+            storage.instances.removeAll()
+            return storage
+        }
+    }
+    
     public static func setIsRTLRetriever(requiresMainThread: Bool, isRTLRetriever: @escaping () -> Bool) {
         _cachedIsRTLRetriever.set(to: (requiresMainThread, isRTLRetriever))
     }
@@ -180,9 +189,11 @@ public class Dependencies {
 
 private extension ThreadSafeObject<MutableCacheType> {
     func immutable<M, I>(cache: CacheConfig<M, I>, using dependencies: Dependencies) -> I {
+        let key: Dependencies.Key = Dependencies.Key.Variant.cache.key(cache.identifier)
+        
         return cache.immutableInstance(
             (self.wrappedValue as? M) ??
-            cache.createInstance(dependencies)
+            cache.createInstance(dependencies, key)
         )
     }
 }
@@ -209,7 +220,7 @@ public extension Dependencies {
         /// Update the cached & in-memory values
         let instance: Feature<T> = (
             typedValue?.value(as: Feature<T>.self) ??
-            feature.createInstance(self)
+            feature.createInstance(self, key)
         )
         instance.setValue(to: updatedFeature, using: self)
         setValue(instance, typedStorage: .feature(instance), key: feature.identifier)
@@ -240,7 +251,9 @@ public extension Dependencies {
     }
     
     func defaultValue<T: FeatureOption>(feature: FeatureConfig<T>) -> T? {
-        return feature.createInstance(self).defaultOption
+        let key: Dependencies.Key = Dependencies.Key.Variant.feature.key(feature.identifier)
+        
+        return feature.createInstance(self, key).defaultOption
     }
 }
 
@@ -317,30 +330,38 @@ private extension Dependencies {
     }
     
     private func getOrCreate<S>(_ singleton: SingletonConfig<S>) -> S {
+        let key: Dependencies.Key = Dependencies.Key.Variant.singleton.key(singleton.identifier)
+        
         return getOrCreateInstance(
             identifier: singleton.identifier,
-            constructor: .singleton { singleton.createInstance(self) }
+            constructor: .singleton { singleton.createInstance(self, key) }
         )
     }
     
     private func getOrCreate<M, I>(_ cache: CacheConfig<M, I>) -> ThreadSafeObject<MutableCacheType> {
+        let key: Dependencies.Key = Dependencies.Key.Variant.cache.key(cache.identifier)
+        
         return getOrCreateInstance(
             identifier: cache.identifier,
-            constructor: .cache { ThreadSafeObject(cache.mutableInstance(cache.createInstance(self))) }
+            constructor: .cache { ThreadSafeObject(cache.mutableInstance(cache.createInstance(self, key))) }
         )
     }
     
     private func getOrCreate(_ defaults: UserDefaultsConfig) -> UserDefaultsType {
+        let key: Dependencies.Key = Dependencies.Key.Variant.userDefaults.key(defaults.identifier)
+        
         return getOrCreateInstance(
             identifier: defaults.identifier,
-            constructor: .userDefaults { defaults.createInstance(self) }
+            constructor: .userDefaults { defaults.createInstance(self, key) }
         )
     }
     
     private func getOrCreate<T: FeatureOption>(_ feature: FeatureConfig<T>) -> Feature<T> {
+        let key: Dependencies.Key = Dependencies.Key.Variant.feature.key(feature.identifier)
+        
         return getOrCreateInstance(
             identifier: feature.identifier,
-            constructor: .feature { feature.createInstance(self) }
+            constructor: .feature { feature.createInstance(self, key) }
         )
     }
     

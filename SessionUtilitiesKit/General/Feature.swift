@@ -142,6 +142,12 @@ public extension FeatureStorage {
         identifier: "versionDeprecationMinimum",
         defaultOption: 16
     )
+    
+    /// This feature should never be enabled outside of tests, it allows the `AttachmentDownloadJob` to run when there is
+    /// already another job downloading the target attachment
+    static let allowDuplicateDownloads: FeatureConfig<Bool> = Dependencies.create(
+        identifier: "allowDuplicateDownloads"
+    )
 }
 
 // MARK: - FeatureOption

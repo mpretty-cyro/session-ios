@@ -11,7 +11,7 @@ import SessionUtilitiesKit
 public extension Cache {
     static let groupPollers: CacheConfig<GroupPollerCacheType, GroupPollerImmutableCacheType> = Dependencies.create(
         identifier: "groupPollers",
-        createInstance: { dependencies in GroupPoller.Cache(using: dependencies) },
+        createInstance: { dependencies, _ in GroupPoller.Cache(using: dependencies) },
         mutableInstance: { $0 },
         immutableInstance: { $0 }
     )
