@@ -209,8 +209,17 @@ extension SwarmPollerType {
         let requestedConfigNamespaces: Set<Network.StorageServer.Namespace> = Set(namespaces.filter { $0.isConfigNamespace })
         let answeredNamespaces: Set<Network.StorageServer.Namespace> = Set(response.keys)
 
+        /// **Computed once and used by BOTH markers below, deliberately.**
+        ///
+        /// There are two places this poll can conclude we are level - one for a poll that returned no config messages, one for
+        /// a poll whose config messages all merged - and they are far enough apart in this function that they were not
+        /// obviously the same decision. Only the first was gated on coverage, so a poll where one config namespace's retrieve
+        /// failed *and* another returned a mergeable message took the second and marked the swarm level, which is exactly the
+        /// state §4.1 exists to exclude. Sharing the value is what stops them drifting apart again
+        let allConfigNamespacesAnswered: Bool = requestedConfigNamespaces.isSubset(of: answeredNamespaces)
+
         if
-            requestedConfigNamespaces.isSubset(of: answeredNamespaces),
+            allConfigNamespacesAnswered,
             !sortedMessages.contains(where: { $0.namespace.isConfigNamespace && !$0.messages.isEmpty })
         {
             await dependencies[singleton: .configRecovery]
@@ -244,8 +253,12 @@ extension SwarmPollerType {
         switch configMergeWasComplete {
             case .none: break
             case .some(true):
-                await dependencies[singleton: .configRecovery]
-                    .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target)
+                /// A **complete merge of a partial answer is not levelness.** Taking in everything we were given says nothing
+                /// about the namespace whose retrieve failed, so this needs the same coverage gate as the marker above
+                if allConfigNamespacesAnswered {
+                    await dependencies[singleton: .configRecovery]
+                        .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target)
+                }
 
             case .some(false):
                 await dependencies[singleton: .configRecovery]

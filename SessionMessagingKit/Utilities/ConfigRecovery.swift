@@ -359,15 +359,34 @@ public enum ConfigRecovery {
             /// `MAX_MESSAGE_SIZE`), so **the accounts with the most to lose are exactly the ones whose recovery would be
             /// rejected wholesale**.
             ///
-            /// The delete goes in the final batch so every store is applied before it, preserving the ordering that stops a
-            /// rejected delete stranding the stores.
+            /// **The delete is a separate request, not part of any batch** - these chunks carry stores only. That is
+            /// deliberate rather than incidental: a full batch of `subRequestLimit` stores plus a delete would be one
+            /// sub-request over the limit, and the server rejects the whole batch, so folding the delete in would reintroduce
+            /// the overflow this chunking exists to prevent - on exactly the config sets that are a multiple of the limit.
+            /// Ordering is preserved by sending it after every batch has completed instead.
             ///
             /// **Note:** Derived from the limit, not from a concurrency cap. A limiter that happens to keep batches small is a
             /// coincidence rather than a bound, and stops being true the moment someone raises it
+            /// **Nothing to send is not the same as everything landing, and the difference is silent.**
+            ///
+            /// With no batches the loop below never runs, so `failedVariants` stays empty - which makes every config read as
+            /// landed, banks every hash as stored, and issues the sweep, all without a single request reaching the swarm. This
+            /// used to be avoided by striding to `max(count, 1)`, which forced one empty `sequence` whose zero sub-responses
+            /// failed everything back into retryable. That worked, but by accident of the failure path rather than by saying
+            /// so, and it spent a request to do it. Unreachable today - `configRecoveryData` returns `nil` for a config with no
+            /// push data and for keys with nothing retained - but the cost of being explicit is two lines
+            guard !storeRequests.isEmpty else {
+                retryableHashes.formUnion(
+                    recoveryData.reduce(into: Set<String>()) { $0.formUnion($1.missingHashes) }
+                )
+                await release(storedHashes, retryableHashes)
+                return
+            }
+
             let storesPerBatch: Int = ConfigRecovery.subRequestLimit
             let batches: [[(config: LibSession.ConfigRecoveryData, request: any ErasedPreparedRequest)]] = stride(
                 from: 0,
-                to: max(storeRequests.count, 1),
+                to: storeRequests.count,
                 by: storesPerBatch
             ).map { start in
                 Array(storeRequests[start..<min(start + storesPerBatch, storeRequests.count)])
@@ -429,8 +448,9 @@ public enum ConfigRecovery {
             /// they have to be swept here or they linger. But a restore that did *not* land leaves the swarm still holding the
             /// state those hashes belong to, and deleting them then would remove data with nothing put back in its place.
             ///
-            /// **Note:** No cross-round state is needed - the hashes are still in memory within this round. Deletes go last so
-            /// every store is applied first, and they count against the same chunk budget
+            /// **Note:** No cross-round state is needed - the hashes are still in memory within this round. The delete is its
+            /// own request issued after every store batch, so it does **not** count against the chunk budget - and must not be
+            /// folded into one, which would push a full batch one sub-request over the server's limit
             let hashesToSweep: Set<String> = landedRestores.reduce(into: []) { $0.formUnion($1.obsoleteHashes) }
 
             if !hashesToSweep.isEmpty {

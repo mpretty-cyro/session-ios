@@ -267,6 +267,44 @@ class SwarmPollerSpec: AsyncSpec {
                 }
             }
 
+            // MARK: -- when one config namespace failed and another returned a config message
+            context("when one config namespace failed and another returned a config message") {
+                // MARK: ---- V22b holds at the merge marker too, not just the empty-poll one
+                it("V22b holds at the merge marker too, not just the empty-poll one") {
+                    /// **There are two places that mark the swarm level, and `V22b` only ever reached one.** The empty-poll
+                    /// marker is gated on every requested config namespace having answered; the merge marker - reached when a
+                    /// config message *did* come back and merged completely - was not gated at all.
+                    ///
+                    /// The state that separates them is this one: one config namespace's retrieve failed while another returned
+                    /// something mergeable. The old `V22b` fixture could not produce it, because it returned an empty retrieve
+                    /// for every namespace it did not fail, so the poll returned before any merge ran
+                    try await fixture.stubPoll(namespacesAnswer: .oneConfigFailedAnotherReturnedAConfig)
+                    try await fixture.mockLibSessionCache
+                        .when { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
+                        .thenReturn(true)
+
+                    /// **`forceSynchronousProcessing: true` is load-bearing, not incidental.** The merge marker is only reached
+                    /// when config messages are handled inside the poll, which needs
+                    /// `namespace.shouldHandleSynchronously || forceSynchronousProcessing` - and of the user namespaces none
+                    /// handle synchronously. In production the reachable route is a **group** poll, where `.configGroupKeys`
+                    /// does handle synchronously; this is the same code path reached the cheap way
+                    _ = try await require { try await fixture.poller.poll(forceSynchronousProcessing: true) }
+                        .toNot(throwError())
+
+                    /// **Assert the premise first.** This vector is only about the merge marker, and the merge marker is only
+                    /// reached if a config message was actually handed to `handleConfigMessages`. Without this the test passes
+                    /// whenever the message failed to parse, which looks identical from the outside
+                    await fixture.mockLibSessionCache
+                        .verify { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
+                        .wasCalled(atLeast: 1, timeout: .milliseconds(500))
+
+                    /// The merge took in everything it was given - but it was not *given* what the failed namespace holds, and
+                    /// that is the whole point of §4.1. A complete merge of a partial answer is not levelness
+                    await expect { await fixture.recoveryStore.localStateIsLevelWithSwarm(swarmPublicKey: fixture.userSwarm) }
+                        .to(beFalse())
+                }
+            }
+
             // MARK: -- when only some namespaces answered
             context("when only some namespaces answered") {
                 // MARK: ---- V22b does not treat the local state as level with the swarm
@@ -346,6 +384,7 @@ private class SwarmPollerTestFixture: FixtureBase {
 
         /// One config namespace errored while the rest replied
         case firstConfigNamespaceFailed
+        case oneConfigFailedAnotherReturnedAConfig
     }
 
     static func create() async throws -> SwarmPollerTestFixture {
@@ -379,6 +418,8 @@ private class SwarmPollerTestFixture: FixtureBase {
         try await mockNetwork.defaultInitialSetup(using: dependencies)
 
         try await mockAppContext.when { $0.reportedApplicationState }.thenReturn(UIApplication.State.background)
+        /// Needed only by the shapes that actually reach the merge - the empty-poll ones return before it
+        try await mockAppContext.when { $0.isMainApp }.thenReturn(true)
         try await mockGeneralCache.when { $0.userExists }.thenReturn(true)
         try await mockGeneralCache.when { $0.ed25519Seed }.thenReturn(Array(Data(hex: TestConstants.edKeySeed)))
         try await mockLibSessionCache.when { $0.activeHashesByVariant(for: .any) }.thenReturn([:])
@@ -405,12 +446,26 @@ private class SwarmPollerTestFixture: FixtureBase {
         ].joined().data(using: .utf8)!
         /// A sub-response the poll can't extract a body from, which is how a failed retrieve arrives
         let failedRetrieve: Data = "{\"code\":500,\"headers\":{}}".data(using: .utf8)!
+        /// A retrieve carrying one config message, so the poll reaches the merge rather than returning early
+        let configRetrieve: Data = [
+            "{\"code\":200,\"headers\":{},\"body\":{\"messages\":[{",
+            "\"data\":\"VGVzdENvbmZpZw==\",\"expiration\":9999999999999,",
+            "\"hash\":\"CONFIG-HASH\",\"timestamp\":1234567890",
+            "}],\"more\":false,\"hf\":[2,11],\"t\":0}}"
+        ].joined().data(using: .utf8)!
         let bodies: [Data] = namespaces.enumerated().map { index, namespace in
             switch namespacesAnswer {
                 case .allSucceededEmpty: return emptyRetrieve
                 case .allFailed: return failedRetrieve
                 case .firstConfigNamespaceFailed:
                     return (namespace.isConfigNamespace && index == 1 ? failedRetrieve : emptyRetrieve)
+
+                case .oneConfigFailedAnotherReturnedAConfig:
+                    switch index {
+                        case 1: return failedRetrieve        /// .configUserProfile - dropped from the response
+                        case 2: return configRetrieve        /// .configContacts - returns something to merge
+                        default: return emptyRetrieve
+                    }
             }
         }
 
