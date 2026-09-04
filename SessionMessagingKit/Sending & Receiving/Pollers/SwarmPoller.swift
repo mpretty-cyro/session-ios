@@ -94,7 +94,7 @@ extension SwarmPollerType {
             using: dependencies
         )
 
-        /// Backfill any keys-message bytes we are missing (**B1**)
+        /// Backfill any keys-message bytes we are missing
         ///
         /// ⚠️ **Deliberately not gated on `outcome.detection`.** Detection says the swarm has *lost* a hash; this fires when
         /// *we* lack bytes for a hash the swarm still has - the opposite condition, and one that stops being fixable the
@@ -113,23 +113,18 @@ extension SwarmPollerType {
             )
         }
 
-        /// **B2 — the only call site, and the precondition is here rather than inside it.**
-        ///
-        /// Reachable only when *nobody has it and it is gone*: a backfill has already run for this group and found nothing, so
-        /// the bytes are not obtainable by re-reading; and this poll's detection says the swarm has lost the keys. Those are
-        /// two different facts and neither implies the other - `keysVerdict == .expired` alone would fire on a group that has
-        /// simply never been looked at.
-        ///
-        /// Keeping the condition at the call site is deliberate: B2 is meant to be removable, and a reader deciding whether to
-        /// remove it should be able to see when it fires without opening it. Deleting B2 is deleting this block and the file
+        /// Force a rekey only when *nobody has it and it is gone*: a backfill has already run for this group and left the
+        /// bytes absent, so they are not obtainable by re-reading; and this poll's detection says the swarm has lost the keys.
+        /// Those are two different facts and neither implies the other - `keysVerdict == .expired` alone would fire on a group
+        /// that has simply never been looked at.
         /// ⚠️ **`markedLevelThisPoll`, not `localStateIsLevelWithSwarm`.** That predicate means *was level at some point this
-        /// session* - set by a good poll and cleared only by a sticky withdrawal. Right for B1, where staleness costs a
-        /// redundant store; **fail-open for B2 at exactly the wrong moment**, because a member added an hour ago with our last
+        /// session* - set by a good poll and cleared only by a sticky withdrawal. Right for the re-store, where staleness costs
+        /// a redundant store; **fail-open here at exactly the wrong moment**, because a member added an hour ago with our last
         /// complete poll yesterday still reads true, and our `GroupMembers` view is stale by precisely the delta that produces
         /// the exclusion.
         ///
         /// A rekey encrypts the new key to **this device's view of the members**. Issued from a stale view it silently excludes
-        /// anyone we have not merged yet - and B2 fires precisely on devices whose config state is known to be degraded, so
+        /// anyone we have not merged yet - and this fires precisely on devices whose config state is known to be degraded, so
         /// the stale view is the expected case rather than the unlucky one
         if outcome.detection.keysVerdict == .expired,
            await dependencies[singleton: .configRecovery].keysBackfillHasFailed(swarmPublicKey: destination.target)
@@ -137,7 +132,7 @@ extension SwarmPollerType {
             /// `markedLevelThisPoll` is passed in rather than read inside, because `localStateIsLevelWithSwarm` means "level at
             /// some point this session" and never goes false again - it is fail-open for this purpose, and only the poll that
             /// just ran knows whether levelness holds *now*
-            await ConfigForceRekey.rekeyIfPossible(
+            await ConfigRecovery.forceRekeyIfPossible(
                 swarmPublicKey: destination.target,
                 localStateIsLevelWithSwarmThisPoll: outcome.markedLevelThisPoll,
                 using: dependencies
@@ -297,8 +292,8 @@ extension SwarmPollerType {
         /// There are two places this poll can conclude we are level - one for a poll that returned no config messages, one for
         /// a poll whose config messages all merged - and they are far enough apart in this function that they were not
         /// obviously the same decision. Only the first was gated on coverage, so a poll where one config namespace's retrieve
-        /// failed *and* another returned a mergeable message took the second and marked the swarm level, which is exactly the
-        /// state §4.1 exists to exclude. Sharing the value is what stops them drifting apart again
+        /// failed *and* another returned a mergeable message took the second and marked the swarm level - claiming we are
+        /// level with a swarm we did not fully hear back from. Sharing the value is what stops them drifting apart again
         let allConfigNamespacesAnswered: Bool = requestedConfigNamespaces.isSubset(of: answeredNamespaces)
 
         /// Whether **this** poll established levelness, as opposed to some earlier poll having done so

@@ -802,7 +802,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 try await fixture.stubRekey(isAdmin: true)
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
-                await ConfigForceRekey.rekeyIfPossible(
+                await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
                     localStateIsLevelWithSwarmThisPoll: true,
                     using: fixture.dependencies
@@ -820,7 +820,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 try await fixture.stubRekey(isAdmin: false)
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
-                await ConfigForceRekey.rekeyIfPossible(
+                await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
                     localStateIsLevelWithSwarmThisPoll: true,
                     using: fixture.dependencies
@@ -842,7 +842,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 try await fixture.stubRekey(isAdmin: true)
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
-                await ConfigForceRekey.rekeyIfPossible(
+                await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
                     localStateIsLevelWithSwarmThisPoll: false,
                     using: fixture.dependencies
@@ -855,7 +855,7 @@ class ConfigRecoverySpec: AsyncSpec {
                     .wasNotCalled()
 
                 /// And the refusal must not be sticky - without this half, a B2 that never rekeyed at all would pass
-                await ConfigForceRekey.rekeyIfPossible(
+                await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
                     localStateIsLevelWithSwarmThisPoll: true,
                     using: fixture.dependencies
@@ -875,7 +875,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 for _ in 0..<3 {
-                    await ConfigForceRekey.rekeyIfPossible(
+                    await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
                     localStateIsLevelWithSwarmThisPoll: true,
                     using: fixture.dependencies
@@ -1178,7 +1178,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
     let store: ConfigRecovery.Store = ConfigRecovery.Store()
 
     /// B2's own store - separate because B2 is meant to be deletable, and its state goes with it
-    let forceRekeyStore: ConfigForceRekey.Store = ConfigForceRekey.Store()
+    let forceRekeyStore: ConfigRecovery.ForceRekeyStore = ConfigRecovery.ForceRekeyStore()
 
     /// A real `libSession` cache too - the recovery guards live inside it, and a mock would only assert what the mock returns
     private(set) var libSessionCache: LibSession.Cache!

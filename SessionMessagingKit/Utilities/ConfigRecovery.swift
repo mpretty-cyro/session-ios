@@ -245,7 +245,7 @@ public enum ConfigRecovery {
         }
     }
 
-    /// Backfill the raw bytes of keys messages this device holds a hash for but no bytes behind it (**B1**)
+    /// Backfill the raw bytes of keys messages this device holds a hash for but no bytes behind it
     ///
     /// Retention captures a keys message's bytes **when it is loaded**, so a group that loaded its keys before retention
     /// existed holds the key and the hash and nothing else. Re-loading the same message fixes that: `insert_key` takes its
@@ -272,8 +272,9 @@ public enum ConfigRecovery {
 
         guard !missingBytes.isEmpty else { return }
 
-        /// Reuses §5.5's one-hour interval rather than inventing another. Claimed before the fetch, so a group whose keys are
-        /// genuinely gone is barred by having tried
+        /// An hour, because the thing being bounded is a whole extra namespace read per poll for a group that is very likely
+        /// to keep failing - and the repair it enables is not time-critical, since the keys have already been missing long
+        /// enough to expire. Claimed before the fetch, so a group whose keys are genuinely gone is barred by having tried
         guard
             await dependencies[singleton: .configRecovery].beginKeysBackfill(
                 swarmPublicKey: swarmPublicKey,
@@ -286,8 +287,8 @@ public enum ConfigRecovery {
             let messages: [ConfigMessageReceiveJob.Details.MessageInfo] = try await fetchKeysMessages()
 
             guard !messages.isEmpty else {
-                /// The swarm has nothing left to give, so this group's bytes are not recoverable by re-reading. That is the
-                /// fact B2's precondition needs and the only thing that separates it from "we have not looked yet"
+                /// The swarm has nothing left to give, so this group's bytes are not recoverable by re-reading - which is the
+                /// only thing that separates this group from one nobody has looked at yet
                 await dependencies[singleton: .configRecovery].markKeysBackfillFailed(swarmPublicKey: swarmPublicKey)
                 Log.info(.cat, "Keys backfill for \(swarmPublicKey) found nothing on the swarm; \(missingBytes.count) hash(es) remain without bytes.")
                 return
@@ -313,7 +314,7 @@ public enum ConfigRecovery {
                 case false:
                     /// **A fetch that returned messages and still left bytes missing is also an attempt that failed.**
                     /// Recording only the empty case would leave this group looking un-attempted forever, which is the one
-                    /// state B2's precondition exists to distinguish
+                    /// state the force rekey's precondition exists to distinguish
                     await dependencies[singleton: .configRecovery].markKeysBackfillFailed(swarmPublicKey: swarmPublicKey)
                     Log.warn(.cat, "Keys backfill captured \(missingBytes.count - stillMissing.count) of \(missingBytes.count) hash(es) on \(swarmPublicKey) (complete merge: \(tookInEverything)).")
             }
@@ -655,24 +656,23 @@ public extension ConfigRecovery {
         /// When each swarm may next be re-polled for keys-message bytes it is missing
         ///
         /// **Separate from `barredUntil`, deliberately.** That map bars a hash from being *re-stored*, and reusing it here
-        /// would bar the very hashes a successful backfill just made recoverable - so a backfill would block the `V23` repair
-        /// it exists to enable. Same one-hour interval and the same reasoning as §5.5 (the redundant action is idempotent and
-        /// here it is only a read), different subject
+        /// would bar the very hashes a successful backfill just made recoverable - so a backfill would block the re-store it
+        /// exists to enable. Same one-hour interval, different subject
         private var keysBackfillBarredUntil: [String: Date] = [:]
 
         /// Swarms where a keys backfill has **run and come back with nothing**
         ///
-        /// **A different question from the bar above, and they must not be collapsed.** The bar governs *how often B1
-        /// retries*; this records *whether B1 has already tried and failed*, which is the only thing that separates "nobody
-        /// has repaired this group" from "nobody can". No existing predicate distinguishes those two, and they are exactly the
-        /// pair B2's precondition turns on.
+        /// Set for a swarm once a backfill has run **and the bytes are still absent** - whether the fetch came back empty or
+        /// returned messages that did not restore them. Both are the same fact: we looked, and they are not here.
+        ///
+        /// **A different question from the bar above, and they must not be collapsed.** The bar governs how often the backfill
+        /// retries; this records whether it has already tried and failed, which is the only thing that separates "nobody has
+        /// repaired this group" from "nobody can" - the pair the force rekey turns on.
         ///
         /// **In-memory and session-scoped, deliberately.** A persisted "tried and failed" is a sticky negative that would let
         /// an irreversible, universally-visible rekey fire on evidence gathered weeks ago, after the swarm has changed
-        /// underneath it. Session scope fails **closed**: after a relaunch B2 is delayed by one poll rather than enabled by a
-        /// stale record. If a lapsing bar clears this too, that is harmless - it fails closed again
-        /// Set for a swarm once a backfill has run **and the bytes are still absent** - whether the fetch came back empty
-        /// or returned messages that did not restore them. Both are the same fact to B2: we looked, and they are not here
+        /// underneath it. Session scope fails **closed**: after a relaunch the rekey is delayed by one poll rather than enabled
+        /// by a stale record. If a lapsing bar clears this too, that is harmless - it fails closed again
         private var keysBackfillFailed: Set<String> = []
 
         // MARK: - Functions
@@ -832,7 +832,7 @@ public protocol ConfigRecoveryStoreType: Actor {
     /// Record that a keys backfill ran for this swarm and found nothing to capture
     func markKeysBackfillFailed(swarmPublicKey: String)
 
-    /// Whether a keys backfill has already run for this swarm and failed - the input to B2's precondition
+    /// Whether a keys backfill has already run for this swarm and left the bytes absent
     func keysBackfillHasFailed(swarmPublicKey: String) -> Bool
 
     /// Record that our local state for the given swarm is level with what the swarm holds

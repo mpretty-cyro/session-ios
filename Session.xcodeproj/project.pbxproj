@@ -956,7 +956,7 @@
 		FD97B2422A3FEBF30027DD57 /* UnreadMarkerCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD97B2412A3FEBF30027DD57 /* UnreadMarkerCell.swift */; };
 		FD981BC42DC304E600564172 /* MessageDeduplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD981BC32DC304E100564172 /* MessageDeduplication.swift */; };
 		FD981BC62DC3310B00564172 /* ExtensionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD981BC52DC3310800564172 /* ExtensionHelper.swift */; };
-		FDCF01000000000000000022 /* ConfigForceRekey.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCF01000000000000000021 /* ConfigForceRekey.swift */; };
+		FDCF01000000000000000022 /* ConfigRecovery+ForceRekey.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCF01000000000000000021 /* ConfigRecovery+ForceRekey.swift */; };
 		FDCF01000000000000000004 /* ConfigRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCF01000000000000000003 /* ConfigRecovery.swift */; };
 		FD981BC92DC4641100564172 /* ExtensionHelperSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD981BC82DC4640D00564172 /* ExtensionHelperSpec.swift */; };
 		FDCF01000000000000000008 /* ConfigRecoverySpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCF01000000000000000007 /* ConfigRecoverySpec.swift */; };
@@ -2625,7 +2625,7 @@
 		FD97B2412A3FEBF30027DD57 /* UnreadMarkerCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMarkerCell.swift; sourceTree = "<group>"; };
 		FD981BC32DC304E100564172 /* MessageDeduplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDeduplication.swift; sourceTree = "<group>"; };
 		FD981BC52DC3310800564172 /* ExtensionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionHelper.swift; sourceTree = "<group>"; };
-		FDCF01000000000000000021 /* ConfigForceRekey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigForceRekey.swift; sourceTree = "<group>"; };
+		FDCF01000000000000000021 /* ConfigRecovery+ForceRekey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConfigRecovery+ForceRekey.swift"; sourceTree = "<group>"; };
 		FDCF01000000000000000003 /* ConfigRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigRecovery.swift; sourceTree = "<group>"; };
 		FD981BC82DC4640D00564172 /* ExtensionHelperSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionHelperSpec.swift; sourceTree = "<group>"; };
 		FDCF01000000000000000007 /* ConfigRecoverySpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigRecoverySpec.swift; sourceTree = "<group>"; };
@@ -4320,7 +4320,7 @@
 				FD2273072C353109004D8A6C /* DisplayPictureManager.swift */,
 				FD981BC52DC3310800564172 /* ExtensionHelper.swift */,
 				FDCF01000000000000000003 /* ConfigRecovery.swift */,
-				FDCF01000000000000000021 /* ConfigForceRekey.swift */,
+				FDCF01000000000000000021 /* ConfigRecovery+ForceRekey.swift */,
 				C3BBE0C62554F1570050F1E3 /* FixedWidthInteger+BigEndian.swift */,
 				FDB11A622DD5BDDD00BEF49F /* ImageDataManager+Singleton.swift */,
 				FDE521992E08DBB000061B8E /* ImageLoading+Convenience.swift */,
@@ -7963,7 +7963,7 @@
 				FD245C632850664600B966DD /* Configuration.swift in Sources */,
 				FD981BC62DC3310B00564172 /* ExtensionHelper.swift in Sources */,
 				FDCF01000000000000000004 /* ConfigRecovery.swift in Sources */,
-				FDCF01000000000000000022 /* ConfigForceRekey.swift in Sources */,
+				FDCF01000000000000000022 /* ConfigRecovery+ForceRekey.swift in Sources */,
 				FD78E9FA2DDD74D200D55B50 /* _042_MoveSettingsToLibSession.swift in Sources */,
 				FD2272FF2C352D8E004D8A6C /* LibSession+UserProfile.swift in Sources */,
 				FD5C7305284F0FF30029977D /* MessageReceiver+VisibleMessages.swift in Sources */,
