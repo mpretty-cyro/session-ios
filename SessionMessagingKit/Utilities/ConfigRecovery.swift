@@ -288,7 +288,7 @@ public enum ConfigRecovery {
             guard !messages.isEmpty else {
                 /// The swarm has nothing left to give, so this group's bytes are not recoverable by re-reading. That is the
                 /// fact B2's precondition needs and the only thing that separates it from "we have not looked yet"
-                await dependencies[singleton: .configRecovery].markKeysBackfillFoundNothing(swarmPublicKey: swarmPublicKey)
+                await dependencies[singleton: .configRecovery].markKeysBackfillFailed(swarmPublicKey: swarmPublicKey)
                 Log.info(.cat, "Keys backfill for \(swarmPublicKey) found nothing on the swarm; \(missingBytes.count) hash(es) remain without bytes.")
                 return
             }
@@ -312,10 +312,9 @@ public enum ConfigRecovery {
                 case true: Log.info(.cat, "Keys backfill captured bytes for \(missingBytes.count) hash(es) on \(swarmPublicKey).")
                 case false:
                     /// **A fetch that returned messages and still left bytes missing is also an attempt that failed.**
-                    /// The record means "we looked this session and the bytes are still not here", not "the swarm was
-                    /// empty" - recording only the empty case would leave this group looking un-attempted forever, which
-                    /// is the one state B2's precondition exists to distinguish
-                    await dependencies[singleton: .configRecovery].markKeysBackfillFoundNothing(swarmPublicKey: swarmPublicKey)
+                    /// Recording only the empty case would leave this group looking un-attempted forever, which is the one
+                    /// state B2's precondition exists to distinguish
+                    await dependencies[singleton: .configRecovery].markKeysBackfillFailed(swarmPublicKey: swarmPublicKey)
                     Log.warn(.cat, "Keys backfill captured \(missingBytes.count - stillMissing.count) of \(missingBytes.count) hash(es) on \(swarmPublicKey) (complete merge: \(tookInEverything)).")
             }
         }
@@ -672,7 +671,9 @@ public extension ConfigRecovery {
         /// an irreversible, universally-visible rekey fire on evidence gathered weeks ago, after the swarm has changed
         /// underneath it. Session scope fails **closed**: after a relaunch B2 is delayed by one poll rather than enabled by a
         /// stale record. If a lapsing bar clears this too, that is harmless - it fails closed again
-        private var keysBackfillFoundNothing: Set<String> = []
+        /// Set for a swarm once a backfill has run **and the bytes are still absent** - whether the fetch came back empty
+        /// or returned messages that did not restore them. Both are the same fact to B2: we looked, and they are not here
+        private var keysBackfillFailed: Set<String> = []
 
         // MARK: - Functions
 
@@ -688,12 +689,12 @@ public extension ConfigRecovery {
             return true
         }
 
-        public func markKeysBackfillFoundNothing(swarmPublicKey: String) {
-            keysBackfillFoundNothing.insert(swarmPublicKey)
+        public func markKeysBackfillFailed(swarmPublicKey: String) {
+            keysBackfillFailed.insert(swarmPublicKey)
         }
 
         public func keysBackfillHasFailed(swarmPublicKey: String) -> Bool {
-            return keysBackfillFoundNothing.contains(swarmPublicKey)
+            return keysBackfillFailed.contains(swarmPublicKey)
         }
 
         public func markLocalStateLevelWithSwarm(swarmPublicKey: String) {
@@ -829,7 +830,7 @@ public protocol ConfigRecoveryStoreType: Actor {
     func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool
 
     /// Record that a keys backfill ran for this swarm and found nothing to capture
-    func markKeysBackfillFoundNothing(swarmPublicKey: String)
+    func markKeysBackfillFailed(swarmPublicKey: String)
 
     /// Whether a keys backfill has already run for this swarm and failed - the input to B2's precondition
     func keysBackfillHasFailed(swarmPublicKey: String) -> Bool

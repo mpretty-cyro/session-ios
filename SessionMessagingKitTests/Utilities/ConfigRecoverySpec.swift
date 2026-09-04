@@ -800,7 +800,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// **The precondition is B1-attempted-and-failed, not merely keys-missing.** Keys-missing alone is true of a
                 /// group nobody has looked at yet, and rekeying that group throws away keys a backfill would have restored
                 try await fixture.stubRekey(isAdmin: true)
-                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 await ConfigForceRekey.rekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
@@ -818,7 +818,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// A member cannot produce a keys message, so reaching the rekey would generate auth failures rather than a
                 /// repair - "must not appear to try" is the requirement, not merely "must not succeed"
                 try await fixture.stubRekey(isAdmin: false)
-                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 await ConfigForceRekey.rekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
@@ -840,7 +840,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// The signal is a parameter rather than something B2 reads, precisely so this is assertable here: it lives
                 /// for one `poll()` invocation, so a version that read it internally could only be guarded at the call site
                 try await fixture.stubRekey(isAdmin: true)
-                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 await ConfigForceRekey.rekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
@@ -872,7 +872,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// a rekey is irreversible and visible to everyone, so doing it too often is materially worse than doing it
                 /// late. The guard lives with B2 so that deleting B2 deletes it
                 try await fixture.stubRekey(isAdmin: true)
-                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 for _ in 0..<3 {
                     await ConfigForceRekey.rekeyIfPossible(
