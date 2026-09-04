@@ -113,6 +113,21 @@ extension SwarmPollerType {
             )
         }
 
+        /// **B2 — the only call site, and the precondition is here rather than inside it.**
+        ///
+        /// Reachable only when *nobody has it and it is gone*: a backfill has already run for this group and found nothing, so
+        /// the bytes are not obtainable by re-reading; and this poll's detection says the swarm has lost the keys. Those are
+        /// two different facts and neither implies the other - `keysVerdict == .expired` alone would fire on a group that has
+        /// simply never been looked at.
+        ///
+        /// Keeping the condition at the call site is deliberate: B2 is meant to be removable, and a reader deciding whether to
+        /// remove it should be able to see when it fires without opening it. Deleting B2 is deleting this block and the file
+        if outcome.detection.keysVerdict == .expired,
+           await dependencies[singleton: .configRecovery].keysBackfillHasFailed(swarmPublicKey: destination.target)
+        {
+            await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: destination.target, using: dependencies)
+        }
+
         return outcome.result
     }
 

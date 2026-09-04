@@ -286,6 +286,9 @@ public enum ConfigRecovery {
             let messages: [ConfigMessageReceiveJob.Details.MessageInfo] = try await fetchKeysMessages()
 
             guard !messages.isEmpty else {
+                /// The swarm has nothing left to give, so this group's bytes are not recoverable by re-reading. That is the
+                /// fact B2's precondition needs and the only thing that separates it from "we have not looked yet"
+                await dependencies[singleton: .configRecovery].markKeysBackfillFoundNothing(swarmPublicKey: swarmPublicKey)
                 Log.info(.cat, "Keys backfill for \(swarmPublicKey) found nothing on the swarm; \(missingBytes.count) hash(es) remain without bytes.")
                 return
             }
@@ -652,6 +655,19 @@ public extension ConfigRecovery {
         /// here it is only a read), different subject
         private var keysBackfillBarredUntil: [String: Date] = [:]
 
+        /// Swarms where a keys backfill has **run and come back with nothing**
+        ///
+        /// **A different question from the bar above, and they must not be collapsed.** The bar governs *how often B1
+        /// retries*; this records *whether B1 has already tried and failed*, which is the only thing that separates "nobody
+        /// has repaired this group" from "nobody can". No existing predicate distinguishes those two, and they are exactly the
+        /// pair B2's precondition turns on.
+        ///
+        /// **In-memory and session-scoped, deliberately.** A persisted "tried and failed" is a sticky negative that would let
+        /// an irreversible, universally-visible rekey fire on evidence gathered weeks ago, after the swarm has changed
+        /// underneath it. Session scope fails **closed**: after a relaunch B2 is delayed by one poll rather than enabled by a
+        /// stale record. If a lapsing bar clears this too, that is harmless - it fails closed again
+        private var keysBackfillFoundNothing: Set<String> = []
+
         // MARK: - Functions
 
         public func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool {
@@ -664,6 +680,14 @@ public extension ConfigRecovery {
             keysBackfillBarredUntil = keysBackfillBarredUntil.filter { _, expiry in expiry > now }
 
             return true
+        }
+
+        public func markKeysBackfillFoundNothing(swarmPublicKey: String) {
+            keysBackfillFoundNothing.insert(swarmPublicKey)
+        }
+
+        public func keysBackfillHasFailed(swarmPublicKey: String) -> Bool {
+            return keysBackfillFoundNothing.contains(swarmPublicKey)
         }
 
         public func markLocalStateLevelWithSwarm(swarmPublicKey: String) {
@@ -797,6 +821,12 @@ public protocol ConfigRecoveryStoreType: Actor {
     /// Records the attempt as it grants it - a backfill that finds nothing must still bar, or a group whose keys really are
     /// gone re-polls forever
     func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool
+
+    /// Record that a keys backfill ran for this swarm and found nothing to capture
+    func markKeysBackfillFoundNothing(swarmPublicKey: String)
+
+    /// Whether a keys backfill has already run for this swarm and failed - the input to B2's precondition
+    func keysBackfillHasFailed(swarmPublicKey: String) -> Bool
 
     /// Record that our local state for the given swarm is level with what the swarm holds
     func markLocalStateLevelWithSwarm(swarmPublicKey: String)

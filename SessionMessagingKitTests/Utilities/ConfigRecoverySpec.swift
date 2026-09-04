@@ -760,6 +760,60 @@ class ConfigRecoverySpec: AsyncSpec {
             }
         }
 
+        // MARK: - force rekeying
+        ///
+        /// **B2.** The last resort: the keys are gone from the swarm and a backfill has already established that no
+        /// re-read will bring them back. Kept behind a seam because it is the one write here that every member on every
+        /// version sees, and Morgan wants the option of withdrawing it.
+        describe("force rekeying") {
+            // MARK: -- V25 rekeys when an admin has established nobody can restore the keys
+            it("V25 rekeys when an admin has established nobody can restore the keys") {
+                /// **The precondition is B1-attempted-and-failed, not merely keys-missing.** Keys-missing alone is true of a
+                /// group nobody has looked at yet, and rekeying that group throws away keys a backfill would have restored
+                try await fixture.stubRekey(isAdmin: true)
+                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+
+                await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
+            }
+
+            // MARK: -- V25a does not rekey, or try to, as a member
+            it("V25a does not rekey, or try to, as a member") {
+                /// A member cannot produce a keys message, so reaching the rekey would generate auth failures rather than a
+                /// repair - "must not appear to try" is the requirement, not merely "must not succeed"
+                try await fixture.stubRekey(isAdmin: false)
+                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+
+                await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+                    .wasNotCalled(timeout: .milliseconds(100))
+            }
+
+            // MARK: -- V25c bounds rekeys rather than one per admin per poll
+            it("V25c bounds rekeys rather than one per admin per poll") {
+                /// Several admins reach this in the same window - they poll the same swarm and see the same missing keys - and
+                /// a rekey is irreversible and visible to everyone, so doing it too often is materially worse than doing it
+                /// late. The guard lives with B2 so that deleting B2 deletes it
+                try await fixture.stubRekey(isAdmin: true)
+                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
+
+                for _ in 0..<3 {
+                    await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+                }
+
+                /// Three passes, one rekey - and asserted as `exactly` rather than `atMost`, since a guard that blocked all
+                /// three would also satisfy "not three"
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
+            }
+        }
+
         // MARK: - recovering
         describe("recovering") {
             beforeEach {
@@ -1047,6 +1101,9 @@ private class ConfigRecoveryTestFixture: FixtureBase {
     /// The real store, because these tests are about the values it ends up holding
     let store: ConfigRecovery.Store = ConfigRecovery.Store()
 
+    /// B2's own store - separate because B2 is meant to be deletable, and its state goes with it
+    let forceRekeyStore: ConfigForceRekey.Store = ConfigForceRekey.Store()
+
     /// A real `libSession` cache too - the recovery guards live inside it, and a mock would only assert what the mock returns
     private(set) var libSessionCache: LibSession.Cache!
     private(set) var groupInfoConf: UnsafeMutablePointer<config_object>!
@@ -1221,6 +1278,16 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         try await mockLibSessionCache
             .when { $0.recoverableKeysHashes(for: .any) }
             .thenReturn(withBytes)
+    }
+
+    /// Everything B2 reads: whether we are an admin, and a rekey path that records rather than performs
+    func stubRekey(isAdmin: Bool) async throws {
+        dependencies.set(singleton: .configForceRekey, to: forceRekeyStore)
+
+        try await mockLibSessionCache.when { $0.isAdmin(groupSessionId: .any) }.thenReturn(isAdmin)
+        try await mockLibSessionCache
+            .when { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+            .thenReturn(())
     }
 
     /// A keys message as the backfill fetch would hand it back
