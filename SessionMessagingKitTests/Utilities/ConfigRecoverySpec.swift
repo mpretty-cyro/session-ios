@@ -802,7 +802,11 @@ class ConfigRecoverySpec: AsyncSpec {
                 try await fixture.stubRekey(isAdmin: true)
                 await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
 
-                await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+                await ConfigForceRekey.rekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: true,
+                    using: fixture.dependencies
+                )
 
                 await fixture.mockLibSessionCache
                     .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
@@ -816,38 +820,50 @@ class ConfigRecoverySpec: AsyncSpec {
                 try await fixture.stubRekey(isAdmin: false)
                 await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
 
-                await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+                await ConfigForceRekey.rekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: true,
+                    using: fixture.dependencies
+                )
 
                 await fixture.mockLibSessionCache
                     .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
                     .wasNotCalled(timeout: .milliseconds(100))
             }
 
-            // MARK: -- V25d the freshness precondition is a call-site rule, not testable here
-            it("V25d the freshness precondition is a call-site rule, not testable here") {
-                /// ⚠️ **This asserts the distinction the precondition rests on, and NOT the precondition itself.** Being
-                /// straight about which: the freshness check lives at B2's call site in `SwarmPoller.poll()`, reading a
-                /// `markedLevelThisPoll` local that exists only inside one poll. `rekeyIfPossible` never sees it, so no test
-                /// driving `rekeyIfPossible` can exercise it - and a test that stubs a `false` and then does not call B2 would
-                /// assert nothing at all while looking like coverage.
+            // MARK: -- V25d does not rekey when this poll did not establish levelness
+            it("V25d does not rekey when this poll did not establish levelness") {
+                /// A device that was not level with the swarm **as of this poll** may hold a `GroupMembers` view missing
+                /// anyone added while it was away, and `rekey` encrypts the new key to exactly the view it is handed - so
+                /// rekeying from a stale view silently excludes those members
                 ///
-                /// What *is* checkable here is the fact that makes the call-site rule necessary: the store's own predicate
-                /// answers a different question. It says "level at some point this session" and stays true afterwards, so a
-                /// device whose last complete poll was yesterday still reads true today - which is precisely the stale
-                /// `GroupMembers` view a rekey would silently exclude members from
-                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.groupSwarm)
+                /// The signal is a parameter rather than something B2 reads, precisely so this is assertable here: it lives
+                /// for one `poll()` invocation, so a version that read it internally could only be guarded at the call site
+                try await fixture.stubRekey(isAdmin: true)
+                await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
 
-                /// True now, and still true at any later time, with no poll in between
-                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
-                    .to(beTrue())
+                await ConfigForceRekey.rekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: false,
+                    using: fixture.dependencies
+                )
 
-                fixture.dependencies.dateNow = fixture.now.addingTimeInterval(24 * 60 * 60)
+                /// "Did not try", not merely "did not succeed" - asserted against `.any` config so it cannot pass on a rekey
+                /// that reached libSession and was refused there
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+                    .wasNotCalled()
 
-                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
-                    .to(beTrue())
+                /// And the refusal must not be sticky - without this half, a B2 that never rekeyed at all would pass
+                await ConfigForceRekey.rekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: true,
+                    using: fixture.dependencies
+                )
 
-                /// So B2 must not read it. Covering the precondition properly needs a poller-level fixture that can drive
-                /// `poll()` to the rekey branch; recorded as a gap rather than faked
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
             }
 
             // MARK: -- V25c bounds rekeys rather than one per admin per poll
@@ -859,7 +875,11 @@ class ConfigRecoverySpec: AsyncSpec {
                 await fixture.store.markKeysBackfillFoundNothing(swarmPublicKey: fixture.groupSwarm)
 
                 for _ in 0..<3 {
-                    await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: fixture.groupSwarm, using: fixture.dependencies)
+                    await ConfigForceRekey.rekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: true,
+                    using: fixture.dependencies
+                )
                 }
 
                 /// Three passes, one rekey - and asserted as `exactly` rather than `atMost`, since a guard that blocked all

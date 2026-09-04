@@ -132,10 +132,16 @@ extension SwarmPollerType {
         /// anyone we have not merged yet - and B2 fires precisely on devices whose config state is known to be degraded, so
         /// the stale view is the expected case rather than the unlucky one
         if outcome.detection.keysVerdict == .expired,
-           outcome.markedLevelThisPoll,
            await dependencies[singleton: .configRecovery].keysBackfillHasFailed(swarmPublicKey: destination.target)
         {
-            await ConfigForceRekey.rekeyIfPossible(swarmPublicKey: destination.target, using: dependencies)
+            /// `markedLevelThisPoll` is passed in rather than read inside, because `localStateIsLevelWithSwarm` means "level at
+            /// some point this session" and never goes false again - it is fail-open for this purpose, and only the poll that
+            /// just ran knows whether levelness holds *now*
+            await ConfigForceRekey.rekeyIfPossible(
+                swarmPublicKey: destination.target,
+                localStateIsLevelWithSwarmThisPoll: outcome.markedLevelThisPoll,
+                using: dependencies
+            )
         }
 
         return outcome.result

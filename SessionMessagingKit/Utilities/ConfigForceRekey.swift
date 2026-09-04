@@ -52,7 +52,23 @@ public enum ConfigForceRekey {
     ///
     /// **Admin-only, and a member must not appear to try.** A member cannot produce a keys message at all, so a member
     /// reaching here would generate auth failures rather than a repair
-    public static func rekeyIfPossible(swarmPublicKey: String, using dependencies: Dependencies) async {
+    /// - Parameter localStateIsLevelWithSwarmThisPoll: whether the poll that is calling this established levelness **in that
+    /// same cycle**. The caller computes it; this refuses when it is `false`.
+    ///
+    /// It is a parameter rather than something read from here on purpose. The signal exists only inside one `poll()`
+    /// invocation, so a version that read it internally could not be tested through this entry point at all - the refusal
+    /// would live entirely at the call site, which is the half-a-rule-at-the-caller shape. Taking it as an argument keeps the
+    /// caller responsible for computing it while making the refusal assertable here, and it still deletes with this file
+    public static func rekeyIfPossible(
+        swarmPublicKey: String,
+        localStateIsLevelWithSwarmThisPoll: Bool,
+        using dependencies: Dependencies
+    ) async {
+        /// A device that was not level with the swarm **as of this poll** holds a `GroupMembers` view that may be missing
+        /// members added while it was away, and `rekey` encrypts the new key to exactly the view it is handed - so rekeying
+        /// from a stale view silently excludes them
+        guard localStateIsLevelWithSwarmThisPoll else { return }
+
         guard let sessionId: SessionId = try? SessionId(from: swarmPublicKey), sessionId.prefix == .group else { return }
 
         /// Bounded rather than unbounded: this is the storm guard, and it lives here because it is B2's problem
