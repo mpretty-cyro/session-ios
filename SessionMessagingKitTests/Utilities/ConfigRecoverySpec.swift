@@ -144,8 +144,11 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- V23a still flags expired when no bytes are retained
                 it("V23a still flags expired when no bytes are retained") {
-                    /// A group predating retention: it has active keys hashes and no bytes, so it cannot be repaired **by this
-                    /// device** and the expired flag stays the right answer.
+                    /// A group that loaded its keys before retention existed: active keys hashes, no bytes, so it cannot be
+                    /// repaired **by this device as it stands** and the expired flag is the right answer *for this state*.
+                    ///
+                    /// **Not a permanent verdict** - re-loading the message backfills the bytes and moves the group into `V23`'s
+                    /// population. This vector pins the no-bytes state, not the claim that the state is terminal.
                     ///
                     /// **Pins the absence of BYTES, not of detection.** The detection is identical to `V23`'s - same missing
                     /// set, same active hashes - so the only term that differs is retention. A fixture that also broke the
@@ -659,6 +662,104 @@ class ConfigRecoverySpec: AsyncSpec {
             }
         }
 
+        // MARK: - backfilling keys bytes
+        ///
+        /// **B1.** Retention captures a keys message's bytes when it is loaded, so a group that loaded its keys before
+        /// retention existed holds the key and the hash and nothing behind them. Re-loading the message fixes that - the merge
+        /// takes `insert_key`'s early return, a no-op for key state, and still captures the bytes.
+        describe("backfilling keys bytes") {
+            @TestState var fetchCount: Int! = 0
+
+            // MARK: -- V24 captures bytes for a hash it holds no bytes for
+            it("V24 captures bytes for a hash it holds no bytes for") {
+                /// The device also holds a `groupInfo` hash on purpose - with keys hashes alone the empty-ask rule would be in
+                /// play and this would be measuring `V14` instead
+                try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: [])
+
+                await ConfigRecovery.backfillKeysIfNeeded(
+                    swarmPublicKey: fixture.groupSwarm,
+                    fetchKeysMessages: { fetchCount += 1; return [fixture.keysMessage(hash: "K1")] },
+                    using: fixture.dependencies
+                )
+
+                /// It went and looked...
+                expect(fetchCount).to(equal(1))
+
+                /// ...and fed what it found through the ordinary load path, which is where retention happens. Asserting the
+                /// merge rather than the fetch is the point: a fetch that never merges captures nothing
+                await fixture.mockLibSessionCache
+                    .verify { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
+            }
+
+            // MARK: -- V24a records the attempt even when the swarm has nothing
+            it("V24a records the attempt even when the swarm has nothing") {
+                /// The keys message has expired from the swarm too, so there is nothing to capture. Without recording the
+                /// attempt this group re-reads the namespace on every poll forever - which is the case the bar exists for,
+                /// and the one where the read is never going to succeed
+                try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: [])
+
+                for _ in 0..<2 {
+                    await ConfigRecovery.backfillKeysIfNeeded(
+                        swarmPublicKey: fixture.groupSwarm,
+                        fetchKeysMessages: { fetchCount += 1; return [] },
+                        using: fixture.dependencies
+                    )
+                }
+
+                /// Twice asked, once fetched - the bar is claimed by the attempt, not by its result
+                expect(fetchCount).to(equal(1))
+
+                /// And nothing was merged, so this is the bar rather than a silent success
+                await fixture.mockLibSessionCache
+                    .verify { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
+                    .wasNotCalled(timeout: .milliseconds(100))
+            }
+
+            // MARK: -- V24b does not fetch at all when the bytes are already held
+            it("V24b does not fetch at all when the bytes are already held") {
+                /// **The trigger is bytes-absent, not keys-related.** A fixture that fires B1 regardless still passes `V24`,
+                /// so this is the vector that separates "runs when it should" from "runs always" - and running always means a
+                /// namespace read every poll for every healthy group
+                try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: ["K1"])
+
+                await ConfigRecovery.backfillKeysIfNeeded(
+                    swarmPublicKey: fixture.groupSwarm,
+                    fetchKeysMessages: { fetchCount += 1; return [fixture.keysMessage(hash: "K1")] },
+                    using: fixture.dependencies
+                )
+
+                expect(fetchCount).to(equal(0))
+            }
+
+            // MARK: -- V24c feeds the ordinary re-store path rather than replacing it
+            it("V24c feeds the ordinary re-store path rather than replacing it") {
+                /// B1 restores the **input**; `V23` does the work. If B1 also re-stored, `V23` would exist twice - so this
+                /// pins both halves: the hashes it captured are now offerable to recovery, and B1 itself consumed none of
+                /// recovery's budget for them
+                try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: [])
+
+                await ConfigRecovery.backfillKeysIfNeeded(
+                    swarmPublicKey: fixture.groupSwarm,
+                    fetchKeysMessages: { fetchCount += 1; return [fixture.keysMessage(hash: "K1")] },
+                    using: fixture.dependencies
+                )
+
+                /// A later poll finding those hashes gone now has bytes to work with, which it did not before
+                let report: ConfigRecovery.DetectionReport = ConfigRecovery.DetectionReport(
+                    detection: .checked(missingHashes: ["K1"]),
+                    activeHashesByVariant: [.groupKeys: ["K1"], .groupInfo: ["I1"]],
+                    recoverableKeysHashes: ["K1"]
+                )
+
+                expect(report.attemptedKeysHashes).to(equal(["K1"]))
+                expect(report.keysVerdict).to(equal(.noVerdict))
+
+                /// And B1 did not bar the hash for re-store - it is a read, not an attempt at the repair
+                await expect { await fixture.isStillRetryable("K1") }.to(beTrue())
+            }
+        }
+
         // MARK: - recovering
         describe("recovering") {
             beforeEach {
@@ -963,6 +1064,11 @@ private class ConfigRecoveryTestFixture: FixtureBase {
     /// aborts the whole test process rather than failing a test
     private(set) var keysOnlyLibSessionCache: LibSession.Cache!
 
+    /// B1 merges inside a database write - retention lives in the config dump, so a merge that does not persist would
+    /// capture the bytes in memory and lose them on the next launch
+    var mockStorage: Storage {
+        mock(for: .storage) { dependencies in try! Storage.createForTesting(using: dependencies) }
+    }
     var mockNetwork: MockNetwork { mock(for: .network) }
     var mockGeneralCache: MockGeneralCache { mock(cache: .general) }
     var mockAppContext: MockAppContext { mock(for: .appContext) }
@@ -1100,6 +1206,33 @@ private class ConfigRecoveryTestFixture: FixtureBase {
             )
     }
 
+    /// Stub the byte-holding picture B1 reads: which keys hashes are active, which already have bytes, and which have bytes
+    /// once a merge has run
+    ///
+    /// The `groupInfo` hash is always present because a device holding *only* keys hashes is a different vector
+    func stubBackfill(activeKeys: Set<String>, withBytes: Set<String>) async throws {
+        try await mockLibSessionCache
+            .when { $0.activeHashesByVariant(for: .any) }
+            .thenReturn([.groupKeys: activeKeys, .groupInfo: ["I1"]])
+        try await mockLibSessionCache
+            .when { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
+            .thenReturn(true)
+
+        try await mockLibSessionCache
+            .when { $0.recoverableKeysHashes(for: .any) }
+            .thenReturn(withBytes)
+    }
+
+    /// A keys message as the backfill fetch would hand it back
+    func keysMessage(hash: String) -> ConfigMessageReceiveJob.Details.MessageInfo {
+        return ConfigMessageReceiveJob.Details.MessageInfo(
+            namespace: .configGroupKeys,
+            serverHash: hash,
+            serverTimestampMs: 1234567890,
+            data: Data([1, 2, 3])
+        )
+    }
+
     /// Whether the hash is still available for another attempt, i.e. it was **not** barred by the round that just ran
     func isStillRetryable(_ hash: String) async -> Bool {
         return await store.hashesEligibleForRecovery([hash], now: now).contains(hash)
@@ -1210,6 +1343,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
 
     private func applyBaselineStubs() async throws {
         dependencies.set(singleton: .configRecovery, to: store)
+        try await mockStorage.perform(migrations: SNMessagingKit.migrations)
         try await mockGeneralCache.defaultInitialSetup()
         try await mockLibSessionCache.defaultInitialSetup()
 

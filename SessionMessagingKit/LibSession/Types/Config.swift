@@ -268,8 +268,10 @@ public extension LibSession {
         /// **unchanged** lands on the same hash and is idempotent, exactly like the other configs, and needs no signature.
         ///
         /// **Note:** A hash from `activeHashes()` may legitimately have no bytes here - retention only covers messages loaded
-        /// since the device began keeping them, so groups predating that cannot be recovered. That is a "not by this device"
-        /// answer, not an error.
+        /// since the device began keeping them, so a group that existed before it has hashes with nothing behind them. That is
+        /// a "not by this device *yet*" answer, not an error and not permanent: re-loading the message backfills the bytes, so
+        /// the gap closes for any group whose keys message is still on the swarm. Only once the message has expired from the
+        /// swarm as well is the group beyond this device's reach.
         ///
         /// **Retention happens on LOAD, not on create** - so the device that *authored* a keys message holds no bytes for it
         /// until it loads its own message back from the swarm. An admin immediately after a rekey is therefore the device

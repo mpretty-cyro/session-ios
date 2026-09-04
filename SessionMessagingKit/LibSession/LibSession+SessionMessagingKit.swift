@@ -923,8 +923,9 @@ public extension LibSession {
                 /// so completeness is per generation, not per hash. Re-storing one that is still present is a no-op TTL
                 /// refresh, the same reasoning as a multipart config.
                 ///
-                /// If nothing is retained - a group predating retention - this returns `nil` and the group is flagged expired
-                /// as before
+                /// If nothing is retained - a group that loaded its keys before retention existed - this returns `nil` and the
+                /// group is flagged expired as before. **That is a statement about this device now, not a permanent verdict:**
+                /// the bytes are recoverable by re-loading the message while it is still on the swarm
                 if config.variant == .groupKeys {
                     let retained: [String: Data] = config.activeKeyMessages()
 

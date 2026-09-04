@@ -94,7 +94,59 @@ extension SwarmPollerType {
             using: dependencies
         )
 
+        /// Backfill any keys-message bytes we are missing (**B1**)
+        ///
+        /// ⚠️ **Deliberately not gated on `outcome.detection`.** Detection says the swarm has *lost* a hash; this fires when
+        /// *we* lack bytes for a hash the swarm still has - the opposite condition, and one that stops being fixable the
+        /// moment detection would notice it. Hanging this off the detection path would look correct and repair almost nothing.
+        ///
+        /// It also runs **after** the two consumers above rather than before: this poll's report was built from the byte set
+        /// as it stood at the start, so anything captured now is for the next poll's report to use. That ordering is what
+        /// makes this feed the ordinary re-store path rather than duplicate it
+        if namespaces.contains(.configGroupKeys) {
+            await ConfigRecovery.backfillKeysIfNeeded(
+                swarmPublicKey: destination.target,
+                /// Captured strongly on purpose - the closure is consumed inside this same `await`, so there is no retain
+                /// cycle to break and a weak capture would only introduce a silent "returned nothing" path
+                fetchKeysMessages: { try await self.fetchKeysMessagesFromScratch() },
+                using: dependencies
+            )
+        }
+
         return outcome.result
+    }
+
+    /// Re-read the whole keys namespace, **deliberately without a `lastHash`**
+    ///
+    /// There is no retrieve-by-hash API, so re-reading the namespace from scratch is the mechanism: passing our last hash
+    /// would return only what has arrived since, which is precisely the set we already have bytes for. One small read per
+    /// affected group, and only until the group's bytes are captured - the trigger is self-clearing, so no migration flag or
+    /// version check is needed to stop it running forever
+    private func fetchKeysMessagesFromScratch() async throws -> [ConfigMessageReceiveJob.Details.MessageInfo] {
+        let snode: LibSession.Snode = try await swarmDrainer.selectNextNode()
+        let authMethod: AuthenticationMethod = try Authentication.with(
+            swarmPublicKey: destination.target,
+            using: dependencies
+        )
+        let request: Network.PreparedRequest<Network.StorageServer.PreparedGetMessagesResponse> = try Network
+            .StorageServer
+            .preparedGetMessages(
+                namespace: .configGroupKeys,
+                snode: snode,
+                lastHash: nil,
+                authMethod: authMethod,
+                using: dependencies
+            )
+        let response: Network.StorageServer.PreparedGetMessagesResponse = try await request.send(using: dependencies)
+
+        return response.messages.map { message in
+            ConfigMessageReceiveJob.Details.MessageInfo(
+                namespace: .configGroupKeys,
+                serverHash: message.hash,
+                serverTimestampMs: message.timestampMs,
+                data: message.data
+            )
+        }
     }
 
     private func performPoll(

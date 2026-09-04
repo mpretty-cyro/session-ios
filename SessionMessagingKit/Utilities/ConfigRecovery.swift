@@ -245,6 +245,78 @@ public enum ConfigRecovery {
         }
     }
 
+    /// Backfill the raw bytes of keys messages this device holds a hash for but no bytes behind it (**B1**)
+    ///
+    /// Retention captures a keys message's bytes **when it is loaded**, so a group that loaded its keys before retention
+    /// existed holds the key and the hash and nothing else. Re-loading the same message fixes that: `insert_key` takes its
+    /// early return - already have this key - which is a no-op for key state, but still `try_emplace`s the bytes and flags a
+    /// dump. **The merge that does nothing is exactly the merge that backfills.**
+    ///
+    /// ⚠️ **Run proactively, NOT from the detection path.** Detection fires when the swarm has *lost* a hash; this fires when
+    /// *we* lack bytes for a hash the swarm still has. By the time detection fires the message is gone and the window has
+    /// closed, so a backfill hung off detection looks right and is nearly useless.
+    ///
+    /// **This feeds recovery rather than replacing it.** It restores the input; the ordinary re-store path does the work when
+    /// a later poll finds those hashes missing
+    public static func backfillKeysIfNeeded(
+        swarmPublicKey: String,
+        fetchKeysMessages: () async throws -> [ConfigMessageReceiveJob.Details.MessageInfo],
+        using dependencies: Dependencies
+    ) async {
+        /// The trigger is **bytes-absent**, not keys-related: a hash we already hold bytes for needs nothing, and firing
+        /// anyway would issue a namespace read on every poll for every healthy group
+        let missingBytes: Set<String> = dependencies.mutate(cache: .libSession) { cache in
+            cache.activeHashesByVariant(for: swarmPublicKey)[.groupKeys, default: []]
+                .subtracting(cache.recoverableKeysHashes(for: swarmPublicKey))
+        }
+
+        guard !missingBytes.isEmpty else { return }
+
+        /// Reuses §5.5's one-hour interval rather than inventing another. Claimed before the fetch, so a group whose keys are
+        /// genuinely gone is barred by having tried
+        guard
+            await dependencies[singleton: .configRecovery].beginKeysBackfill(
+                swarmPublicKey: swarmPublicKey,
+                now: dependencies.dateNow,
+                interval: ConfigRecovery.barInterval
+            )
+        else { return }
+
+        do {
+            let messages: [ConfigMessageReceiveJob.Details.MessageInfo] = try await fetchKeysMessages()
+
+            guard !messages.isEmpty else {
+                Log.info(.cat, "Keys backfill for \(swarmPublicKey) found nothing on the swarm; \(missingBytes.count) hash(es) remain without bytes.")
+                return
+            }
+
+            /// The ordinary load path, **inside a database write** - and the write is not incidental.
+            ///
+            /// Retention lives in the config dump, so a merge that captures the bytes in memory without persisting the dump
+            /// would be lost on the next launch: the backfill would appear to work and silently not. Going through the normal
+            /// handling path is what makes the capture durable, and is also why no `libSession` change is needed
+            let tookInEverything: Bool = try await dependencies[singleton: .storage].write { db in
+                try dependencies.mutate(cache: .libSession) { cache in
+                    try cache.handleConfigMessages(db, swarmPublicKey: swarmPublicKey, messages: messages)
+                }
+            } ?? false
+
+            let stillMissing: Set<String> = dependencies.mutate(cache: .libSession) { cache in
+                missingBytes.subtracting(cache.recoverableKeysHashes(for: swarmPublicKey))
+            }
+
+            switch stillMissing.isEmpty {
+                case true: Log.info(.cat, "Keys backfill captured bytes for \(missingBytes.count) hash(es) on \(swarmPublicKey).")
+                case false: Log.warn(.cat, "Keys backfill captured \(missingBytes.count - stillMissing.count) of \(missingBytes.count) hash(es) on \(swarmPublicKey) (complete merge: \(tookInEverything)).")
+            }
+        }
+        catch {
+            /// A failed read changes nothing and is already barred for the interval - the hashes stay eligible for the next
+            /// attempt after it lapses
+            Log.warn(.cat, "Keys backfill failed for \(swarmPublicKey) due to error: \(error).")
+        }
+    }
+
     /// Re-store any config messages this swarm has told us it no longer holds
     ///
     /// This is a no-op until the local state is known to be level with the swarm this session - which is what stops a
@@ -572,7 +644,27 @@ public extension ConfigRecovery {
         /// Consecutive failed rounds per swarm, which sets how far the next retry is deferred
         private var consecutiveFailures: [String: Int] = [:]
 
+        /// When each swarm may next be re-polled for keys-message bytes it is missing
+        ///
+        /// **Separate from `barredUntil`, deliberately.** That map bars a hash from being *re-stored*, and reusing it here
+        /// would bar the very hashes a successful backfill just made recoverable - so a backfill would block the `V23` repair
+        /// it exists to enable. Same one-hour interval and the same reasoning as §5.5 (the redundant action is idempotent and
+        /// here it is only a read), different subject
+        private var keysBackfillBarredUntil: [String: Date] = [:]
+
         // MARK: - Functions
+
+        public func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool {
+            if let barredUntil: Date = keysBackfillBarredUntil[swarmPublicKey], now < barredUntil { return false }
+
+            /// Recorded **before** the fetch, not after it, so a swarm whose keys are genuinely gone is barred by the attempt
+            /// rather than by its result. Recording on success only would leave exactly that group re-polling the namespace
+            /// on every poll forever, which is the case this bar exists for
+            keysBackfillBarredUntil[swarmPublicKey] = now.addingTimeInterval(interval)
+            keysBackfillBarredUntil = keysBackfillBarredUntil.filter { _, expiry in expiry > now }
+
+            return true
+        }
 
         public func markLocalStateLevelWithSwarm(swarmPublicKey: String) {
             swarmsLevelWithLocalState.insert(swarmPublicKey)
@@ -699,6 +791,12 @@ public protocol ConfigRecoveryStoreType: Actor {
 
     /// Filters `hashes` down to those not currently barred
     func hashesEligibleForRecovery(_ hashes: Set<String>, now: Date) -> Set<String>
+
+    /// Claim a keys-backfill attempt for the given swarm, returning `false` if one was made within `interval`
+    ///
+    /// Records the attempt as it grants it - a backfill that finds nothing must still bar, or a group whose keys really are
+    /// gone re-polls forever
+    func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool
 
     /// Record that our local state for the given swarm is level with what the swarm holds
     func markLocalStateLevelWithSwarm(swarmPublicKey: String)
