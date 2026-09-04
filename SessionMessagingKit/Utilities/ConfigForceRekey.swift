@@ -13,6 +13,19 @@ private extension Log.Category {
 
 /// **B2 — rekey a group whose keys nobody can restore.**
 ///
+/// ## What an unnecessary rekey actually costs
+///
+/// **Not exclusion by itself.** `Keys::rekey` encrypts the new key for every member in the `Members` config it is handed, so
+/// a plain rekey locks nobody out - a dormant member who returns fetches the keys message and gets the key, and that message
+/// is still on the swarm because every other member's poll renews its TTL. The cost of a needless rekey is that every member
+/// processes a new generation, and content encrypted under superseded keys may be unreadable to anyone who never held them.
+///
+/// 🔴 **The real exclusion risk is the members view, not the rekey.** The new key is encrypted to *this device's* view of the
+/// membership, and B2 fires precisely on devices whose config state is known to be degraded. A member added while we were
+/// away and not yet merged locally is silently excluded by a rekey issued from that stale view. That is why the caller must
+/// establish levelness **as of the current poll** - not the session-sticky predicate, which still reads true when our last
+/// complete poll was yesterday.
+///
 /// ⚠️ **This whole file is meant to be deletable.** It is the one part of config recovery that writes new state visible to
 /// every member on every version, and it exists to be evaluated and possibly withdrawn. So:
 ///

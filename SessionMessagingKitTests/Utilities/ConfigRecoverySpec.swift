@@ -710,6 +710,18 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// Twice asked, once fetched - the bar is claimed by the attempt, not by its result
                 expect(fetchCount).to(equal(1))
 
+                /// **And it lapses.** Asserting the block alone passes a *permanent* block, which would be a different bug
+                /// with the same green: a group whose keys later return to the swarm would never be looked at again
+                fixture.dependencies.dateNow = fixture.now.addingTimeInterval(3601)
+
+                await ConfigRecovery.backfillKeysIfNeeded(
+                    swarmPublicKey: fixture.groupSwarm,
+                    fetchKeysMessages: { fetchCount += 1; return [] },
+                    using: fixture.dependencies
+                )
+
+                expect(fetchCount).to(equal(2))
+
                 /// And nothing was merged, so this is the bar rather than a silent success
                 await fixture.mockLibSessionCache
                     .verify { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
@@ -757,6 +769,23 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 /// And B1 did not bar the hash for re-store - it is a read, not an attempt at the repair
                 await expect { await fixture.isStillRetryable("K1") }.to(beTrue())
+
+                /// **Both halves, because either alone is satisfiable by the wrong implementation.** A zero store count
+                /// passes an implementation that stored *instead of* fetching, and a fetch count alone says nothing about
+                /// whether it also re-stored. B1 is exactly one read and no writes to the swarm
+                expect(fetchCount).to(equal(1))
+                await fixture.mockNetwork
+                    .verify {
+                        try await $0.send(
+                            endpoint: MockEndpoint.any,
+                            destination: .any,
+                            body: .any,
+                            category: .any,
+                            requestTimeout: .any,
+                            overallTimeout: .any
+                        )
+                    }
+                    .wasNotCalled(timeout: .milliseconds(100))
             }
         }
 
@@ -792,6 +821,33 @@ class ConfigRecoverySpec: AsyncSpec {
                 await fixture.mockLibSessionCache
                     .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
                     .wasNotCalled(timeout: .milliseconds(100))
+            }
+
+            // MARK: -- V25d the freshness precondition is a call-site rule, not testable here
+            it("V25d the freshness precondition is a call-site rule, not testable here") {
+                /// ⚠️ **This asserts the distinction the precondition rests on, and NOT the precondition itself.** Being
+                /// straight about which: the freshness check lives at B2's call site in `SwarmPoller.poll()`, reading a
+                /// `markedLevelThisPoll` local that exists only inside one poll. `rekeyIfPossible` never sees it, so no test
+                /// driving `rekeyIfPossible` can exercise it - and a test that stubs a `false` and then does not call B2 would
+                /// assert nothing at all while looking like coverage.
+                ///
+                /// What *is* checkable here is the fact that makes the call-site rule necessary: the store's own predicate
+                /// answers a different question. It says "level at some point this session" and stays true afterwards, so a
+                /// device whose last complete poll was yesterday still reads true today - which is precisely the stale
+                /// `GroupMembers` view a rekey would silently exclude members from
+                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.groupSwarm)
+
+                /// True now, and still true at any later time, with no poll in between
+                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
+                    .to(beTrue())
+
+                fixture.dependencies.dateNow = fixture.now.addingTimeInterval(24 * 60 * 60)
+
+                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
+                    .to(beTrue())
+
+                /// So B2 must not read it. Covering the precondition properly needs a poller-level fixture that can drive
+                /// `poll()` to the rekey branch; recorded as a gap rather than faked
             }
 
             // MARK: -- V25c bounds rekeys rather than one per admin per poll

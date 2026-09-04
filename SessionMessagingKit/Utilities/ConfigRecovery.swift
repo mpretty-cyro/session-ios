@@ -310,7 +310,13 @@ public enum ConfigRecovery {
 
             switch stillMissing.isEmpty {
                 case true: Log.info(.cat, "Keys backfill captured bytes for \(missingBytes.count) hash(es) on \(swarmPublicKey).")
-                case false: Log.warn(.cat, "Keys backfill captured \(missingBytes.count - stillMissing.count) of \(missingBytes.count) hash(es) on \(swarmPublicKey) (complete merge: \(tookInEverything)).")
+                case false:
+                    /// **A fetch that returned messages and still left bytes missing is also an attempt that failed.**
+                    /// The record means "we looked this session and the bytes are still not here", not "the swarm was
+                    /// empty" - recording only the empty case would leave this group looking un-attempted forever, which
+                    /// is the one state B2's precondition exists to distinguish
+                    await dependencies[singleton: .configRecovery].markKeysBackfillFoundNothing(swarmPublicKey: swarmPublicKey)
+                    Log.warn(.cat, "Keys backfill captured \(missingBytes.count - stillMissing.count) of \(missingBytes.count) hash(es) on \(swarmPublicKey) (complete merge: \(tookInEverything)).")
             }
         }
         catch {
