@@ -408,6 +408,8 @@ private class SwarmPollerTestFixture: FixtureBase {
                 timestampMs: 1234567890
             )
         )!
+    }
+
     /// Stub everything a real `poll()` needs, with the retrieve sub-responses shaped by `namespacesAnswer`
     ///
     /// No config hashes are held, so no `expire` sub-request is built - these tests are about the "is our state level with
