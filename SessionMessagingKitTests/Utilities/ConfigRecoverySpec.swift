@@ -870,7 +870,7 @@ class ConfigRecoverySpec: AsyncSpec {
             it("V25c bounds rekeys rather than one per admin per poll") {
                 /// Several admins reach this in the same window - they poll the same swarm and see the same missing keys - and
                 /// a rekey is irreversible and visible to everyone, so doing it too often is materially worse than doing it
-                /// late. The guard lives with B2 so that deleting B2 deletes it
+                /// late. The guard's state lives with the rekey so that removing the rekey removes it
                 try await fixture.stubRekey(isAdmin: true)
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
@@ -887,6 +887,20 @@ class ConfigRecoverySpec: AsyncSpec {
                 await fixture.mockLibSessionCache
                     .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
                     .wasCalled(exactly: 1, timeout: .milliseconds(500))
+
+                /// And it lapses. Without this the test passes on a guard that blocks forever, which is a different bug wearing
+                /// the same green - and the longer the interval, the longer that bug would go unnoticed in the field
+                fixture.dependencies.dateNow = fixture.now.addingTimeInterval((24 * 60 * 60) + 1)
+
+                await ConfigRecovery.forceRekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    localStateIsLevelWithSwarmThisPoll: true,
+                    using: fixture.dependencies
+                )
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 2, timeout: .milliseconds(500))
             }
         }
 

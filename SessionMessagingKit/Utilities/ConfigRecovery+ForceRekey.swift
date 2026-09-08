@@ -16,8 +16,14 @@ public extension ConfigRecovery {
     ///
     /// A rekey is irreversible and every member sees it, so doing it too often is materially worse than doing it late. Several
     /// admins can reach the precondition in the same window - they poll the same swarm and see the same missing keys - and
-    /// without a bound each of them rekeys on every poll
-    private static var rekeyInterval: TimeInterval { 60 * 60 }
+    /// without a bound each of them rekeys on every poll.
+    ///
+    /// **A day rather than an hour, and deliberately longer than the re-store bar.** That bar can err short because a redundant
+    /// re-store sends byte-identical data and costs one request; erring short here makes every member on every version process
+    /// a new generation and can leave content encrypted under superseded keys unreadable to anyone who never held them. The
+    /// delay costs nothing by comparison - a group that reaches this path has had no retrievable keys message for at least the
+    /// message TTL, so it has already been broken for far longer than the wait
+    private static var rekeyInterval: TimeInterval { 24 * 60 * 60 }
 
     /// Rekey the group so its members get usable keys again
     ///
