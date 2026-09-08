@@ -989,9 +989,24 @@ class ConfigRecoverySpec: AsyncSpec {
                     .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
                     .wasCalled(exactly: 1, timeout: .milliseconds(500))
 
-                /// And it lapses. Without this the test passes on a guard that blocks forever, which is a different bug wearing
-                /// the same green - and the longer the interval, the longer that bug would go unnoticed in the field
-                fixture.dependencies.dateNow = fixture.now.addingTimeInterval((24 * 60 * 60) + 1)
+                /// Two hours later, still blocked - which is what pins the interval at a day rather than merely at "some
+                /// interval". Without this step the test passes just as happily on the hour-long bar this used to use, so a
+                /// silent regression to that value would look identical
+                fixture.dependencies.dateNow = fixture.now.addingTimeInterval(2 * 60 * 60)
+
+                await ConfigRecovery.forceRekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    pollToken: token,
+                    using: fixture.dependencies
+                )
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
+
+                /// And past a day it lapses. Without this the test passes on a guard that blocks forever, which is a different
+                /// bug wearing the same green - and the longer the interval, the longer that bug survives unnoticed
+                fixture.dependencies.dateNow = fixture.now.addingTimeInterval((25 * 60 * 60) + 1)
 
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
