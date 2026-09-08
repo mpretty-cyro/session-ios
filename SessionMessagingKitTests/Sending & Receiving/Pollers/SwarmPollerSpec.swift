@@ -276,8 +276,8 @@ class SwarmPollerSpec: AsyncSpec {
                     /// config message *did* come back and merged completely - was not gated at all.
                     ///
                     /// The state that separates them is this one: one config namespace's retrieve failed while another returned
-                    /// something mergeable. The old `V22b` fixture could not produce it, because it returned an empty retrieve
-                    /// for every namespace it did not fail, so the poll returned before any merge ran
+                    /// something mergeable. A fixture returning an empty retrieve for every namespace it does not fail cannot
+                    /// reach it, because the poll returns before any merge runs - hence a dedicated one
                     try await fixture.stubPoll(namespacesAnswer: .oneConfigFailedAnotherReturnedAConfig)
                     try await fixture.mockLibSessionCache
                         .when { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
@@ -358,10 +358,10 @@ private class SwarmPollerTestFixture: FixtureBase {
 
     /// A real cache rather than a mock, since these tests are about the value it ends up holding
     ///
-    /// **Registered eagerly in `applyBaselineStubs`, deliberately.** This was previously a `lazy var` whose initialiser
-    /// registered it as a side effect, which meant whether the fixture was correctly wired depended on *where the first
-    /// property access happened* - a test that read it midway through repaired itself for the rest of its body, and one that
-    /// only read it at the end silently asserted against a different instance than the poller had mutated
+    /// ⚠️ **Registered eagerly in `applyBaselineStubs`, and must stay that way.** Registering it from a `lazy var`
+    /// initialiser instead would make correct wiring depend on *where the first property access happens* - a test reading it
+    /// midway would repair itself for the rest of its body, and one reading it only at the end would silently assert against a
+    /// different instance than the poller mutated
     let recoveryStore: ConfigRecovery.Store = ConfigRecovery.Store()
 
     lazy var poller: CurrentUserPoller = CurrentUserPoller(

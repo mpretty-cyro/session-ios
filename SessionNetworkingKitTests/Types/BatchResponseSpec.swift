@@ -214,8 +214,8 @@ class BatchResponseSpec: QuickSpec {
                 /// error string in the list looks like - and `JSONSerialization.data(withJSONObject:)` **raises**
                 /// `NSInvalidArgumentException` for it rather than throwing, so `try?` cannot catch it and the process aborts.
                 ///
-                /// ⚠️ **None of these can be demonstrated red-then-green, on either branch.** On the previous implementation
-                /// they do not fail, they **crash the test process**, so there is no failing-assertion state to observe. That
+                /// ⚠️ **None of these can be demonstrated red-then-green.** Without the guard they do not fail, they **crash
+                /// the test process**, so there is no failing-assertion state to observe. That
                 /// the abort is real was established out-of-process instead: `isValidJSONObject` returns `false` for
                 /// `NSNumber`, `NSString`, `NSNull` and `__NSCFBoolean` and `true` for every container, and it is the same
                 /// predicate the raise is guarded on.
