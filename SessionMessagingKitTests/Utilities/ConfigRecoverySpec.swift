@@ -138,7 +138,7 @@ class ConfigRecoverySpec: AsyncSpec {
                     /// so a later poll seeing the keys present clears it reactively
                     expect(report.keysVerdict).to(equal(.noVerdict))
 
-                    /// And the keys hashes are offered for re-store, which is the part `V16` used to forbid
+                    /// And the keys hashes are offered for re-store - `V16` forbids that only when the bytes are absent
                     expect(report.recoverableMissingHashes).to(equal(["K1", "K2"]))
                 }
 
@@ -553,9 +553,9 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V23 generates keys recovery data from the retained bytes
             it("V23 generates keys recovery data from the retained bytes") {
-                /// **This test used to assert the opposite**, on the then-true grounds that `libSession` had no way to re-emit
-                /// a keys message. It now retains each active keys message verbatim, so the bytes can be pushed back
-                /// **unchanged** - same hash, no signature required - which is what lets a *member* repair a group's keys.
+                /// `libSession` retains each active keys message verbatim, so the bytes can be pushed back **unchanged** -
+                /// same hash, no signature required - which is what lets a *member* repair a group's keys, and is why a keys
+                /// config is recoverable at all despite never being re-generatable from a dump.
                 ///
                 /// **The premise is asserted first:** if the config held no active hashes this would return empty for an
                 /// entirely different reason and pass without exercising anything
@@ -990,8 +990,8 @@ class ConfigRecoverySpec: AsyncSpec {
                     .wasCalled(exactly: 1, timeout: .milliseconds(500))
 
                 /// Two hours later, still blocked - which is what pins the interval at a day rather than merely at "some
-                /// interval". Without this step the test passes just as happily on the hour-long bar this used to use, so a
-                /// silent regression to that value would look identical
+                /// interval". Without this step the test passes just as happily on an hour-long bar, so a silent shortening
+                /// of the interval would look identical
                 fixture.dependencies.dateNow = fixture.now.addingTimeInterval(2 * 60 * 60)
 
                 await ConfigRecovery.forceRekeyIfPossible(

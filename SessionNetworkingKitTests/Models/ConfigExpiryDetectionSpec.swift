@@ -257,9 +257,9 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
             // MARK: -- when the unchanged key is absent
             context("when the unchanged key is absent") {
-                /// **Note:** The single-node case is `V8b` in the vector list above - it used to be repeated here under a prose
-                /// name, which is the shape that gets one of a genuine pair deleted as a duplicate. What is left here is the
-                /// *mixed* case, which is a different claim
+                /// **Note:** The single-node case is `V8b` above; what is covered here is the *mixed* case, which is a
+                /// different claim. Naming them apart matters - stated as two prose descriptions they read as duplicates, and
+                /// one of a genuine pair gets deleted
                 ///
                 // MARK: ---- still detects from the nodes which did report it
                 it("still detects from the nodes which did report it") {

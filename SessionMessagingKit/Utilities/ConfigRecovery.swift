@@ -190,11 +190,11 @@ public enum ConfigRecovery {
 
     /// Apply what the latest detection said about a group's keys config to its `expired` flag
     ///
-    /// **This used to be applied immediately on the grounds that a keys config had no recovery path.** It now does: libSession
-    /// retains each active keys message verbatim, so a device holding the bytes can push them back unchanged. When that repair
-    /// is available the verdict is `noVerdict` and the flag is left alone while it runs - a group being repaired is not a lost
+    /// **A keys config does have a recovery path, which is why the flag is not applied on sight.** libSession retains each
+    /// active keys message verbatim, so a device holding the bytes can push them back unchanged. Where that repair is
+    /// available the verdict is `noVerdict` and the flag is left alone while it runs - a group being repaired is not a lost
     /// one - and `recoverIfNeeded` applies `expired` afterwards if the repair did not land. A device with no retained bytes
-    /// still gets the flag straight away, because for it there really is nothing to wait for.
+    /// gets the flag straight away, because for it there really is nothing to wait for.
     ///
     /// This only ever speaks when the device actually held keys hashes to ask about. When it held none, no expire request
     /// was sent, so detection is *structurally silent* rather than reassuring - and the existing "no config messages in the
@@ -451,11 +451,11 @@ public enum ConfigRecovery {
             /// **Nothing to send is not the same as everything landing, and the difference is silent.**
             ///
             /// With no batches the loop below never runs, so `failedVariants` stays empty - which makes every config read as
-            /// landed, banks every hash as stored, and issues the sweep, all without a single request reaching the swarm. This
-            /// used to be avoided by striding to `max(count, 1)`, which forced one empty `sequence` whose zero sub-responses
-            /// failed everything back into retryable. That worked, but by accident of the failure path rather than by saying
-            /// so, and it spent a request to do it. Unreachable today - `configRecoveryData` returns `nil` for a config with no
-            /// push data and for keys with nothing retained - but the cost of being explicit is two lines
+            /// landed, banks every hash as stored, and issues the sweep, all without a single request reaching the swarm.
+            /// Striding to `max(count, 1)` would also prevent it, by forcing one empty `sequence` whose zero sub-responses fail
+            /// everything back into retryable - but that relies on the failure path rather than saying what it means, and
+            /// spends a request. Unreachable today, since `configRecoveryData` returns `nil` for a config with no push data and
+            /// for keys with nothing retained, but the cost of being explicit is two lines
             guard !storeRequests.isEmpty else {
                 retryableHashes.formUnion(
                     recoveryData.reduce(into: Set<String>()) { $0.formUnion($1.missingHashes) }
@@ -655,9 +655,9 @@ public extension ConfigRecovery {
         /// Swarms whose contents we have fully taken in, each stamped with the poll it happened in
         ///
         /// **One field answers both questions, which is why it is a stamp rather than a flag.** *Have we ever been level this
-        /// session* is `!= nil`, and *were we level as of the poll now running* is `== that poll's token`. Holding them
-        /// separately is what previously let the two drift: the poll-scoped answer lived in a local threaded out of the poll
-        /// function, set at only some of the sites that write this
+        /// session* is `!= nil`, and *were we level as of the poll now running* is `== that poll's token`. Held separately the
+        /// two can drift, because nothing forces every site that records levelness to record it in both places - and there are
+        /// three such sites, one of which is not a poll at all
         private var swarmsLevelWithLocalState: [String: PollToken] = [:]
 
         /// The poll each swarm is currently in, minted at the **start** of that poll
