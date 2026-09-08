@@ -614,6 +614,25 @@ public extension Singleton {
 }
 
 public extension ConfigRecovery {
+    /// Identifies one poll of one swarm, so a mark made during a poll can be told apart from a mark made earlier
+    ///
+    /// A distinct type rather than an `Int` so `outsideAPoll` has somewhere to live and cannot be confused with a live token
+    /// by anything that merely holds a number
+    struct PollToken: Equatable, Hashable {
+        private let value: UInt64
+
+        private init(value: UInt64) { self.value = value }
+
+        /// For marks made where there is no poll - see `ConfigMessageReceiveJob`
+        ///
+        /// 🔴 **Never equal to any live token**, which is the whole point: a caller outside a poll must be able to say "we are
+        /// level" without thereby claiming "we are level as of the poll now running". Live tokens start at 1
+        public static let outsideAPoll: PollToken = PollToken(value: 0)
+
+        fileprivate static let first: PollToken = PollToken(value: 1)
+        fileprivate var next: PollToken { PollToken(value: value + 1) }
+    }
+
     /// The cross-poll bookkeeping config recovery needs: which swarms are level, which are mid-recovery, which hashes are
     /// barred, and how far each swarm's next retry is deferred
     ///
@@ -633,8 +652,21 @@ public extension ConfigRecovery {
         /// ciphertext, so the same hash can't belong to two swarms
         private var barredUntil: [String: Date] = [:]
 
-        /// Swarms whose contents we have fully taken in at some point this session
-        private var swarmsLevelWithLocalState: Set<String> = []
+        /// Swarms whose contents we have fully taken in, each stamped with the poll it happened in
+        ///
+        /// **One field answers both questions, which is why it is a stamp rather than a flag.** *Have we ever been level this
+        /// session* is `!= nil`, and *were we level as of the poll now running* is `== that poll's token`. Holding them
+        /// separately is what previously let the two drift: the poll-scoped answer lived in a local threaded out of the poll
+        /// function, set at only some of the sites that write this
+        private var swarmsLevelWithLocalState: [String: PollToken] = [:]
+
+        /// The poll each swarm is currently in, minted at the **start** of that poll
+        ///
+        /// ⚠️ **Per swarm, and minted at the start.** A single global counter would let any other swarm's poll invalidate this
+        /// swarm's mark, so the poll-scoped answer would go false moments after being made and the rekey would never fire -
+        /// silent, because nothing errors. Minting at the *end* is worse: the token would name the poll that just finished, so
+        /// a mark made during it would always match and the check would never refuse anything
+        private var currentPollToken: [String: PollToken] = [:]
 
         /// Swarms where we are known to have **failed** to take a config message in
         ///
@@ -697,8 +729,15 @@ public extension ConfigRecovery {
             return keysBackfillFailed.contains(swarmPublicKey)
         }
 
-        public func markLocalStateLevelWithSwarm(swarmPublicKey: String) {
-            swarmsLevelWithLocalState.insert(swarmPublicKey)
+        public func beginPoll(swarmPublicKey: String) -> PollToken {
+            let next: PollToken = (currentPollToken[swarmPublicKey]?.next ?? PollToken.first)
+            currentPollToken[swarmPublicKey] = next
+
+            return next
+        }
+
+        public func markLocalStateLevelWithSwarm(swarmPublicKey: String, token: PollToken) {
+            swarmsLevelWithLocalState[swarmPublicKey] = token
         }
 
         public func markMergeIncompleteForSwarm(swarmPublicKey: String) {
@@ -710,7 +749,22 @@ public extension ConfigRecovery {
             /// A known-lossy merge disqualifies the swarm outright, however many clean polls follow it - the message we failed
             /// to take in is unreachable now, so a later quiet poll is not evidence we caught up
             return (
-                swarmsLevelWithLocalState.contains(swarmPublicKey) &&
+                swarmsLevelWithLocalState[swarmPublicKey] != nil &&
+                !swarmsWithIncompleteMerge.contains(swarmPublicKey)
+            )
+        }
+
+        public func localStateIsLevelWithSwarm(swarmPublicKey: String, asOf token: PollToken) -> Bool {
+            /// ⚠️ **The named poll must still be the current one.** Matching the stamp alone only asks "was the mark made in
+            /// the poll you are naming" - which an old token satisfies, since the mark that poll left is still there. A caller
+            /// holding a stale token would then be told it is level *now*, which is the staleness this exists to refuse
+            guard currentPollToken[swarmPublicKey] == token else { return false }
+
+            /// ⚠️ **The lossy-merge disqualification applies here too.** On this client the withdrawal is a second set rather
+            /// than a deletion, so a swarm with an incomplete merge still holds a stamp - matching the token alone would let
+            /// exactly the state the withdrawal exists to exclude satisfy the stricter question
+            return (
+                swarmsLevelWithLocalState[swarmPublicKey] == token &&
                 !swarmsWithIncompleteMerge.contains(swarmPublicKey)
             )
         }
@@ -820,6 +874,9 @@ public protocol ConfigRecoveryStoreType: Actor {
     /// Whether our local state is known to be level with the given swarm
     func localStateIsLevelWithSwarm(swarmPublicKey: String) -> Bool
 
+    /// Whether we became level with this swarm **during the poll `token` identifies**, as opposed to at any earlier point
+    func localStateIsLevelWithSwarm(swarmPublicKey: String, asOf token: ConfigRecovery.PollToken) -> Bool
+
     /// Filters `hashes` down to those not currently barred
     func hashesEligibleForRecovery(_ hashes: Set<String>, now: Date) -> Set<String>
 
@@ -835,8 +892,14 @@ public protocol ConfigRecoveryStoreType: Actor {
     /// Whether a keys backfill has already run for this swarm and left the bytes absent
     func keysBackfillHasFailed(swarmPublicKey: String) -> Bool
 
-    /// Record that our local state for the given swarm is level with what the swarm holds
-    func markLocalStateLevelWithSwarm(swarmPublicKey: String)
+    /// Open a poll for this swarm, returning the token that identifies it
+    func beginPoll(swarmPublicKey: String) -> ConfigRecovery.PollToken
+
+    /// Record that our local state for the given swarm is level with what the swarm holds, as of the poll `token` identifies
+    ///
+    /// Callers that are not a poll pass `.outsideAPoll`, which records levelness without claiming it happened during any
+    /// particular poll
+    func markLocalStateLevelWithSwarm(swarmPublicKey: String, token: ConfigRecovery.PollToken)
 
     /// Record that we failed to take in a config message for the given swarm
     ///

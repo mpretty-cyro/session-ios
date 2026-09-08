@@ -253,7 +253,7 @@ class SwarmPollerSpec: AsyncSpec {
                         )
 
                     /// Give recovery something to do, and a swarm it believes it is level with
-                    await fixture.recoveryStore.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.recoveryStore.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
 
 
                     /// The poll itself must still succeed - the store inside recovery will not, since the stubbed response

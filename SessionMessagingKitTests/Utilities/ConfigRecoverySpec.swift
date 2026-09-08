@@ -268,7 +268,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- allows recovery once our state is level
                 it("allows recovery once our state is level") {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
 
                     await expect { await fixture.claim(["H2"]) }.to(equal(["H2"]))
                 }
@@ -280,7 +280,7 @@ class ConfigRecoverySpec: AsyncSpec {
                     /// config messages and marks the swarm level. Correcting only the poll where the failure happened leaves
                     /// the wrong state one poll later, indistinguishable from a clean history
                     await fixture.store.markMergeIncompleteForSwarm(swarmPublicKey: fixture.userSwarm)
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
 
                     await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.userSwarm) }
                         .to(beFalse())
@@ -289,7 +289,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- keeps a lossy merge scoped to the swarm it happened on
                 it("keeps a lossy merge scoped to the swarm it happened on") {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
                     await fixture.store.markMergeIncompleteForSwarm(swarmPublicKey: fixture.groupSwarm)
 
                     /// The positive half - the unaffected swarm still recovers, so this isn't disqualifying everything
@@ -305,7 +305,7 @@ class ConfigRecoverySpec: AsyncSpec {
                     /// The failure it guards against is the whole point of the precondition: polling swarm A tells us nothing
                     /// about whether we have taken in what swarm B holds, so recovering B on the strength of A's poll is exactly
                     /// the "re-store before we have seen the current state" case
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
 
                     /// The positive half, so this cannot pass by nothing running at all
                     await expect { await fixture.claim(["H1"]) }.to(equal(["H1"]))
@@ -318,7 +318,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- when a hash has already been stored
             context("when a hash has already been stored") {
                 beforeEach {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
                     _ = await fixture.claim(["H2"])
                     await fixture.release(claimed: ["H2"], stored: ["H2"], retryable: [])
                 }
@@ -375,7 +375,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- when a guard ruled a hash out
             context("when a guard ruled a hash out") {
                 beforeEach {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
                     _ = await fixture.claim(["H2"])
 
                     /// Neither stored nor retryable - which is what a guard reaching a decision looks like
@@ -401,7 +401,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- when an attempt fails
             context("when an attempt fails") {
                 beforeEach {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
                     _ = await fixture.claim(["H2"])
                     await fixture.release(claimed: ["H2"], stored: [], retryable: ["H2"])
                 }
@@ -476,7 +476,7 @@ class ConfigRecoverySpec: AsyncSpec {
             context("when limiting concurrency") {
                 // MARK: ---- won't claim the same swarm twice at once
                 it("won't claim the same swarm twice at once") {
-                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                    await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
 
                     await expect { await fixture.claim(["H1", "H2"]) }.toNot(beNil())
                     await expect { await fixture.claim(["H1", "H2"]) }.to(beNil())
@@ -485,7 +485,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 // MARK: ---- won't exceed the concurrent swarm limit
                 it("won't exceed the concurrent swarm limit") {
                     for key in ["05a", "05b", "05c"] {
-                        await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: key)
+                        await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: key, token: .outsideAPoll)
                     }
 
                     await expect { await fixture.claim(["Ha"], swarmPublicKey: "05a", maxConcurrentSwarms: 2) }
@@ -800,11 +800,12 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// **The precondition is B1-attempted-and-failed, not merely keys-missing.** Keys-missing alone is true of a
                 /// group nobody has looked at yet, and rekeying that group throws away keys a backfill would have restored
                 try await fixture.stubRekey(isAdmin: true)
+                let token: ConfigRecovery.PollToken = await fixture.beginLevelPoll()
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: true,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
 
@@ -818,11 +819,12 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// A member cannot produce a keys message, so reaching the rekey would generate auth failures rather than a
                 /// repair - "must not appear to try" is the requirement, not merely "must not succeed"
                 try await fixture.stubRekey(isAdmin: false)
+                let token: ConfigRecovery.PollToken = await fixture.beginLevelPoll()
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: true,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
 
@@ -836,15 +838,16 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// A device that was not level with the swarm **as of this poll** may hold a `GroupMembers` view missing
                 /// anyone added while it was away, and `rekey` encrypts the new key to exactly the view it is handed - so
                 /// rekeying from a stale view silently excludes those members
-                ///
-                /// The signal is a parameter rather than something B2 reads, precisely so this is assertable here: it lives
-                /// for one `poll()` invocation, so a version that read it internally could only be guarded at the call site
                 try await fixture.stubRekey(isAdmin: true)
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
+                /// A poll that ran and never reached levelness - the swarm was polled, nothing marked it
+                let token: ConfigRecovery.PollToken = await fixture.store
+                    .beginPoll(swarmPublicKey: fixture.groupSwarm)
+
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: false,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
 
@@ -854,10 +857,12 @@ class ConfigRecoverySpec: AsyncSpec {
                     .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
                     .wasNotCalled()
 
-                /// And the refusal must not be sticky - without this half, a B2 that never rekeyed at all would pass
+                /// And the refusal is not permanent - without this half a rekey that never fired at all would pass
+                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.groupSwarm, token: token)
+
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: true,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
 
@@ -866,18 +871,114 @@ class ConfigRecoverySpec: AsyncSpec {
                     .wasCalled(exactly: 1, timeout: .milliseconds(500))
             }
 
+            // MARK: -- V25e does not rekey on a level mark left by an earlier poll
+            it("V25e does not rekey on a level mark left by an earlier poll") {
+                /// The case the sticky predicate cannot express: we *were* level, but not during the poll asking to rekey.
+                /// Between the two polls a member may have been added and not yet merged, and the rekey would encrypt to a
+                /// members view that predates them
+                try await fixture.stubRekey(isAdmin: true)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
+
+                let firstPoll: ConfigRecovery.PollToken = await fixture.beginLevelPoll()
+                let secondPoll: ConfigRecovery.PollToken = await fixture.store
+                    .beginPoll(swarmPublicKey: fixture.groupSwarm)
+
+                await ConfigRecovery.forceRekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    pollToken: secondPoll,
+                    using: fixture.dependencies
+                )
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+                    .wasNotCalled()
+
+                /// ⚠️ **The sticky reading must still be TRUE here.** Without this the test also passes when both readings
+                /// went false together - which is what folding the poll-scoped question back into the withdrawal would do,
+                /// and it would pass for entirely the wrong reason while the re-store silently stopped working
+                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
+                    .to(beTrue())
+
+                /// And the earlier poll's own token is not a way back in - it is stale precisely because it is not current
+                await ConfigRecovery.forceRekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    pollToken: firstPoll,
+                    using: fixture.dependencies
+                )
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+                    .wasNotCalled()
+
+                /// Levelness reached during the poll that is asking - now it fires
+                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.groupSwarm, token: secondPoll)
+
+                await ConfigRecovery.forceRekeyIfPossible(
+                    swarmPublicKey: fixture.groupSwarm,
+                    pollToken: secondPoll,
+                    using: fixture.dependencies
+                )
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .groupKeys, sessionId: .any, change: { _ in }) }
+                    .wasCalled(exactly: 1, timeout: .milliseconds(500))
+            }
+
+            // MARK: -- V25f a mark made outside a poll never satisfies the as-of-this-poll question
+            it("V25f a mark made outside a poll never satisfies the as-of-this-poll question") {
+                /// `ConfigMessageReceiveJob` marks levelness without being a poll - it merges messages handed to it and has no
+                /// idea whether the swarm was fully answered. Its mark has to count for the sticky question and never for the
+                /// poll-scoped one, or a merge that polled nothing would let the rekey believe our members view is current
+                try await fixture.stubRekey(isAdmin: true)
+                await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
+
+                await fixture.store.markLocalStateLevelWithSwarm(
+                    swarmPublicKey: fixture.groupSwarm,
+                    token: .outsideAPoll
+                )
+
+                /// Sticky: yes. This mark is real evidence we took everything in at some point
+                await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
+                    .to(beTrue())
+
+                /// As of a poll: never, for any poll. Asserted over several so it cannot pass by the sentinel merely
+                /// disagreeing with the first token that happens to be minted
+                for _ in 0..<3 {
+                    let token: ConfigRecovery.PollToken = await fixture.store
+                        .beginPoll(swarmPublicKey: fixture.groupSwarm)
+
+                    await expect {
+                        await fixture.store.localStateIsLevelWithSwarm(
+                            swarmPublicKey: fixture.groupSwarm,
+                            asOf: token
+                        )
+                    }.to(beFalse())
+
+                    await ConfigRecovery.forceRekeyIfPossible(
+                        swarmPublicKey: fixture.groupSwarm,
+                        pollToken: token,
+                        using: fixture.dependencies
+                    )
+                }
+
+                await fixture.mockLibSessionCache
+                    .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
+                    .wasNotCalled()
+            }
+
             // MARK: -- V25c bounds rekeys rather than one per admin per poll
             it("V25c bounds rekeys rather than one per admin per poll") {
                 /// Several admins reach this in the same window - they poll the same swarm and see the same missing keys - and
                 /// a rekey is irreversible and visible to everyone, so doing it too often is materially worse than doing it
                 /// late. The guard's state lives with the rekey so that removing the rekey removes it
                 try await fixture.stubRekey(isAdmin: true)
+                let token: ConfigRecovery.PollToken = await fixture.beginLevelPoll()
                 await fixture.store.markKeysBackfillFailed(swarmPublicKey: fixture.groupSwarm)
 
                 for _ in 0..<3 {
                     await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: true,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
                 }
@@ -894,7 +995,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 await ConfigRecovery.forceRekeyIfPossible(
                     swarmPublicKey: fixture.groupSwarm,
-                    localStateIsLevelWithSwarmThisPoll: true,
+                    pollToken: token,
                     using: fixture.dependencies
                 )
 
@@ -907,7 +1008,7 @@ class ConfigRecoverySpec: AsyncSpec {
         // MARK: - recovering
         describe("recovering") {
             beforeEach {
-                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm)
+                await fixture.store.markLocalStateLevelWithSwarm(swarmPublicKey: fixture.userSwarm, token: .outsideAPoll)
             }
 
             // MARK: -- does nothing in the background
@@ -1378,6 +1479,14 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         try await mockLibSessionCache
             .when { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
             .thenReturn(())
+    }
+
+    /// Open a poll for the group and record that it reached levelness, as a good poll does - returning that poll's token
+    @discardableResult func beginLevelPoll() async -> ConfigRecovery.PollToken {
+        let token: ConfigRecovery.PollToken = await store.beginPoll(swarmPublicKey: groupSwarm)
+        await store.markLocalStateLevelWithSwarm(swarmPublicKey: groupSwarm, token: token)
+
+        return token
     }
 
     /// A keys message as the backfill fetch would hand it back

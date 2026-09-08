@@ -45,15 +45,19 @@ public extension ConfigRecovery {
     /// membership, and this fires precisely on devices whose config state is known to be degraded. A member added while we were
     /// away and not yet merged locally is silently excluded by a rekey issued from that stale view.
     ///
-    /// - Parameter localStateIsLevelWithSwarmThisPoll: whether the calling poll established levelness **in that same cycle**.
-    /// Passed in rather than read here because the signal exists only inside one `poll()` invocation - reading it internally
-    /// would put the refusal wholly at the call site, where this entry point cannot assert it
+    /// - Parameter pollToken: identifies the poll asking for this rekey. The caller says only *which poll it is*; whether that
+    /// poll reached levelness is decided here, from the store, so the refusal is this function's own behaviour
     static func forceRekeyIfPossible(
         swarmPublicKey: String,
-        localStateIsLevelWithSwarmThisPoll: Bool,
+        pollToken: ConfigRecovery.PollToken,
         using dependencies: Dependencies
     ) async {
-        guard localStateIsLevelWithSwarmThisPoll else { return }
+        /// Levelness reached **during this poll**, not at any earlier point. A device level only as of an older poll may have
+        /// missed a member added since, and `rekey` encrypts the new key to exactly the members view it is handed
+        guard await dependencies[singleton: .configRecovery].localStateIsLevelWithSwarm(
+            swarmPublicKey: swarmPublicKey,
+            asOf: pollToken
+        ) else { return }
 
         guard let sessionId: SessionId = try? SessionId(from: swarmPublicKey), sessionId.prefix == .group else { return }
 

@@ -65,7 +65,7 @@ extension SwarmPollerType {
     /// **Note:** The returned messages will have already been processed by the `Poller`, they are only returned
     /// for cases where we need explicit/custom behaviours to occur (eg. Onboarding)
     public func poll(forceSynchronousProcessing: Bool) async throws -> PollResult<PollResponse> {
-        let outcome: (result: PollResult<PollResponse>, detection: ConfigRecovery.DetectionReport, markedLevelThisPoll: Bool) = try await performPoll(
+        let outcome: (result: PollResult<PollResponse>, detection: ConfigRecovery.DetectionReport, pollToken: ConfigRecovery.PollToken) = try await performPoll(
             forceSynchronousProcessing: forceSynchronousProcessing
         )
 
@@ -117,9 +117,9 @@ extension SwarmPollerType {
         /// bytes absent, so they are not obtainable by re-reading; and this poll's detection says the swarm has lost the keys.
         /// Those are two different facts and neither implies the other - `keysVerdict == .expired` alone would fire on a group
         /// that has simply never been looked at.
-        /// ⚠️ **`markedLevelThisPoll`, not `localStateIsLevelWithSwarm`.** That predicate means *was level at some point this
-        /// session* - set by a good poll and cleared only by a sticky withdrawal. Right for the re-store, where staleness costs
-        /// a redundant store; **fail-open here at exactly the wrong moment**, because a member added an hour ago with our last
+        /// ⚠️ **Levelness as of *this* poll, not at any point this session.** The plain predicate is set by a good poll and
+        /// cleared only by a sticky withdrawal, so it stays true indefinitely. Right for the re-store, where staleness costs a
+        /// redundant store; **fail-open here at exactly the wrong moment**, because a member added an hour ago with our last
         /// complete poll yesterday still reads true, and our `GroupMembers` view is stale by precisely the delta that produces
         /// the exclusion.
         ///
@@ -129,12 +129,9 @@ extension SwarmPollerType {
         if outcome.detection.keysVerdict == .expired,
            await dependencies[singleton: .configRecovery].keysBackfillHasFailed(swarmPublicKey: destination.target)
         {
-            /// `markedLevelThisPoll` is passed in rather than read inside, because `localStateIsLevelWithSwarm` means "level at
-            /// some point this session" and never goes false again - it is fail-open for this purpose, and only the poll that
-            /// just ran knows whether levelness holds *now*
             await ConfigRecovery.forceRekeyIfPossible(
                 swarmPublicKey: destination.target,
-                localStateIsLevelWithSwarmThisPoll: outcome.markedLevelThisPoll,
+                pollToken: outcome.pollToken,
                 using: dependencies
             )
         }
@@ -177,7 +174,15 @@ extension SwarmPollerType {
 
     private func performPoll(
         forceSynchronousProcessing: Bool
-    ) async throws -> (result: PollResult<PollResponse>, detection: ConfigRecovery.DetectionReport, markedLevelThisPoll: Bool) {
+    ) async throws -> (result: PollResult<PollResponse>, detection: ConfigRecovery.DetectionReport, pollToken: ConfigRecovery.PollToken) {
+        /// Open the poll **before** anything else runs, because the token has to name the poll that is about to happen
+        ///
+        /// ⚠️ **Minting this at the end instead would produce a check that can never refuse.** The token would name the poll
+        /// that just finished, so a mark made during that poll would always equal it, and the rekey's freshness test would
+        /// agree every time while looking exactly like a working guard
+        let pollToken: ConfigRecovery.PollToken = await dependencies[singleton: .configRecovery]
+            .beginPoll(swarmPublicKey: destination.target)
+
         /// Select the node to poll
         let swarm: Set<LibSession.Snode> = try await dependencies[singleton: .network]
             .getSwarm(for: destination.target, ignoreStrikeCount: false)
@@ -300,20 +305,18 @@ extension SwarmPollerType {
         ///
         /// The store's own predicate is session-sticky by design, which is right for deciding whether a re-store may run and
         /// wrong for authorising a rekey. This is the freshness signal, and it is deliberately local to one poll
-        var markedLevelThisPoll: Bool = false
 
         if
             allConfigNamespacesAnswered,
             !sortedMessages.contains(where: { $0.namespace.isConfigNamespace && !$0.messages.isEmpty })
         {
-            markedLevelThisPoll = true
             await dependencies[singleton: .configRecovery]
-                .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target)
+                .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target, token: pollToken)
         }
 
         /// No need to do anything if there are no messages
         guard rawMessageCount > 0 else {
-            return (PollResult(response: []), detectionReport, markedLevelThisPoll)
+            return (PollResult(response: []), detectionReport, pollToken)
         }
         
         /// Process the response
@@ -341,9 +344,8 @@ extension SwarmPollerType {
                 /// A **complete merge of a partial answer is not levelness.** Taking in everything we were given says nothing
                 /// about the namespace whose retrieve failed, so this needs the same coverage gate as the marker above
                 if allConfigNamespacesAnswered {
-                    markedLevelThisPoll = true
                     await dependencies[singleton: .configRecovery]
-                        .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target)
+                        .markLocalStateLevelWithSwarm(swarmPublicKey: destination.target, token: pollToken)
                 }
 
             case .some(false):
@@ -352,7 +354,7 @@ extension SwarmPollerType {
         }
         
         /// If we don't want to forcible process the response synchronously then just finish immediately
-        guard forceSynchronousProcessing else { return (processedResponse.pollResult, detectionReport, markedLevelThisPoll) }
+        guard forceSynchronousProcessing else { return (processedResponse.pollResult, detectionReport, pollToken) }
         
         /// We want to try to handle the receive jobs immediately in the background
         await withThrowingTaskGroup(of: Void.self) { [dependencies] group in
@@ -372,7 +374,7 @@ extension SwarmPollerType {
             }
         }
         
-        return (processedResponse.pollResult, detectionReport, markedLevelThisPoll)
+        return (processedResponse.pollResult, detectionReport, pollToken)
     }
 }
 
