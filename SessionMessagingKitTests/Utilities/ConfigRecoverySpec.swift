@@ -12,12 +12,12 @@ import Nimble
 
 @testable import SessionMessagingKit
 
-/// Covers the guards, the expired-group rule and the recovery action - vectors **V10-V13g** and **V16-V21**; the detection rule
-/// itself (**V1-V9**, **V14-V15**) is in `ConfigExpiryDetectionSpec`, and the "is our state level" decision (**V22-V22e**) is in
+/// Covers the guards, the expired-group rule and the recovery action - vectors V10-V13g and V16-V21; the detection rule
+/// itself (V1-V9, V14-V15) is in `ConfigExpiryDetectionSpec`, and the "is our state level" decision (V22-V22e) is in
 /// `SwarmPollerSpec`, driven through the real poll path
 ///
 /// These vectors exist because the logic is implemented independently on iOS, Android and Desktop rather than being shared in
-/// `libSession`, so they are the only thing keeping the three consistent. **Do not relax one to make it pass.**
+/// `libSession`, so they are the only thing keeping the three consistent. Do not relax one to make it pass.
 class ConfigRecoverySpec: AsyncSpec {
     override class func spec() {
         @TestState var fixture: ConfigRecoveryTestFixture!
@@ -28,7 +28,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
         // MARK: - a DetectionReport
         ///
-        /// A pure value derived from one poll's `expire` response. It is deliberately **not** cache state: storing a detection
+        /// A pure value derived from one poll's `expire` response. It is deliberately not cache state: storing a detection
         /// and consuming it later lets it be picked up by the wrong poll or dropped when nothing consumes it, and it bought
         /// nothing because detection repeats every poll - a hash that is still missing is simply reported again.
         describe("a DetectionReport") {
@@ -124,9 +124,9 @@ class ConfigRecoverySpec: AsyncSpec {
                 // MARK: ---- V23 recovers the keys instead of flagging expired when the bytes are held
                 it("V23 recovers the keys instead of flagging expired when the bytes are held") {
                     /// A keys message is admin-signed and cannot be regenerated, but the retained bytes can be pushed back
-                    /// **unchanged** - same hash, no signature needed - which is what lets a member repair a group.
+                    /// unchanged - same hash, no signature needed - which is what lets a member repair a group.
                     ///
-                    /// **The fixture holds a `groupInfo` hash as well as the keys ones, deliberately.** With keys hashes alone
+                    /// The fixture holds a `groupInfo` hash as well as the keys ones, deliberately. With keys hashes alone
                     /// and all of them missing, `V14`'s empty-ask rule would be in play instead and this would be testing that
                     let report: ConfigRecovery.DetectionReport = ConfigRecovery.DetectionReport(
                         detection: .checked(missingHashes: ["K1", "K2"]),
@@ -145,12 +145,12 @@ class ConfigRecoverySpec: AsyncSpec {
                 // MARK: ---- V23a still flags expired when no bytes are retained
                 it("V23a still flags expired when no bytes are retained") {
                     /// A group that loaded its keys before retention existed: active keys hashes, no bytes, so it cannot be
-                    /// repaired **by this device as it stands** and the expired flag is the right answer *for this state*.
+                    /// repaired by this device as it stands and the expired flag is the right answer *for this state*.
                     ///
-                    /// **Not a permanent verdict** - re-loading the message backfills the bytes and moves the group into `V23`'s
+                    /// Not a permanent verdict - re-loading the message backfills the bytes and moves the group into `V23`'s
                     /// population. This vector pins the no-bytes state, not the claim that the state is terminal.
                     ///
-                    /// **Pins the absence of BYTES, not of detection.** The detection is identical to `V23`'s - same missing
+                    /// Pins the absence of BYTES, not of detection. The detection is identical to `V23`'s - same missing
                     /// set, same active hashes - so the only term that differs is retention. A fixture that also broke the
                     /// detection would be indistinguishable from `V16`
                     let report: ConfigRecovery.DetectionReport = ConfigRecovery.DetectionReport(
@@ -165,7 +165,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- V23b retains and re-stores a supplemental, not just the rekey
                 it("V23b retains and re-stores a supplemental, not just the rekey") {
-                    /// **Pins that retention is hash-keyed, not generation-keyed.** A generation is one rekey plus every
+                    /// Pins that retention is hash-keyed, not generation-keyed. A generation is one rekey plus every
                     /// supplemental issued against it, but `active_key_messages()` carries no generation, so "is this
                     /// generation complete" is not a question this layer can ask. What it *can* pin is that a supplemental is
                     /// kept and offered on its own terms - which is the property that would break if someone "tidied" the
@@ -188,7 +188,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- repairs with whatever bytes it holds rather than requiring all of them
                 it("repairs with whatever bytes it holds rather than requiring all of them") {
-                    /// ⚠️ **This is the reverse of what I first implemented.** I gated recovery on holding *every* missing keys
+                    /// This is the reverse of what I first implemented. I gated recovery on holding *every* missing keys
                     /// hash, reasoning that a partial generation repairs nothing. That reasoning is not available here: the
                     /// accessor is hash-keyed, so partial-ness of a *generation* cannot be determined, and the recovery action
                     /// re-stores every retained message anyway - strictly more than generation-completeness would ask.
@@ -213,12 +213,12 @@ class ConfigRecoverySpec: AsyncSpec {
                     /// reassuring - the existing "no config messages in the first poll" check in `GroupPoller.pollerDidStart`
                     /// remains the authority.
                     ///
-                    /// **This is about which check holds AUTHORITY, not about the request** - that is `V14`, where no expire
+                    /// This is about which check holds AUTHORITY, not about the request - that is `V14`, where no expire
                     /// sub-request is sent at all. Here a conclusive detection did come back and did report a missing hash; the
                     /// only thing that defers is the expired verdict.
                     ///
                     /// The bug it catches is a one-character one: "every keys hash we asked about is missing" implemented as a
-                    /// subset test is **vacuously true of the empty set**, so a device holding no keys hashes flags the group
+                    /// subset test is vacuously true of the empty set, so a device holding no keys hashes flags the group
                     /// expired on the strength of a question it never asked
                     let activeHashesByVariant: [ConfigDump.Variant: Set<String>] = [.groupInfo: ["I1"]]
 
@@ -246,7 +246,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                     expect(withKeysHash.keysVerdict).to(equal(.expired))
 
-                    /// **Note:** The apply side (`applyKeysVerdictIfNeeded` writing nothing for `noVerdict`) is not asserted
+                    /// Note: The apply side (`applyKeysVerdictIfNeeded` writing nothing for `noVerdict`) is not asserted
                     /// here - this fixture has no database, and the flag write goes through `updateAllAndConfig`. Recorded
                     /// rather than faked; the verdict itself is where the vector's discrimination lives
                 }
@@ -259,7 +259,7 @@ class ConfigRecoverySpec: AsyncSpec {
             context("when checking the level-with-swarm guard") {
                 // MARK: ---- V10 refuses to recover before our state is known to be level
                 it("V10 refuses to recover before our state is known to be level") {
-                    /// The hash **is** detected as missing, but recovery must not run - a device that re-stores before it has
+                    /// The hash is detected as missing, but recovery must not run - a device that re-stores before it has
                     /// seen what the swarm holds could put back state which has since been deliberately changed
                     await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.userSwarm) }
                         .to(beFalse())
@@ -300,7 +300,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 it("V10b does not let one swarm's clean poll satisfy another's precondition") {
                     /// The precondition is *per swarm*, and a flat "we have polled successfully this session" flag passes every
                     /// other vector in this file while failing only this one - `V10` never notices, because it asserts the state
-                    /// before **any** poll has happened, which a global flag also gets right.
+                    /// before any poll has happened, which a global flag also gets right.
                     ///
                     /// The failure it guards against is the whole point of the precondition: polling swarm A tells us nothing
                     /// about whether we have taken in what swarm B holds, so recovering B on the strength of A's poll is exactly
@@ -332,13 +332,13 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- V13g stores it again once the bar interval has elapsed
                 it("V13g stores it again once the bar interval has elapsed") {
-                    /// **The bar is bounded in time, not scoped to the session.** A session can outlive the 30-day TTL - a
+                    /// The bar is bounded in time, not scoped to the session. A session can outlive the 30-day TTL - a
                     /// backgrounded mobile client, or a desktop client which has no foreground gate - and in that window a hash
                     /// barred after a *successful* store can expire from the swarm a second time. A session-scoped bar blocks
                     /// the very recovery that would put it back, and the excluded population is long-lived sessions, which is
                     /// exactly where configs expire.
                     ///
-                    /// Driven by **advancing the clock**, not by rebuilding the store: a fresh store would have no bar at all,
+                    /// Driven by advancing the clock, not by rebuilding the store: a fresh store would have no bar at all,
                     /// so that version of this test passes against a session-scoped implementation and proves nothing
                     await expect { await fixture.claim(["H2"], now: fixture.now.addingTimeInterval(3599)) }.to(beNil())
                     await expect { await fixture.claim(["H2"], now: fixture.now.addingTimeInterval(3601)) }
@@ -347,7 +347,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- prunes lapsed bars so the map cannot grow across a long session
                 it("prunes lapsed bars so the map cannot grow across a long session") {
-                    /// **Varies the key rather than repeating the operation.** Settling the *same* hash twice overwrites one
+                    /// Varies the key rather than repeating the operation. Settling the *same* hash twice overwrites one
                     /// map entry, so a size assertion never moves whether or not anything is pruned - the measuring-nothing
                     /// output is identical to the success output. The leak lives in accumulation across *distinct* keys, and in
                     /// production the keys genuinely rotate: a re-pushed config occupies new hashes.
@@ -442,7 +442,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 // MARK: ---- V13d never stops retrying, however many rounds have failed
                 it("V13d never stops retrying, however many rounds have failed") {
-                    /// The growth is a **deferral, not a cap**. An implementation that treats consecutive failures as a budget
+                    /// The growth is a deferral, not a cap. An implementation that treats consecutive failures as a budget
                     /// would pass every other vector here while permanently abandoning the swarm - which is the question worth
                     /// asking of every guard in this file: *which population does it exclude?* Here it is the swarms that have
                     /// failed the most, which are exactly the ones whose configs are most likely to be gone
@@ -538,7 +538,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- V20 re-stores for a non-admin member
             it("V20 re-stores for a non-admin member") {
                 /// A member's dump retains the admin's signature, so its re-store reproduces byte-identical bytes and the
-                /// storage server accepts it under member auth - group recovery does **not** need an admin online
+                /// storage server accepts it under member auth - group recovery does not need an admin online
                 /// Positive proof the fixture really is the member view rather than the admin one
                 expect(fixture.memberConfigIsReadOnly()).to(beTrue())
 
@@ -553,11 +553,11 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V23 generates keys recovery data from the retained bytes
             it("V23 generates keys recovery data from the retained bytes") {
-                /// `libSession` retains each active keys message verbatim, so the bytes can be pushed back **unchanged** -
+                /// `libSession` retains each active keys message verbatim, so the bytes can be pushed back unchanged -
                 /// same hash, no signature required - which is what lets a *member* repair a group's keys, and is why a keys
                 /// config is recoverable at all despite never being re-generatable from a dump.
                 ///
-                /// **The premise is asserted first:** if the config held no active hashes this would return empty for an
+                /// The premise is asserted first: if the config held no active hashes this would return empty for an
                 /// entirely different reason and pass without exercising anything
                 expect(fixture.keysOnlyActiveHashes()).to(equal(["HASH-KEYS"]))
 
@@ -612,26 +612,26 @@ class ConfigRecoverySpec: AsyncSpec {
                 expect(LibSession.Config.groupInfo(fixture.groupInfoConf).needsPush).to(beTrue())
                 expect(fixture.recoveryData(missing: ["HASH-INFO"])).to(beEmpty())
 
-                /// ⚠️ **This cannot isolate the `needsPush` guard *for this config*, and the mechanism is narrower than it
-                /// looks.** `ConfigBase::set_state` moves `_curr_hashes` into `_old_hashes` and clears it on the first change
+                /// This cannot isolate the `needsPush` guard *for this config*, and the mechanism is narrower than it
+                /// looks. `ConfigBase::set_state` moves `_curr_hashes` into `_old_hashes` and clears it on the first change
                 /// away from Clean - so a dirtied config has no *current* hashes, the intersection is empty, and it is excluded
-                /// one step **before** `needsPush` is consulted. Deleting that guard leaves this test passing; measured.
+                /// one step before `needsPush` is consulted. Deleting that guard leaves this test passing; measured.
                 ///
-                /// **But `active_hashes()` is `_curr_hashes` UNION the parts of any pending multipart set** (`!part.done &&
+                /// But `active_hashes()` is `_curr_hashes` UNION the parts of any pending multipart set (`!part.done &&
                 /// part.expiry > now`), and `set_state` does not touch those. So a config that goes dirty *while a multipart
                 /// set is still arriving* keeps a non-empty active-hash list, can intersect a genuinely missing part hash, and
-                /// reaches `needsPush` - which is **load-bearing in exactly that case**, not redundant in general.
+                /// reaches `needsPush` - which is load-bearing in exactly that case, not redundant in general.
                 ///
                 /// The assertion below therefore holds *because this fixture has no multipart set in flight*, which is the
                 /// ordinary case, and not because dirtying empties active hashes as a rule. It is still a useful tripwire for
-                /// the curr-hash clearing; it is **not** a claim that the guard is dead code
+                /// the curr-hash clearing; it is not a claim that the guard is dead code
                 expect(fixture.libSessionCache.activeHashesByVariant(for: fixture.groupSwarm)[.groupInfo]).to(beEmpty())
             }
 
             // MARK: -- V22c reports a lossy merge rather than treating it as level with the swarm
             it("V22c reports a lossy merge rather than treating it as level with the swarm") {
                 /// Merging deliberately tolerates an individual message failing - one undecryptable config must not fail a
-                /// whole poll - so a successful call is **not** proof we incorporated what the swarm sent. A poll that dropped
+                /// whole poll - so a successful call is not proof we incorporated what the swarm sent. A poll that dropped
                 /// a config message is exactly the state where our view is knowably stale, which is what the level-with-swarm
                 /// precondition exists to catch
                 let result = try fixture.mergeOneGoodOneGarbage()
@@ -664,7 +664,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
         // MARK: - backfilling keys bytes
         ///
-        /// **B1.** Retention captures a keys message's bytes when it is loaded, so a group that loaded its keys before
+        /// B1. Retention captures a keys message's bytes when it is loaded, so a group that loaded its keys before
         /// retention existed holds the key and the hash and nothing behind them. Re-loading the message fixes that - the merge
         /// takes `insert_key`'s early return, a no-op for key state, and still captures the bytes.
         describe("backfilling keys bytes") {
@@ -710,7 +710,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// Twice asked, once fetched - the bar is claimed by the attempt, not by its result
                 expect(fetchCount).to(equal(1))
 
-                /// **And it lapses.** Asserting the block alone passes a *permanent* block, which would be a different bug
+                /// And it lapses. Asserting the block alone passes a *permanent* block, which would be a different bug
                 /// with the same green: a group whose keys later return to the swarm would never be looked at again
                 fixture.dependencies.dateNow = fixture.now.addingTimeInterval(3601)
 
@@ -730,7 +730,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V24b does not fetch at all when the bytes are already held
             it("V24b does not fetch at all when the bytes are already held") {
-                /// **The trigger is bytes-absent, not keys-related.** A fixture that fires B1 regardless still passes `V24`,
+                /// The trigger is bytes-absent, not keys-related. A fixture that fires B1 regardless still passes `V24`,
                 /// so this is the vector that separates "runs when it should" from "runs always" - and running always means a
                 /// namespace read every poll for every healthy group
                 try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: ["K1"])
@@ -746,7 +746,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V24c feeds the ordinary re-store path rather than replacing it
             it("V24c feeds the ordinary re-store path rather than replacing it") {
-                /// B1 restores the **input**; `V23` does the work. If B1 also re-stored, `V23` would exist twice - so this
+                /// B1 restores the input; `V23` does the work. If B1 also re-stored, `V23` would exist twice - so this
                 /// pins both halves: the hashes it captured are now offerable to recovery, and B1 itself consumed none of
                 /// recovery's budget for them
                 try await fixture.stubBackfill(activeKeys: ["K1"], withBytes: [])
@@ -770,7 +770,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// And B1 did not bar the hash for re-store - it is a read, not an attempt at the repair
                 await expect { await fixture.isStillRetryable("K1") }.to(beTrue())
 
-                /// **Both halves, because either alone is satisfiable by the wrong implementation.** A zero store count
+                /// Both halves, because either alone is satisfiable by the wrong implementation. A zero store count
                 /// passes an implementation that stored *instead of* fetching, and a fetch count alone says nothing about
                 /// whether it also re-stored. B1 is exactly one read and no writes to the swarm
                 expect(fetchCount).to(equal(1))
@@ -791,13 +791,13 @@ class ConfigRecoverySpec: AsyncSpec {
 
         // MARK: - force rekeying
         ///
-        /// **B2.** The last resort: the keys are gone from the swarm and a backfill has already established that no
+        /// B2. The last resort: the keys are gone from the swarm and a backfill has already established that no
         /// re-read will bring them back. Kept behind a seam because it is the one write here that every member on every
         /// version sees, and Morgan wants the option of withdrawing it.
         describe("force rekeying") {
             // MARK: -- V25 rekeys when an admin has established nobody can restore the keys
             it("V25 rekeys when an admin has established nobody can restore the keys") {
-                /// **The precondition is B1-attempted-and-failed, not merely keys-missing.** Keys-missing alone is true of a
+                /// The precondition is B1-attempted-and-failed, not merely keys-missing. Keys-missing alone is true of a
                 /// group nobody has looked at yet, and rekeying that group throws away keys a backfill would have restored
                 try await fixture.stubRekey(isAdmin: true)
                 let token: ConfigRecovery.PollToken = await fixture.beginLevelPoll()
@@ -835,7 +835,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V25d does not rekey when this poll did not establish levelness
             it("V25d does not rekey when this poll did not establish levelness") {
-                /// A device that was not level with the swarm **as of this poll** may hold a `GroupMembers` view missing
+                /// A device that was not level with the swarm as of this poll may hold a `GroupMembers` view missing
                 /// anyone added while it was away, and `rekey` encrypts the new key to exactly the view it is handed - so
                 /// rekeying from a stale view silently excludes those members
                 try await fixture.stubRekey(isAdmin: true)
@@ -893,7 +893,7 @@ class ConfigRecoverySpec: AsyncSpec {
                     .verify { try $0.performAndPushChange(.any, for: .any, sessionId: .any, change: { _ in }) }
                     .wasNotCalled()
 
-                /// ⚠️ **The sticky reading must still be TRUE here.** Without this the test also passes when both readings
+                /// The sticky reading must still be TRUE here. Without this the test also passes when both readings
                 /// went false together - which is what folding the poll-scoped question back into the withdrawal would do,
                 /// and it would pass for entirely the wrong reason while the re-store silently stopped working
                 await expect { await fixture.store.localStateIsLevelWithSwarm(swarmPublicKey: fixture.groupSwarm) }
@@ -1032,7 +1032,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// extra store requests and the largest N coincides with the long-offline case most likely to be in a
                 /// constrained background window
                 ///
-                /// **Note:** `isAppForegroundAndActive` is a protocol *extension* default so it is statically dispatched and
+                /// Note: `isAppForegroundAndActive` is a protocol *extension* default so it is statically dispatched and
                 /// can't be stubbed directly - `reportedApplicationState` is the requirement it reads
                 try await fixture.mockAppContext
                     .when { $0.reportedApplicationState }
@@ -1055,7 +1055,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- consults the guards in the foreground
             it("consults the guards in the foreground") {
                 /// The positive counterpart the negative above depends on - it asserts an effect that only exists if the path
-                /// ran to **completion**, rather than that the happy path merely didn't fail
+                /// ran to completion, rather than that the happy path merely didn't fail
                 try await fixture.foreground()
 
                 await ConfigRecovery.recoverIfNeeded(
@@ -1071,11 +1071,11 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V13h chunks a recovery that exceeds the server's sub-request limit
             it("V13h chunks a recovery that exceeds the server's sub-request limit") {
-                /// The storage server rejects a batch of **more than 20** sub-requests outright rather than truncating it, so
+                /// The storage server rejects a batch of more than 20 sub-requests outright rather than truncating it, so
                 /// an unchunked recovery loses every store in it - and because a single config can split into ~66 parts, the
                 /// accounts with the most to lose are exactly the ones that would be rejected wholesale.
                 ///
-                /// Asserts the **boundary**, not eventual success: the fixture supplies 25 parts plus a delete, so a correct
+                /// Asserts the boundary, not eventual success: the fixture supplies 25 parts plus a delete, so a correct
                 /// implementation must send exactly two batches of at most 20 sub-requests each. Counting only "did everything
                 /// store" would pass on an implementation that got lucky with a small fixture
                 try await fixture.foreground()
@@ -1102,7 +1102,7 @@ class ConfigRecoverySpec: AsyncSpec {
             // MARK: -- does not sweep superseded hashes when the restore didn't land
             it("does not sweep superseded hashes when the restore didn't land") {
                 /// The sweep exists because `push()` clears `libSession`'s copy of the superseded hashes, so an undeleted one
-                /// lingers until its TTL. But a restore that did **not** land leaves the swarm still holding the state those
+                /// lingers until its TTL. But a restore that did not land leaves the swarm still holding the state those
                 /// hashes belong to, and deleting them then removes data with nothing put back in its place.
                 ///
                 /// Here the stubbed batch reports no sub-responses, so no store is confirmed - and nothing is swept. The positive
@@ -1153,12 +1153,12 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V17b issues no delete when there are no superseded hashes
             it("V17b issues no delete when there are no superseded hashes") {
-                /// The negative counterpart to `V17`: a config whose `push()` hands back an **empty** obsolete-hash list must not
+                /// The negative counterpart to `V17`: a config whose `push()` hands back an empty obsolete-hash list must not
                 /// produce a delete request at all. The natural bug is issuing one anyway - an empty `delete` is a signed request
                 /// the server accepts and does nothing with, so it never surfaces as an error, it just costs a round trip on
                 /// every recovery.
                 ///
-                /// **Asserted by the total number of requests, not by what the delete contained.** With no obsolete hashes there
+                /// Asserted by the total number of requests, not by what the delete contained. With no obsolete hashes there
                 /// is no hash to look for, so a "the delete didn't mention OLD-HASH" assertion passes on an implementation which
                 /// sends an empty delete - the exact bug this vector exists for
                 try await fixture.foreground()
@@ -1172,7 +1172,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
                 let calls: [(subRequests: Int, hasDelete: Bool)] = await fixture.batchShapes()
 
-                /// The reachability control: the store batch **did** go out and **did** land, so the path reached the point where
+                /// The reachability control: the store batch did go out and did land, so the path reached the point where
                 /// `V17` issues its sweep. Without this, total inaction satisfies the assertion below
                 expect(calls.first?.subRequests).to(equal(2))
                 await expect { await fixture.isStillRetryable("H2") }.to(beFalse())
@@ -1183,7 +1183,7 @@ class ConfigRecoverySpec: AsyncSpec {
 
             // MARK: -- V23d clears the expired flag itself when the repair lands
             it("V23d clears the expired flag itself when the repair lands") {
-                /// **The reactive path cannot do this one.** It clears the flag when a keys message is successfully *handled* -
+                /// The reactive path cannot do this one. It clears the flag when a keys message is successfully *handled* -
                 /// which happens on the *peer* that fetches the re-stored message. The device that did the re-storing already
                 /// holds that hash and will never re-handle it, so relying on reactivity leaves its own flag set forever over
                 /// keys it just put back on the swarm.
@@ -1202,7 +1202,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// The repair landed, so the hash is banked rather than left pending - which is the input to the eager clear
                 await expect { await fixture.isStillRetryable("H2") }.to(beFalse())
 
-                /// ⚠️ **The flag write itself is not asserted** - `applyKeysVerdictIfNeeded` goes through `updateAllAndConfig`
+                /// The flag write itself is not asserted - `applyKeysVerdictIfNeeded` goes through `updateAllAndConfig`
                 /// and this fixture has no database, the same gap recorded on `V16b` and `V23c`. What is pinned is that the
                 /// branch is reached with the *success* outcome: `attemptedKeysHashes` is non-empty and fully stored, which is
                 /// the only state that selects `notExpired` over `expired`
@@ -1230,7 +1230,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 expect(calls.filter { $0.subRequests > 0 }.count).to(equal(1))
                 await expect { await fixture.isStillRetryable("H2") }.to(beTrue())
 
-                /// ⚠️ **The expired-flag half is not asserted here, and that is a fixture limit rather than a design choice.**
+                /// The expired-flag half is not asserted here, and that is a fixture limit rather than a design choice.
                 /// `applyKeysVerdictIfNeeded` writes through `updateAllAndConfig`, and this fixture has no database - the same
                 /// gap already recorded on `V16b`. What *is* pinned is the decision input: `attemptedKeysHashes` is non-empty
                 /// only when a repair was attempted (`V23`), and it is empty whenever one was not (`V23a`), so the branch that
@@ -1250,7 +1250,7 @@ class ConfigRecoverySpec: AsyncSpec {
                 /// "the call didn't throw" is not "the config was stored", and treating it as such bars the hash on a response
                 /// where nothing was written - withdrawing recovery from a device whose config really is gone.
                 ///
-                /// The stubbed sub-response carries a **decodable body** with a 5xx code, so the status check is the only thing
+                /// The stubbed sub-response carries a decodable body with a 5xx code, so the status check is the only thing
                 /// that can reject it: an implementation keying on "didn't throw", or on whether the body parsed, accepts this
                 try await fixture.foreground()
                 try await fixture.stubRecovery(partCount: 2, outcome: .subRequestFailed)
@@ -1320,9 +1320,9 @@ private class ConfigRecoveryTestFixture: FixtureBase {
     /// A separate cache holding the read-only member view, so the member path can be exercised without disturbing the admin one
     private(set) var memberLibSessionCache: LibSession.Cache!
 
-    /// A cache holding **only** a `groupKeys` config, so the "a keys config is never recovered" guard can be reached
+    /// A cache holding only a `groupKeys` config, so the "a keys config is never recovered" guard can be reached
     ///
-    /// **Deliberately its own cache with nothing else in it.** A `.groupKeys` `Config` owns the keys, info *and* members
+    /// Deliberately its own cache with nothing else in it. A `.groupKeys` `Config` owns the keys, info *and* members
     /// pointers, so registering one alongside that group's `.groupInfo` would free the info pointer twice on deinit - which
     /// aborts the whole test process rather than failing a test
     private(set) var keysOnlyLibSessionCache: LibSession.Cache!
@@ -1339,7 +1339,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
 
     // MARK: - Convenience
 
-    /// A report whose missing hash is a **keys** hash the device holds bytes for, i.e. a repair in flight
+    /// A report whose missing hash is a keys hash the device holds bytes for, i.e. a repair in flight
     func keysReport(missing: Set<String>) -> ConfigRecovery.DetectionReport {
         return ConfigRecovery.DetectionReport(
             detection: .checked(missingHashes: missing),
@@ -1403,7 +1403,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         /// Every store's own sub-response is a decodable 2xx - the only shape that counts as landed
         case landed
 
-        /// The batch returns 200 while the store's **own** sub-response carries a 5xx
+        /// The batch returns 200 while the store's own sub-response carries a 5xx
         ///
         /// The body is still decodable on purpose: it leaves the status code as the *only* thing that can reject the store, so an
         /// implementation which keys off "didn't throw" or "the body parsed" accepts it
@@ -1420,7 +1420,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         /// `hf`/`t` every storage server response carries. The swarm may be empty because a sub-response inside a batch is not
         /// re-validated; only its code and whether the body parsed are read
         ///
-        /// Wrapped in `{"results": […]}` because that is what the **storage server** returns for `sequence` - it has no
+        /// Wrapped in `{"results": […]}` because that is what the storage server returns for `sequence` - it has no
         /// bare-array response path at all; the bare form is SOGS's, and `decodingResponses` branches on the difference. A
         /// bare-array stub here would test the right logic through a branch this path never takes
         let storeBody: String = "{\"hash\":\"H2\",\"swarm\":{},\"hf\":[19,3],\"t\":1}"
@@ -1514,7 +1514,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         )
     }
 
-    /// Whether the hash is still available for another attempt, i.e. it was **not** barred by the round that just ran
+    /// Whether the hash is still available for another attempt, i.e. it was not barred by the round that just ran
     func isStillRetryable(_ hash: String) async -> Bool {
         return await store.hashesEligibleForRecovery([hash], now: now).contains(hash)
     }
@@ -1664,13 +1664,13 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         /// The admin's keys message, needed to give the member view a decryption key
         let keysMessage: Data = (pushResult.map { Data(bytes: $0, count: pushResultLen) } ?? Data())
 
-        /// Push and confirm so the config is **clean** with a single known active hash - the state a real config is in
+        /// Push and confirm so the config is clean with a single known active hash - the state a real config is in
         /// whenever recovery could apply to it
         let config: LibSession.Config = .groupInfo(infoConf)
         let pushed: LibSession.PendingPushes? = try config.push(variant: .groupInfo)
         try config.confirmPushed(seqNo: (pushed?.pushData.first?.seqNo ?? 0), hashes: ["HASH-INFO"])
 
-        /// A **read-only member** view of the same group, for the member-path vector
+        /// A read-only member view of the same group, for the member-path vector
         ///
         /// Built the way a real member gets one: no group identity key (so `is_readonly()`), the admin's keys message loaded to
         /// supply the decryption key, then the admin's config merged in. That merge is what retains the admin's signature, which
@@ -1717,7 +1717,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         )
         memberLibSessionCache.setConfig(for: .groupInfo, sessionId: groupSessionId, to: .groupInfo(readOnlyInfoConf))
 
-        /// A **third** member view, used only to register a `groupKeys` config on its own
+        /// A third member view, used only to register a `groupKeys` config on its own
         ///
         /// It has to be its own state rather than reusing the member view above, for the double-free reason on
         /// `keysOnlyLibSessionCache`: that view's info pointer is already registered as `.groupInfo` elsewhere
@@ -1763,7 +1763,7 @@ private class ConfigRecoveryTestFixture: FixtureBase {
         _ = user_groups_get_or_construct_group(groupsConf, &userGroup, &cGroupId)
         _ = user_groups_set_group(groupsConf, &userGroup)
 
-        /// **Deliberately no `userGroups` on the member cache.** Registering the *same* config pointer in two
+        /// Deliberately no `userGroups` on the member cache. Registering the *same* config pointer in two
         /// `LibSession.Cache` instances double-frees it - each `ConfigStore.deinit` frees what it holds, so the second
         /// deallocation aborts the whole test process. The kicked/destroyed checks return `false` when the config is absent,
         /// which is what this path wants anyway

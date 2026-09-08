@@ -20,7 +20,7 @@ private extension Log.Category {
 /// put it back.
 ///
 /// This is safe because `libSession`'s config encryption is deterministic and the storage server derives a message's hash from
-/// its ciphertext, so re-storing an unchanged config produces **the same message hash it had before**. It isn't a new message
+/// its ciphertext, so re-storing an unchanged config produces the same message hash it had before. It isn't a new message
 /// competing with existing state, it's the same message going back where it was: no new seqno, no merge, no fork, and nothing
 /// can be overwritten. Two devices recovering at once compute the same hash and the second is a no-op.
 public enum ConfigRecovery {
@@ -43,7 +43,7 @@ public enum ConfigRecovery {
 
     /// What one poll's expiry detection found, handed straight from the poll to the two things that act on it
     ///
-    /// Deliberately a **parameter rather than cache state**. Storing a detection and consuming it later allows a verdict to be
+    /// Deliberately a parameter rather than cache state. Storing a detection and consuming it later allows a verdict to be
     /// picked up by the wrong poll, or silently dropped when nothing consumes it - and the accumulation bought nothing, because
     /// detection is repeated on every poll: a hash that is still missing is reported again next time. Android passes its report
     /// the same way (`Poller.kt` → `onUserConfigsChecked(auth, report:)`), so this is the shared shape rather than an iOS one
@@ -60,13 +60,13 @@ public enum ConfigRecovery {
         /// The `GroupKeys` hashes this report is attempting to repair, if any
         ///
         /// Held separately because the expired flag depends on the *outcome* for these specific hashes: while a repair is in
-        /// flight the group is not flagged, but a repair that **fails** leaves the user unable to decrypt, so the flag has to
+        /// flight the group is not flagged, but a repair that fails leaves the user unable to decrypt, so the flag has to
         /// be applied then. Every other missing hash has no bearing on it
         public let attemptedKeysHashes: Set<String>
 
         /// A detection that says nothing - the response couldn't answer, or nothing answered at all
         ///
-        /// **Note:** Deliberately not called `none`; that shadows `Optional.none` at any use site where the contextual type is
+        /// Note: Deliberately not called `none`; that shadows `Optional.none` at any use site where the contextual type is
         /// an optional, which is a silent mis-resolution rather than an error
         public static let noDetection: DetectionReport = DetectionReport(
             keysVerdict: .noVerdict,
@@ -98,9 +98,9 @@ public enum ConfigRecovery {
             let keysHashes: Set<String> = (activeHashesByVariant[.groupKeys] ?? [])
             let missingKeysHashes: Set<String> = missingHashes.intersection(keysHashes)
 
-            /// A keys config is recoverable when this device retained the bytes of **any** missing keys hash
+            /// A keys config is recoverable when this device retained the bytes of any missing keys hash
             ///
-            /// **Not all-or-nothing, and not grouped by generation.** `active_key_messages()` is keyed by hash with no
+            /// Not all-or-nothing, and not grouped by generation. `active_key_messages()` is keyed by hash with no
             /// generation in it, so "is this generation complete" is not a question the API can answer - and the recovery
             /// action re-stores *every* retained message rather than a subset, which is strictly more than
             /// generation-completeness would ask for and therefore satisfies it regardless. Re-stores are byte-identical and
@@ -129,7 +129,7 @@ public enum ConfigRecovery {
             )
         }
 
-        /// The group is expired **iff every** keys hash the device asked about is MISSING - a single surviving keys hash
+        /// The group is expired iff every keys hash the device asked about is MISSING - a single surviving keys hash
         /// clears it
         ///
         /// A device legitimately holds several keys hashes at once (a generation is one rekey message plus N
@@ -145,7 +145,7 @@ public enum ConfigRecovery {
             guard keysHashes.isSubset(of: missingHashes) else { return .notExpired }
 
             /// Every keys hash is gone - but if this device retained their bytes it can put them back, so the group is not
-            /// expired, it is *being repaired*. The flag is deliberately left **untouched** rather than cleared: a later poll
+            /// expired, it is *being repaired*. The flag is deliberately left untouched rather than cleared: a later poll
             /// seeing the keys present clears it reactively, which is what makes it a "not available to you right now" signal
             /// rather than a sticky one
             return (keysAreRecoverable ? .noVerdict : .expired)
@@ -160,19 +160,19 @@ public enum ConfigRecovery {
 
     /// The most sub-requests the storage server will accept in one batch
     ///
-    /// `BATCH_REQUEST_MAX` (`request_handler.h:62`). Exceeding it rejects the **whole** batch rather than truncating it, and
+    /// `BATCH_REQUEST_MAX` (`request_handler.h:62`). Exceeding it rejects the whole batch rather than truncating it, and
     /// both the JSON and bt paths allow exactly this many - the JSON check is `> MAX` while the bt one is `>= MAX` evaluated
     /// before pushing each sub-request, so the two agree despite looking different
     private static let subRequestLimit: Int = 20
 
     /// How long a successfully-stored hash is barred from being stored again
     ///
-    /// **Bounded in time rather than scoped to the session.** A session can outlive the 30-day config TTL - a backgrounded
+    /// Bounded in time rather than scoped to the session. A session can outlive the 30-day config TTL - a backgrounded
     /// mobile client, or a desktop client which has no foreground gate and runs for weeks - and in that window a hash barred
     /// after a *successful* store can expire from the swarm a second time. A session-scoped bar then blocks the recovery that
     /// would put it back, and the excluded population is long-lived sessions, which is exactly where configs expire.
     ///
-    /// **One hour**, because the bar only ever needed to outlast a burst of polls plus swarm replication lag - polls are
+    /// One hour, because the bar only ever needed to outlast a burst of polls plus swarm replication lag - polls are
     /// seconds apart and replication is seconds to minutes - while staying far enough under the TTL that it cannot interact
     /// with re-expiry at all. An hour is ~100x the lag it has to cover and 1/720th of the TTL, so both margins are large; it
     /// also bounds the worst case at 24 re-stores per hash per day if a config somehow keeps expiring
@@ -183,14 +183,14 @@ public enum ConfigRecovery {
 
     /// The longest a retry is ever deferred
     ///
-    /// **This bounds the interval, never the attempt count.** Recovery must keep trying indefinitely - a client with no
+    /// This bounds the interval, never the attempt count. Recovery must keep trying indefinitely - a client with no
     /// foreground gate stays open for days, so the growth exists to stop a persistently-failing swarm wasting requests, not
     /// to give up on it. Capping the interval rather than the count is what keeps this a deferral rather than a budget
     private static let maxFailureBackoff: TimeInterval = (30 * 60)
 
     /// Apply what the latest detection said about a group's keys config to its `expired` flag
     ///
-    /// **A keys config does have a recovery path, which is why the flag is not applied on sight.** libSession retains each
+    /// A keys config does have a recovery path, which is why the flag is not applied on sight. libSession retains each
     /// active keys message verbatim, so a device holding the bytes can push them back unchanged. Where that repair is
     /// available the verdict is `noVerdict` and the flag is left alone while it runs - a group being repaired is not a lost
     /// one - and `recoverIfNeeded` applies `expired` afterwards if the repair did not land. A device with no retained bytes
@@ -247,23 +247,23 @@ public enum ConfigRecovery {
 
     /// Backfill the raw bytes of keys messages this device holds a hash for but no bytes behind it
     ///
-    /// Retention captures a keys message's bytes **when it is loaded**, so a group that loaded its keys before retention
+    /// Retention captures a keys message's bytes when it is loaded, so a group that loaded its keys before retention
     /// existed holds the key and the hash and nothing else. Re-loading the same message fixes that: `insert_key` takes its
     /// early return - already have this key - which is a no-op for key state, but still `try_emplace`s the bytes and flags a
-    /// dump. **The merge that does nothing is exactly the merge that backfills.**
+    /// dump. The merge that does nothing is exactly the merge that backfills.
     ///
-    /// ⚠️ **Run proactively, NOT from the detection path.** Detection fires when the swarm has *lost* a hash; this fires when
+    /// Run proactively, NOT from the detection path. Detection fires when the swarm has *lost* a hash; this fires when
     /// *we* lack bytes for a hash the swarm still has. By the time detection fires the message is gone and the window has
     /// closed, so a backfill hung off detection looks right and is nearly useless.
     ///
-    /// **This feeds recovery rather than replacing it.** It restores the input; the ordinary re-store path does the work when
+    /// This feeds recovery rather than replacing it. It restores the input; the ordinary re-store path does the work when
     /// a later poll finds those hashes missing
     public static func backfillKeysIfNeeded(
         swarmPublicKey: String,
         fetchKeysMessages: () async throws -> [ConfigMessageReceiveJob.Details.MessageInfo],
         using dependencies: Dependencies
     ) async {
-        /// The trigger is **bytes-absent**, not keys-related: a hash we already hold bytes for needs nothing, and firing
+        /// The trigger is bytes-absent, not keys-related: a hash we already hold bytes for needs nothing, and firing
         /// anyway would issue a namespace read on every poll for every healthy group
         let missingBytes: Set<String> = dependencies.mutate(cache: .libSession) { cache in
             cache.activeHashesByVariant(for: swarmPublicKey)[.groupKeys, default: []]
@@ -294,7 +294,7 @@ public enum ConfigRecovery {
                 return
             }
 
-            /// The ordinary load path, **inside a database write** - and the write is not incidental.
+            /// The ordinary load path, inside a database write - and the write is not incidental.
             ///
             /// Retention lives in the config dump, so a merge that captures the bytes in memory without persisting the dump
             /// would be lost on the next launch: the backfill would appear to work and silently not. Going through the normal
@@ -312,7 +312,7 @@ public enum ConfigRecovery {
             switch stillMissing.isEmpty {
                 case true: Log.info(.cat, "Keys backfill captured bytes for \(missingBytes.count) hash(es) on \(swarmPublicKey).")
                 case false:
-                    /// **A fetch that returned messages and still left bytes missing is also an attempt that failed.**
+                    /// A fetch that returned messages and still left bytes missing is also an attempt that failed.
                     /// Recording only the empty case would leave this group looking un-attempted forever, which is the one
                     /// state the force rekey's precondition exists to distinguish
                     await dependencies[singleton: .configRecovery].markKeysBackfillFailed(swarmPublicKey: swarmPublicKey)
@@ -333,7 +333,7 @@ public enum ConfigRecovery {
     /// swarm holds re-stores the current result, which is correct by construction; the dangerous ordering is re-storing while
     /// the swarm still holds config we haven't taken in.
     ///
-    /// **Note:** "level with the swarm" is the property, not "a merge happened" - a merge is only *one* way to reach it, and
+    /// Note: "level with the swarm" is the property, not "a merge happened" - a merge is only *one* way to reach it, and
     /// the case this feature exists for reaches it the other way. A device whose configs have expired gets nothing back from
     /// the swarm to merge, so requiring a literal merge would disable recovery for exactly those devices.
     public static func recoverIfNeeded(
@@ -361,13 +361,13 @@ public enum ConfigRecovery {
             )
         else { return }
 
-        /// Hashes whose store **failed** and may therefore be attempted again later, subject to the backoff
+        /// Hashes whose store failed and may therefore be attempted again later, subject to the backoff
         var retryableHashes: Set<String> = []
 
         /// Hashes actually written this round - any success resets the swarm's backoff growth
         var storedHashes: Set<String> = []
 
-        /// Releasing the claim has to happen on **every** exit from here, and `defer` cannot `await` an actor - so it is
+        /// Releasing the claim has to happen on every exit from here, and `defer` cannot `await` an actor - so it is
         /// factored into one local closure called at each return rather than duplicated inline. Missing one would leave the
         /// swarm claimed for the rest of the session, which is a silent "recovery stopped working" rather than an error
         let release: (Set<String>, Set<String>) async -> Void = { storedHashes, retryableHashes in
@@ -408,7 +408,7 @@ public enum ConfigRecovery {
             )
             let timestampMs: UInt64 = await dependencies.networkOffsetTimestampMs()
 
-            /// Kept alongside its config so each store's **own** status can be checked afterwards
+            /// Kept alongside its config so each store's own status can be checked afterwards
             ///
             /// The batch itself succeeding says nothing about the stores inside it - a `sequence` returns 200 while its
             /// sub-requests carry their own codes, so treating "didn't throw" as "stored" would bar every hash on a response
@@ -434,19 +434,19 @@ public enum ConfigRecovery {
                 }
             /// Split into batches the server will actually accept
             ///
-            /// The storage server rejects a batch of **more than `subRequestLimit`** sub-requests outright - it does not
+            /// The storage server rejects a batch of more than `subRequestLimit` sub-requests outright - it does not
             /// truncate - so one oversized sequence loses every store in it, and it surfaces as a request failure rather than a
             /// size error. That matters more than it sounds: a single config can split into ~66 parts (`MAX_MULTIPART_SIZE` /
-            /// `MAX_MESSAGE_SIZE`), so **the accounts with the most to lose are exactly the ones whose recovery would be
-            /// rejected wholesale**.
+            /// `MAX_MESSAGE_SIZE`), so the accounts with the most to lose are exactly the ones whose recovery would be
+            /// rejected wholesale.
             ///
-            /// **The delete is a separate request, not part of any batch** - these chunks carry stores only. That is
+            /// The delete is a separate request, not part of any batch - these chunks carry stores only. That is
             /// deliberate rather than incidental: a full batch of `subRequestLimit` stores plus a delete would be one
             /// sub-request over the limit, and the server rejects the whole batch, so folding the delete in would reintroduce
             /// the overflow this chunking exists to prevent - on exactly the config sets that are a multiple of the limit.
             /// Ordering is preserved by sending it after every batch has completed instead.
             ///
-            /// **Note:** Derived from the limit, not from a concurrency cap. A limiter that happens to keep batches small is a
+            /// Note: Derived from the limit, not from a concurrency cap. A limiter that happens to keep batches small is a
             /// coincidence rather than a bound, and stops being true the moment someone raises it
             /// **Nothing to send is not the same as everything landing, and the difference is silent.**
             ///
@@ -473,7 +473,7 @@ public enum ConfigRecovery {
                 Array(storeRequests[start..<min(start + storesPerBatch, storeRequests.count)])
             }
 
-            /// Accumulated across batches - a batch which fails must leave **its own** configs retryable without condemning
+            /// Accumulated across batches - a batch which fails must leave its own configs retryable without condemning
             /// the ones another batch stored successfully
             var failedVariants: Set<ConfigDump.Variant> = []
 
@@ -491,7 +491,7 @@ public enum ConfigRecovery {
 
                     /// Check each store's own status, not just that the batch came back
                     ///
-                    /// A config counts as stored only if **every** one of its parts succeeded - a multipart config isn't
+                    /// A config counts as stored only if every one of its parts succeeded - a multipart config isn't
                     /// recovered until all its parts are back - so any part failing leaves the whole config retryable
                     let subResponses: [Any] = Array(response)
 
@@ -523,14 +523,14 @@ public enum ConfigRecovery {
                 .filter { !failedVariants.contains($0.variant) }
             storedHashes = landedRestores.reduce(into: []) { $0.formUnion($1.missingHashes) }
 
-            /// Delete the superseded hashes **only for restores that fully landed**, and only after the stores have run
+            /// Delete the superseded hashes only for restores that fully landed, and only after the stores have run
             ///
             /// The obsolete hashes are the ones our own config superseded, and `push()` cleared `libSession`'s copy of them, so
             /// they have to be swept here or they linger. But a restore that did *not* land leaves the swarm still holding the
             /// state those hashes belong to, and deleting them then would remove data with nothing put back in its place.
             ///
-            /// **Note:** No cross-round state is needed - the hashes are still in memory within this round. The delete is its
-            /// own request issued after every store batch, so it does **not** count against the chunk budget - and must not be
+            /// Note: No cross-round state is needed - the hashes are still in memory within this round. The delete is its
+            /// own request issued after every store batch, so it does not count against the chunk budget - and must not be
             /// folded into one, which would push a full batch one sub-request over the server's limit
             let hashesToSweep: Set<String> = landedRestores.reduce(into: []) { $0.formUnion($1.obsoleteHashes) }
 
@@ -572,7 +572,7 @@ public enum ConfigRecovery {
             /// Reached only if something *before* the batches threw - building the requests, or resolving auth. Each batch
             /// handles its own failure inline so one batch cannot condemn another's hashes.
             ///
-            /// A failed store is **not** an attempt spent - these stay eligible so a later poll can try again once the
+            /// A failed store is not an attempt spent - these stay eligible so a later poll can try again once the
             /// per-swarm backoff has elapsed. Barring them here would withdraw recovery for a whole bar interval over a blip
             retryableHashes.formUnion(
                 recoveryData.reduce(into: Set<String>()) { $0.formUnion($1.missingHashes) }
@@ -581,13 +581,13 @@ public enum ConfigRecovery {
             Log.error(.cat, "Failed to re-store expired config(s) for \(swarmPublicKey) due to error: \(error).")
         }
 
-        /// Apply the outcome of a keys repair to the expired flag - **both directions, and neither is optional**
+        /// Apply the outcome of a keys repair to the expired flag - both directions, and neither is optional
         ///
         /// The flag is withheld while a repair is in flight, because a group being repaired is not a lost one. Afterwards:
         ///
-        /// - **failed** → flag it. Withholding on a failed repair leaves the user unable to decrypt with no signal at all. The
+        /// - failed → flag it. Withholding on a failed repair leaves the user unable to decrypt with no signal at all. The
         ///   hashes stay retryable, so a later poll tries again under the usual backoff.
-        /// - **succeeded** → clear it **eagerly**, and this is the part that cannot be left to the reactive path. That path
+        /// - succeeded → clear it eagerly, and this is the part that cannot be left to the reactive path. That path
         ///   clears the flag when a keys message is successfully *handled*, but this device already holds the hash it just
         ///   put back and will never re-handle it. A peer that fetches it clears *their* flag; ours would stay set forever
         if !report.attemptedKeysHashes.isEmpty {
@@ -625,7 +625,7 @@ public extension ConfigRecovery {
 
         /// For marks made where there is no poll - see `ConfigMessageReceiveJob`
         ///
-        /// 🔴 **Never equal to any live token**, which is the whole point: a caller outside a poll must be able to say "we are
+        /// **Never equal to any live token**, which is the whole point: a caller outside a poll must be able to say "we are
         /// level" without thereby claiming "we are level as of the poll now running". Live tokens start at 1
         public static let outsideAPoll: PollToken = PollToken(value: 0)
 
@@ -636,7 +636,7 @@ public extension ConfigRecovery {
     /// The cross-poll bookkeeping config recovery needs: which swarms are level, which are mid-recovery, which hashes are
     /// barred, and how far each swarm's next retry is deferred
     ///
-    /// **An `actor` rather than a lock-guarded cache**, so the concurrency protection is the language's rather than
+    /// An `actor` rather than a lock-guarded cache, so the concurrency protection is the language's rather than
     /// hand-rolled. Everything a *single* poll discovers is passed as a parameter instead (see `DetectionReport`) - what
     /// remains here is only state that genuinely has to outlive one poll.
     ///
@@ -645,32 +645,32 @@ public extension ConfigRecovery {
     actor Store: ConfigRecoveryStoreType {
         /// When each hash stops being barred from another store attempt
         ///
-        /// **Time-bounded, not session-scoped.** A session can outlive the 30-day TTL, and in that window a hash barred after a
+        /// Time-bounded, not session-scoped. A session can outlive the 30-day TTL, and in that window a hash barred after a
         /// successful store can expire again - a session-scoped bar would block the recovery that would put it back.
         ///
-        /// **Note:** Not keyed by swarm - the storage server derives a message hash from the pubkey, namespace and
+        /// Note: Not keyed by swarm - the storage server derives a message hash from the pubkey, namespace and
         /// ciphertext, so the same hash can't belong to two swarms
         private var barredUntil: [String: Date] = [:]
 
         /// Swarms whose contents we have fully taken in, each stamped with the poll it happened in
         ///
-        /// **One field answers both questions, which is why it is a stamp rather than a flag.** *Have we ever been level this
+        /// One field answers both questions, which is why it is a stamp rather than a flag. *Have we ever been level this
         /// session* is `!= nil`, and *were we level as of the poll now running* is `== that poll's token`. Held separately the
         /// two can drift, because nothing forces every site that records levelness to record it in both places - and there are
         /// three such sites, one of which is not a poll at all
         private var swarmsLevelWithLocalState: [String: PollToken] = [:]
 
-        /// The poll each swarm is currently in, minted at the **start** of that poll
+        /// The poll each swarm is currently in, minted at the start of that poll
         ///
-        /// ⚠️ **Per swarm, and minted at the start.** A single global counter would let any other swarm's poll invalidate this
+        /// **Per swarm, and minted at the start.** A single global counter would let any other swarm's poll invalidate this
         /// swarm's mark, so the poll-scoped answer would go false moments after being made and the rekey would never fire -
         /// silent, because nothing errors. Minting at the *end* is worse: the token would name the poll that just finished, so
         /// a mark made during it would always match and the check would never refuse anything
         private var currentPollToken: [String: PollToken] = [:]
 
-        /// Swarms where we are known to have **failed** to take a config message in
+        /// Swarms where we are known to have failed to take a config message in
         ///
-        /// **This is sticky for the session, and it has to be.** A config message which parses but fails to merge has already
+        /// This is sticky for the session, and it has to be. A config message which parses but fails to merge has already
         /// had its `lastHash` advanced past it (that happens at parse time, before the merge), so the next poll won't return
         /// it - and a poll that returns no config messages is otherwise read as "we're level with the swarm". Without this,
         /// a lossy merge is corrected for exactly one poll and then silently becomes indistinguishable from a clean one
@@ -687,23 +687,23 @@ public extension ConfigRecovery {
 
         /// When each swarm may next be re-polled for keys-message bytes it is missing
         ///
-        /// **Separate from `barredUntil`, deliberately.** That map bars a hash from being *re-stored*, and reusing it here
+        /// Separate from `barredUntil`, deliberately. That map bars a hash from being *re-stored*, and reusing it here
         /// would bar the very hashes a successful backfill just made recoverable - so a backfill would block the re-store it
         /// exists to enable. Same one-hour interval, different subject
         private var keysBackfillBarredUntil: [String: Date] = [:]
 
-        /// Swarms where a keys backfill has **run and come back with nothing**
+        /// Swarms where a keys backfill has run and come back with nothing
         ///
-        /// Set for a swarm once a backfill has run **and the bytes are still absent** - whether the fetch came back empty or
+        /// Set for a swarm once a backfill has run and the bytes are still absent - whether the fetch came back empty or
         /// returned messages that did not restore them. Both are the same fact: we looked, and they are not here.
         ///
-        /// **A different question from the bar above, and they must not be collapsed.** The bar governs how often the backfill
+        /// A different question from the bar above, and they must not be collapsed. The bar governs how often the backfill
         /// retries; this records whether it has already tried and failed, which is the only thing that separates "nobody has
         /// repaired this group" from "nobody can" - the pair the force rekey turns on.
         ///
-        /// **In-memory and session-scoped, deliberately.** A persisted "tried and failed" is a sticky negative that would let
+        /// In-memory and session-scoped, deliberately. A persisted "tried and failed" is a sticky negative that would let
         /// an irreversible, universally-visible rekey fire on evidence gathered weeks ago, after the swarm has changed
-        /// underneath it. Session scope fails **closed**: after a relaunch the rekey is delayed by one poll rather than enabled
+        /// underneath it. Session scope fails closed: after a relaunch the rekey is delayed by one poll rather than enabled
         /// by a stale record. If a lapsing bar clears this too, that is harmless - it fails closed again
         private var keysBackfillFailed: Set<String> = []
 
@@ -712,7 +712,7 @@ public extension ConfigRecovery {
         public func beginKeysBackfill(swarmPublicKey: String, now: Date, interval: TimeInterval) -> Bool {
             if let barredUntil: Date = keysBackfillBarredUntil[swarmPublicKey], now < barredUntil { return false }
 
-            /// Recorded **before** the fetch, not after it, so a swarm whose keys are genuinely gone is barred by the attempt
+            /// Recorded before the fetch, not after it, so a swarm whose keys are genuinely gone is barred by the attempt
             /// rather than by its result. Recording on success only would leave exactly that group re-polling the namespace
             /// on every poll forever, which is the case this bar exists for
             keysBackfillBarredUntil[swarmPublicKey] = now.addingTimeInterval(interval)
@@ -755,12 +755,12 @@ public extension ConfigRecovery {
         }
 
         public func localStateIsLevelWithSwarm(swarmPublicKey: String, asOf token: PollToken) -> Bool {
-            /// ⚠️ **The named poll must still be the current one.** Matching the stamp alone only asks "was the mark made in
+            /// **The named poll must still be the current one.** Matching the stamp alone only asks "was the mark made in
             /// the poll you are naming" - which an old token satisfies, since the mark that poll left is still there. A caller
             /// holding a stale token would then be told it is level *now*, which is the staleness this exists to refuse
             guard currentPollToken[swarmPublicKey] == token else { return false }
 
-            /// ⚠️ **The lossy-merge disqualification applies here too.** On this client the withdrawal is a second set rather
+            /// The lossy-merge disqualification applies here too. On this client the withdrawal is a second set rather
             /// than a deletion, so a swarm with an incomplete merge still holds a stamp - matching the token alone would let
             /// exactly the state the withdrawal exists to exclude satisfy the stricter question
             return (
@@ -812,19 +812,19 @@ public extension ConfigRecovery {
         ) {
             inProgress.remove(swarmPublicKey)
 
-            /// A hash is barred **for `barInterval`** once it has been successfully stored, or once a guard has ruled it out.
+            /// A hash is barred for `barInterval` once it has been successfully stored, or once a guard has ruled it out.
             /// It is *not* barred by a store which failed - that is the one distinction here.
             ///
             /// Two properties, and it is worth being exact about which is which:
             ///
-            /// - **Bounded, not permanent.** The bar stops repeated *detections* causing a re-push storm, which only ever
+            /// - Bounded, not permanent. The bar stops repeated *detections* causing a re-push storm, which only ever
             ///   required outlasting a burst of polls. Making it last a whole session made it unbounded in time while the TTL
             ///   is not, so a hash could expire again behind its own bar - see `barInterval`.
-            /// - **Success and guard rejections only.** A store which failed is not a re-store, so barring it would withdraw
+            /// - Success and guard rejections only. A store which failed is not a re-store, so barring it would withdraw
             ///   recovery from a device with a genuinely expired config on the strength of one network blip. Retries are
             ///   bounded by the per-swarm backoff instead.
             ///
-            /// Guard rejections are barred on the **same clock**, and that is not merely for symmetry: "nothing will change
+            /// Guard rejections are barred on the same clock, and that is not merely for symmetry: "nothing will change
             /// within the session" is the same session-scoped assumption the time-bound exists to correct. Over weeks a kicked
             /// group can be rejoined, a destroyed one replaced, and a dirty config settles and becomes clean. Re-examining a
             /// rejection is free - the guards reject before any network call - so there was never a cost justifying permanence
@@ -834,13 +834,13 @@ public extension ConfigRecovery {
 
             /// Drop entries whose bar has lapsed, so the map cannot grow without bound across a long session
             ///
-            /// It would otherwise accumulate one entry per hash ever settled, and the hashes **rotate** - a re-pushed config
+            /// It would otherwise accumulate one entry per hash ever settled, and the hashes rotate - a re-pushed config
             /// occupies new ones - so this is genuine growth rather than the same keys being overwritten
             barredUntil = barredUntil.filter { _, expiry in expiry > now }
 
             /// Defer the next round when something is left to retry, doubling per consecutive failure up to the ceiling
             ///
-            /// **The growth is a deferral, not a cap** - the interval is bounded, the number of attempts never is. Any
+            /// The growth is a deferral, not a cap - the interval is bounded, the number of attempts never is. Any
             /// successful store resets it, which can't loop indefinitely because a stored hash is barred for `barInterval`
             /// afterwards, so a success cannot immediately re-arm the reset it just caused
             guard !retryableHashes.isEmpty else {
@@ -868,13 +868,13 @@ public extension ConfigRecovery {
 
 // MARK: - ConfigRecoveryStoreType
 
-/// **Note:** No immutable/mutable split - that pairing exists to stop unsynchronised mutation of a lock-guarded cache, and an
+/// Note: No immutable/mutable split - that pairing exists to stop unsynchronised mutation of a lock-guarded cache, and an
 /// actor enforces the same thing at the language level
 public protocol ConfigRecoveryStoreType: Actor {
     /// Whether our local state is known to be level with the given swarm
     func localStateIsLevelWithSwarm(swarmPublicKey: String) -> Bool
 
-    /// Whether we became level with this swarm **during the poll `token` identifies**, as opposed to at any earlier point
+    /// Whether we became level with this swarm during the poll `token` identifies, as opposed to at any earlier point
     func localStateIsLevelWithSwarm(swarmPublicKey: String, asOf token: ConfigRecovery.PollToken) -> Bool
 
     /// Filters `hashes` down to those not currently barred
@@ -916,7 +916,7 @@ public protocol ConfigRecoveryStoreType: Actor {
 
     /// Release the swarm after a recovery attempt
     ///
-    /// Everything in `claimedHashes` is barred for `barInterval` **except** `retryableHashes`, which are the ones whose store
+    /// Everything in `claimedHashes` is barred for `barInterval` except `retryableHashes`, which are the ones whose store
     /// failed and so may be attempted again once the backoff has elapsed
     func endRecovery(
         swarmPublicKey: String,

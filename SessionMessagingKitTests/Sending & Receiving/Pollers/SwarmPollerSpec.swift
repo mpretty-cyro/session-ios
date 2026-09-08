@@ -153,7 +153,7 @@ class SwarmPollerSpec: AsyncSpec {
         /// breaks the feature silently: too strict and recovery never runs, too loose and a device can re-store over state
         /// it hasn't seen yet.
         ///
-        /// Deliberately driven through the **real poll path** rather than by calling the recovery cache directly - supplying
+        /// Deliberately driven through the real poll path rather than by calling the recovery cache directly - supplying
         /// the precondition in test setup is exactly what would hide the defect these two cover.
         describe("a SwarmPoller deciding whether local state is level with the swarm") {
             // MARK: -- when every namespace answered with no messages
@@ -195,7 +195,7 @@ class SwarmPollerSpec: AsyncSpec {
             context("when a failed poll is followed by a clean one") {
                 // MARK: ---- V22e treats the local state as level, because a failed poll lost no information
                 it("V22e treats the local state as level, because a failed poll lost no information") {
-                    /// The narrowing that keeps the incomplete-merge stickiness honest: a failed fetch must **not** withdraw
+                    /// The narrowing that keeps the incomplete-merge stickiness honest: a failed fetch must not withdraw
                     /// the swarm for the session. Nothing was consumed - the read cursor never moved - so a later successful
                     /// poll is free to establish that we're level.
                     ///
@@ -227,7 +227,7 @@ class SwarmPollerSpec: AsyncSpec {
                     /// polling does with it (messages, merges, the failure counter).
                     ///
                     /// On iOS the escape route is closed by the type system rather than by a catch: `recoverIfNeeded` and
-                    /// `applyKeysVerdictIfNeeded` are `async` **without** `throws`, so the call sites below compile without
+                    /// `applyKeysVerdictIfNeeded` are `async` without `throws`, so the call sites below compile without
                     /// `try` and the compiler guarantees nothing propagates. `configRecoveryData` is likewise non-throwing in
                     /// the protocol, so not even a mock can throw from the inspection. This asserts the observable half:
                     /// recovery genuinely running and failing leaves the poll intact
@@ -271,7 +271,7 @@ class SwarmPollerSpec: AsyncSpec {
             context("when one config namespace failed and another returned a config message") {
                 // MARK: ---- V22b holds at the merge marker too, not just the empty-poll one
                 it("V22b holds at the merge marker too, not just the empty-poll one") {
-                    /// **There are two places that mark the swarm level, and `V22b` only ever reached one.** The empty-poll
+                    /// There are two places that mark the swarm level, and `V22b` only ever reached one. The empty-poll
                     /// marker is gated on every requested config namespace having answered; the merge marker - reached when a
                     /// config message *did* come back and merged completely - was not gated at all.
                     ///
@@ -283,15 +283,15 @@ class SwarmPollerSpec: AsyncSpec {
                         .when { try $0.handleConfigMessages(.any, swarmPublicKey: .any, messages: .any) }
                         .thenReturn(true)
 
-                    /// **`forceSynchronousProcessing: true` is load-bearing, not incidental.** The merge marker is only reached
+                    /// `forceSynchronousProcessing: true` is load-bearing, not incidental. The merge marker is only reached
                     /// when config messages are handled inside the poll, which needs
                     /// `namespace.shouldHandleSynchronously || forceSynchronousProcessing` - and of the user namespaces none
-                    /// handle synchronously. In production the reachable route is a **group** poll, where `.configGroupKeys`
+                    /// handle synchronously. In production the reachable route is a group poll, where `.configGroupKeys`
                     /// does handle synchronously; this is the same code path reached the cheap way
                     _ = try await require { try await fixture.poller.poll(forceSynchronousProcessing: true) }
                         .toNot(throwError())
 
-                    /// **Assert the premise first.** This vector is only about the merge marker, and the merge marker is only
+                    /// Assert the premise first. This vector is only about the merge marker, and the merge marker is only
                     /// reached if a config message was actually handed to `handleConfigMessages`. Without this the test passes
                     /// whenever the message failed to parse, which looks identical from the outside
                     await fixture.mockLibSessionCache
@@ -358,7 +358,7 @@ private class SwarmPollerTestFixture: FixtureBase {
 
     /// A real cache rather than a mock, since these tests are about the value it ends up holding
     ///
-    /// ⚠️ **Registered eagerly in `applyBaselineStubs`, and must stay that way.** Registering it from a `lazy var`
+    /// Registered eagerly in `applyBaselineStubs`, and must stay that way. Registering it from a `lazy var`
     /// initialiser instead would make correct wiring depend on *where the first property access happens* - a test reading it
     /// midway would repair itself for the rest of its body, and one reading it only at the end would silently assert against a
     /// different instance than the poller mutated
@@ -483,7 +483,7 @@ private class SwarmPollerTestFixture: FixtureBase {
                 )
             }
             .thenReturn(
-                /// The **storage server** shape (`{"results": […]}`), not the bare array SOGS returns - these tests drive a
+                /// The storage server shape (`{"results": […]}`), not the bare array SOGS returns - these tests drive a
                 /// swarm poll, and `decodingResponses` takes a different branch for each, so the bare form would exercise a
                 /// branch this path never reaches
                 MockNetwork.storageServerBatchResponseData(

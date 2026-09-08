@@ -9,11 +9,11 @@ import Nimble
 
 @testable import SessionNetworkingKit
 
-/// Covers the config expiry detection rule itself - vectors **V1-V9**; the guards and the recovery action - **V9-V13** - are
+/// Covers the config expiry detection rule itself - vectors V1-V9; the guards and the recovery action - V9-V13 - are
 /// covered by `ConfigRecoverySpec` in `SessionMessagingKitTests`
 ///
 /// These vectors exist because the detection logic is implemented independently on iOS, Android and Desktop rather than being
-/// shared in `libSession`, so they are the only thing keeping the three consistent. **Do not relax one to make it pass.**
+/// shared in `libSession`, so they are the only thing keeping the three consistent. Do not relax one to make it pass.
 class ConfigExpiryDetectionSpec: AsyncSpec {
     override class func spec() {
         typealias Detection = Network.StorageServer.ConfigExpiryDetection
@@ -42,18 +42,18 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
             )
         }
 
-        /// A sub-response carrying `failed: true` **which still reported what it holds**
+        /// A sub-response carrying `failed: true` which still reported what it holds
         ///
-        /// **`hasUnchangedInfo` is `true` deliberately, and the vectors below depend on it.** A node that failed *and* omitted
-        /// `unchanged` is excluded by **either** half of the eligibility check, so a fixture in that shape cannot tell the two
+        /// `hasUnchangedInfo` is `true` deliberately, and the vectors below depend on it. A node that failed *and* omitted
+        /// `unchanged` is excluded by either half of the eligibility check, so a fixture in that shape cannot tell the two
         /// halves apart - the failed-check could be deleted outright and every test here would still pass. Giving it the
         /// `unchanged` key leaves *being failed* as the only reason to exclude it.
         ///
         /// The shape is real on the wire: a service node can report `failed` while still carrying `unchanged`, and reading such
-        /// a node as usable makes its empty arrays authoritative - **every requested hash reported missing**, which authorises
+        /// a node as usable makes its empty arrays authoritative - every requested hash reported missing, which authorises
         /// re-storing configs the swarm still holds and then deleting its older copies.
         ///
-        /// **Note:** iOS's own `validResultMap` currently flattens any failure to `hasUnchangedInfo: false`, so this exact
+        /// Note: iOS's own `validResultMap` currently flattens any failure to `hasUnchangedInfo: false`, so this exact
         /// combination cannot arrive through that path today. `detect` is a pure function whose contract has to hold for every
         /// input its type admits, and the failed-check is what protects it if that flattening is ever relaxed
         func failedNode() -> Result {
@@ -163,12 +163,12 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
                 // MARK: ---- V8 refuses to detect when the request didn't set extend
                 it("V8 refuses to detect when the request didn't set extend") {
-                    /// **The sub-response is deliberately READABLE, which the real one would not be.** A server that never saw
+                    /// The sub-response is deliberately READABLE, which the real one would not be. A server that never saw
                     /// `extend` omits `unchanged`, so the production shape satisfies *two* sufficient causes at once - the
                     /// request flag and the absent key - and a fixture carrying both passes with either guard deleted. It would
                     /// then be `V8b` under `V8`'s name.
                     ///
-                    /// Handing it a response that *could* be read isolates the claim: we refuse because **we never asked**, not
+                    /// Handing it a response that *could* be read isolates the claim: we refuse because we never asked, not
                     /// because the answer was unusable
                     let result: Detection = Detection.detect(
                         requestedHashes: [h1, h2],
@@ -182,9 +182,9 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
                 // MARK: ---- V8b refuses to detect when the response omitted unchanged despite extend
                 it("V8b refuses to detect when the response omitted unchanged despite extend") {
-                    /// **The same verdict as `V8`, reached by the other route.** `V8` arrives via the **request flag** - we know
-                    /// we never asked for `unchanged`, so we know the answer can't contain it. `V8b` arrives via the **response
-                    /// key** - we did ask, and the node didn't supply it anyway. A parser branching only on the flag passes `V8`
+                    /// The same verdict as `V8`, reached by the other route. `V8` arrives via the request flag - we know
+                    /// we never asked for `unchanged`, so we know the answer can't contain it. `V8b` arrives via the response
+                    /// key - we did ask, and the node didn't supply it anyway. A parser branching only on the flag passes `V8`
                     /// and fails this; one branching only on the key does the reverse, so neither vector covers the other.
                     ///
                     /// The route matters because the second case is the one that happens in production without anyone changing
@@ -197,7 +197,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                     )
 
                     /// An absent key means "this response can't answer", never "nothing else is held" - the inverted reading
-                    /// reports **every** config gone and re-stores the lot, which is why both halves are asserted
+                    /// reports every config gone and re-stores the lot, which is why both halves are asserted
                     expect(result).to(equal(.unavailable))
                     expect(result.missingHashes).to(beEmpty())
                     expect(result.missingHashes).toNot(contain(h2))
@@ -211,7 +211,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                         resultMap: ["A": node(updated: ["P1", "P3"])]
                     )
 
-                    /// Only the absent part is missing - and since a config is only healthy when **all** of its parts are
+                    /// Only the absent part is missing - and since a config is only healthy when all of its parts are
                     /// present, this config is not healthy
                     expect(result).to(equal(.checked(missingHashes: ["P2"])))
                 }
@@ -222,7 +222,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                     /// the closest `detect` can be asked is with an empty hash list - which must not come back as a conclusive
                     /// "nothing is missing".
                     ///
-                    /// **The swarm is deliberately NOT empty.** Asking with no hashes *and* no sub-responses satisfies two
+                    /// The swarm is deliberately NOT empty. Asking with no hashes *and* no sub-responses satisfies two
                     /// sufficient causes - the empty ask and the absence of any usable answer - so that fixture returns
                     /// `inconclusive` with the empty-ask guard deleted, and would be testing the swarm instead of the ask. A
                     /// readable node isolates it
@@ -257,7 +257,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
             // MARK: -- when the unchanged key is absent
             context("when the unchanged key is absent") {
-                /// **Note:** The single-node case is `V8b` above; what is covered here is the *mixed* case, which is a
+                /// Note: The single-node case is `V8b` above; what is covered here is the *mixed* case, which is a
                 /// different claim. Naming them apart matters - stated as two prose descriptions they read as duplicates, and
                 /// one of a genuine pair gets deleted
                 ///
@@ -340,7 +340,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
         // MARK: - a mixed UpdateExpiryResponse
         ///
-        /// **This layer, not `detect`, is where iOS decides what counts as an answer.** `detect` receives a `resultMap` in which
+        /// This layer, not `detect`, is where iOS decides what counts as an answer. `detect` receives a `resultMap` in which
         /// every unusable sub-response has already collapsed into `didError`, so a mixed-readability vector written against
         /// `detect` is `V5` under another name. The distinction lives in `validResultMap`, so the vector is asserted from the
         /// wire response down
@@ -351,7 +351,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
 
             /// One node we can validate and one we cannot, in a single response
             ///
-            /// **"Unreadable" here means unvalidatable, which is deliberately *not* the `failed` flag** - that case is `V5`. A
+            /// "Unreadable" here means unvalidatable, which is deliberately *not* the `failed` flag - that case is `V5`. A
             /// sub-response missing its signature is the distinct route: it arrived, it claims nothing went wrong, and we still
             /// cannot treat anything in it as an answer
             let mixedResponse: Data = """
@@ -384,7 +384,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                 // MARK: ---- V8c honours the readable node without counting the unreadable one
                 it("V8c honours the readable node without counting the unreadable one") {
                     /// The mixed case neither `V6` nor `V8` reaches: `V6` is every node failing, `V8`/`V8b` are a response which
-                    /// can't answer at all. Here one node answers and one is noise, and **both halves have to hold at once** -
+                    /// can't answer at all. Here one node answers and one is noise, and both halves have to hold at once -
                     /// dropping the readable node's verdict disables recovery, while counting the unreadable node's empty arrays
                     /// as absence marks every hash we asked about as gone
                     let response: Network.StorageServer.UpdateExpiryResponse = try JSONDecoder(using: dependencies)
@@ -395,7 +395,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                         using: dependencies
                     )
 
-                    /// The fixture is what it claims: one usable answer and one unusable one, **both still present in the map**
+                    /// The fixture is what it claims: one usable answer and one unusable one, both still present in the map
                     ///
                     /// Retaining the unusable entry matters beyond bookkeeping - `requiredSuccessfulResponses` is `-1`, so
                     /// filtering failures out of the map instead of flagging them would drop the success ratio below 100% and
@@ -411,7 +411,7 @@ class ConfigExpiryDetectionSpec: AsyncSpec {
                         resultMap: resultMap
                     )
 
-                    /// `H2` missing comes from the readable node; `H1` **not** missing is what proves the unreadable node was
+                    /// `H2` missing comes from the readable node; `H1` not missing is what proves the unreadable node was
                     /// excluded rather than read as absence
                     expect(result).to(equal(.checked(missingHashes: [h2])))
                     expect(result.missingHashes).toNot(contain(h1))

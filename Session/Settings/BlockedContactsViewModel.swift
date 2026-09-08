@@ -61,7 +61,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     let emptyStateTextPublisher: AnyPublisher<String?, Never> = Just("blockBlockedNone".localized())
             .eraseToAnyPublisher()
     
-    /// **`@MainActor` because `internalState` is.** Without it this `lazy var`'s initialiser - and the subscription to
+    /// `@MainActor` because `internalState` is. Without it this `lazy var`'s initialiser - and the subscription to
     /// `$internalState` it builds - can run on any thread, while the observation task writes `internalState` on the main
     /// actor. Lazy-var initialisation is not thread-safe in Swift, so the subscription list can be built on one thread while
     /// it is being sent on from another, which segfaults inside `PublishedSubject.send`

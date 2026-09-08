@@ -12,7 +12,7 @@ protocol SessionTableViewModel: AnyObject, SectionedTableData {
     var dependencies: Dependencies { get }
     
     var searchable: Bool { get }
-    /// **The `@MainActor` members below read main-actor view state, so the requirement carries the isolation.**
+    /// The `@MainActor` members below read main-actor view state, so the requirement carries the isolation.
     ///
     /// A witness inherits global-actor isolation from the requirement it satisfies, which is what makes this preventative
     /// rather than corrective: a conformer that declares a plain `lazy var footerButtonInfo = $internalState.map { … }` is

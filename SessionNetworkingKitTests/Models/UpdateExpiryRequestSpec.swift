@@ -9,7 +9,7 @@ import Nimble
 
 @testable import SessionNetworkingKit
 
-/// These assert what actually reaches **the wire**, not what the caller passed in
+/// These assert what actually reaches the wire, not what the caller passed in
 ///
 /// That distinction is the whole point: `updateExpiry` accepted `shortenOnly`/`extendOnly` and silently dropped both on the
 /// way to the request for as long as they had existed, and no test of the caller's arguments or of the request type in
@@ -61,12 +61,12 @@ class UpdateExpiryRequestSpec: AsyncSpec {
             /// Prove a real `expire` request reached the wire before any caller inspects it
             ///
             /// Without this, a `nil` body would satisfy every `toNot(contain:)` assertion in this file - and the "sends
-            /// neither flag" case is made **entirely** of those, so it would pass while measuring nothing at all. The
+            /// neither flag" case is made entirely of those, so it would pass while measuring nothing at all. The
             /// `try?` above deliberately swallows the send failure (the body is already encoded by then), which means
             /// nothing else here would notice a request that was never built
             /// Prove this is really the `expire` request before any caller inspects the flags
             ///
-            /// **Note:** `wasCalled(atLeast: 1)` above is itself an assertion, so it already fails if no send happened -
+            /// Note: `wasCalled(atLeast: 1)` above is itself an assertion, so it already fails if no send happened -
             /// the file was never vulnerable to a `nil` body the way its `toNot(contain:)`-only test suggested. These add
             /// the part `wasCalled` cannot give: that the captured call is *this* request rather than merely some request
             expect(body).to(contain("H1"))
@@ -151,7 +151,7 @@ class UpdateExpiryRequestSpec: AsyncSpec {
 
 /// Signs with a fixed value - this spec is about what reaches the wire, not about the signature itself
 ///
-/// **Note:** `Authentication.standard` lives in `SessionMessagingKit`, which this target can't see
+/// Note: `Authentication.standard` lives in `SessionMessagingKit`, which this target can't see
 private struct TestAuthentication: AuthenticationMethod {
     var info: Authentication.Info {
         .standard(

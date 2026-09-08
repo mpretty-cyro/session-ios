@@ -95,12 +95,12 @@ public extension Network.StorageServer {
         
         /// Then extract and return the message responses
         ///
-        /// ⚠️ **This pairs namespaces to responses BY POSITION, over a filtered collection.** Two properties keep that sound,
+        /// This pairs namespaces to responses BY POSITION, over a filtered collection. Two properties keep that sound,
         /// and both are load-bearing rather than incidental:
         ///
-        /// 1. **The `updateExpiry` sub-request is prepended, never interleaved** (see above), so filtering to the retrieve type
+        /// 1. The `updateExpiry` sub-request is prepended, never interleaved (see above), so filtering to the retrieve type
         ///    leaves the remainder in `namespaces` order.
-        /// 2. **A failed retrieve still decodes as `BatchSubResponse<PreparedGetMessagesResponse>`** - with `body == nil` and
+        /// 2. A failed retrieve still decodes as `BatchSubResponse<PreparedGetMessagesResponse>` - with `body == nil` and
         ///    `failedToParseBody` set - because the sub-response type comes from the request's declared type, not from the
         ///    response content. So a failure keeps its slot instead of dropping out and shifting everything after it.
         ///
@@ -110,7 +110,7 @@ public extension Network.StorageServer {
         /// asked about. Nothing here would throw, and no existing test would catch it.
         ///
         /// The count is guarded by `requireAllBatchResponses: true` above, which is affordable here because `batch` runs every
-        /// sub-request. It is deliberately **not** set on the `sequence` used by config recovery, which stops at the first
+        /// sub-request. It is deliberately not set on the `sequence` used by config recovery, which stops at the first
         /// failure and so legitimately returns a short (tail-truncated) list
         let messageResponses: [Network.BatchSubResponse<PreparedGetMessagesResponse>] = batchResponse
             .compactMap { $0 as? Network.BatchSubResponse<PreparedGetMessagesResponse> }
@@ -388,7 +388,7 @@ public extension Network.StorageServer {
         /// Now that we know which hashes each service node reported holding we can work out whether any of the
         /// messages we tried to extend have already been swept from the swarm
         ///
-        /// **Note:** This runs regardless of the app state (detection is free, it's inside a response we were waiting
+        /// Note: This runs regardless of the app state (detection is free, it's inside a response we were waiting
         /// for anyway) - it's the *acting* on it which is restricted to the foreground
         if let onExpiryDetection: (ConfigExpiryDetection, Dependencies) async -> Void = onExpiryDetection {
             await onExpiryDetection(

@@ -158,21 +158,21 @@ public protocol ErasedBatchSubResponse: ResponseInfoType {
 // MARK: - Convenience
 
 internal extension Network.BatchResponse {
-    /// Re-serialise one sub-response so it can be decoded as its own type, **failing the whole response rather than losing it**
+    /// Re-serialise one sub-response so it can be decoded as its own type, failing the whole response rather than losing it
     ///
     /// Two hazards live in this one call, and neither is what it looks like:
     ///
-    /// - **Losing an element is not survivable.** `decodingResponses` pairs sub-responses to their expected types by
-    ///   **position** (`zip` below), and callers pair them to *their* requests by position too. Dropping one silently shifts
-    ///   every later response onto the wrong request, which **misattributes** rather than fails - on the config path that means
+    /// - Losing an element is not survivable. `decodingResponses` pairs sub-responses to their expected types by
+    ///   position (`zip` below), and callers pair them to *their* requests by position too. Dropping one silently shifts
+    ///   every later response onto the wrong request, which misattributes rather than fails - on the config path that means
     ///   expiry detection reporting hashes it never asked about, and configs re-stored that were never lost. Nothing throws and
     ///   nothing looks wrong. So this maps rather than compact-maps: a sub-response we can't handle fails the response.
     ///
-    /// - **`data(withJSONObject:)` RAISES rather than throws.** For an invalid top-level type it raises
+    /// - `data(withJSONObject:)` RAISES rather than throws. For an invalid top-level type it raises
     ///   `NSInvalidArgumentException`, which is an Objective-C exception - `try?` cannot catch it and the process aborts. Every
-    ///   element `JSONSerialization.jsonObject` can produce is either a container (valid, always serialises) or a **scalar**
+    ///   element `JSONSerialization.jsonObject` can produce is either a container (valid, always serialises) or a scalar
     ///   (`NSNumber`/`NSString`/`NSNull`/`NSCFBoolean` - never valid), so a response like `{"results":[1]}` is not a parse
-    ///   failure, it is a **crash**. `isValidJSONObject` is the same predicate the raise is guarded on, so checking it first is
+    ///   failure, it is a crash. `isValidJSONObject` is the same predicate the raise is guarded on, so checking it first is
     ///   what converts that into a recoverable error
     private static func reserialised(subResponse: Any) throws -> Data {
         guard JSONSerialization.isValidJSONObject(subResponse) else { throw NetworkError.parsingFailed }
@@ -196,7 +196,7 @@ internal extension Network.BatchResponse {
         let dataArray: [Data]
         
         switch jsonObject {
-            /// The **SOGS** shape - `sogs/routes/general.py` returns a plain list rather than wrapping it, which is the only
+            /// The SOGS shape - `sogs/routes/general.py` returns a plain list rather than wrapping it, which is the only
             /// reason this branch exists alongside the one below
             case let anyArray as [Any]:
                 /// Same handling as the storage-server branch, and for the same two reasons - a lost sub-response shifts every
@@ -208,7 +208,7 @@ internal extension Network.BatchResponse {
                     throw NetworkError.parsingFailed
                 }
 
-            /// The **storage server** shape - `batch` and `sequence` both wrap their sub-results in `results`, and there is no
+            /// The storage server shape - `batch` and `sequence` both wrap their sub-results in `results`, and there is no
             /// bare-array response path from it, so this is the branch every config poll and config recovery takes
             case let anyDict as [String: Any]:
                 guard let subResponses: [Any] = anyDict["results"] as? [Any] else { throw NetworkError.parsingFailed }

@@ -129,9 +129,9 @@ extension MockNetwork {
         return response(info: info, with: [T.mock])
     }
     
-    /// A **bare JSON array** of sub-responses, which is the shape **SOGS** returns
+    /// A bare JSON array of sub-responses, which is the shape SOGS returns
     ///
-    /// `sogs/routes/general.py` builds a plain list and jsonifies it. The storage server does **not** - see
+    /// `sogs/routes/general.py` builds a plain list and jsonifies it. The storage server does not - see
     /// `storageServerBatchResponseData` - and `Network.BatchResponse.decodingResponses` has a separate branch for each, so
     /// stubbing the wrong one exercises a branch the device under test never takes
     static func batchResponseData<E: EndpointType>(
@@ -144,7 +144,7 @@ extension MockNetwork {
         return (info, data)
     }
 
-    /// A `{"results": […]}` dict, which is the shape the **storage server** returns for both `batch` and `sequence`
+    /// A `{"results": […]}` dict, which is the shape the storage server returns for both `batch` and `sequence`
     ///
     /// Not interchangeable with `batchResponseData`: `request_handler.cpp` wraps both endpoints' sub-results in `results`
     /// (documented at `client_rpc_endpoints.h` - *"a dict with key `results` containing a list of the same length as the

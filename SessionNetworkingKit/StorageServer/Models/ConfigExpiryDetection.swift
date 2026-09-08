@@ -11,7 +11,7 @@ public extension Network.StorageServer {
     ///
     /// The `expire` endpoint is recursive - one service node fans the request out to the whole swarm and returns a
     /// `swarm` dict keyed by service node pubkey, where each entry reports the hashes it `updated` and the hashes it
-    /// still holds but left `unchanged`. A hash in **neither** array means that node's database has no such message
+    /// still holds but left `unchanged`. A hash in neither array means that node's database has no such message
     /// for this account
     ///
     /// This is deliberately a standalone value type rather than logic buried in the poller so the rule can be exercised
@@ -72,7 +72,7 @@ public extension Network.StorageServer.ConfigExpiryDetection {
         /// separate check for a swarm which returns no config messages at all, and this must not pre-empt it
         guard !requestedHashes.isEmpty else { return .inconclusive }
 
-        /// A sub-response is eligible only if it didn't fail **and** it actually told us what it still holds
+        /// A sub-response is eligible only if it didn't fail and it actually told us what it still holds
         ///
         /// An ineligible sub-response contributes nothing - it is neither evidence of presence nor of absence. Failed
         /// entries may also carry `timeout`, `code`, `reason`, `bad_peer_response` or `query_failure` but none of that
@@ -93,7 +93,7 @@ public extension Network.StorageServer.ConfigExpiryDetection {
             )
         }
 
-        /// A hash is missing if it is absent from both `updated` and `unchanged` in at least **one** eligible
+        /// A hash is missing if it is absent from both `updated` and `unchanged` in at least one eligible
         /// sub-response - presence in the others does not override that
         ///
         /// One node reporting absence is enough on purpose: re-storing is idempotent so a false positive costs a

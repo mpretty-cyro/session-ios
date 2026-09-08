@@ -265,17 +265,17 @@ public extension LibSession {
         ///
         /// This is what makes a keys config recoverable at all. A keys message is admin-signed and its junk padding derives
         /// from the signing key, so it cannot be regenerated - least of all by a member. Pushing the retained bytes back
-        /// **unchanged** lands on the same hash and is idempotent, exactly like the other configs, and needs no signature.
+        /// unchanged lands on the same hash and is idempotent, exactly like the other configs, and needs no signature.
         ///
-        /// **Note:** A hash from `activeHashes()` may legitimately have no bytes here - retention only covers messages loaded
+        /// Note: A hash from `activeHashes()` may legitimately have no bytes here - retention only covers messages loaded
         /// since the device began keeping them, so a group that existed before it has hashes with nothing behind them. That is
         /// a "not by this device *yet*" answer, not an error and not permanent: re-loading the message backfills the bytes, so
         /// the gap closes for any group whose keys message is still on the swarm. Only once the message has expired from the
         /// swarm as well is the group beyond this device's reach.
         ///
-        /// **Retention happens on LOAD, not on create** - so the device that *authored* a keys message holds no bytes for it
+        /// Retention happens on LOAD, not on create - so the device that *authored* a keys message holds no bytes for it
         /// until it loads its own message back from the swarm. An admin immediately after a rekey is therefore the device
-        /// **least** able to repair, not the most, which is the opposite of the intuition. The pointer libSession hands back is **borrowed** and invalidated by anything that modifies
+        /// least able to repair, not the most, which is the opposite of the intuition. The pointer libSession hands back is borrowed and invalidated by anything that modifies
         /// the config, so the bytes are copied out immediately
         func activeKeyMessages() -> [String: Data] {
             switch self {
@@ -299,7 +299,7 @@ public extension LibSession {
 
         /// Merge the given messages into this config
         ///
-        /// **Note:** `mergedCount` is reported separately because a partial merge is **not** an error - one undecryptable
+        /// Note: `mergedCount` is reported separately because a partial merge is not an error - one undecryptable
         /// message must not fail a whole poll - so the timestamp alone can't distinguish "took everything in" from "took some
         /// of it in". Anything that needs to know our state is level with the swarm has to compare the counts
         func merge(
@@ -435,7 +435,7 @@ public extension LibSession {
 public extension LibSession {
     /// Everything needed to put a single config back on its swarm after it expired from there
     ///
-    /// This is generated from a **clean** config via the same `push()` call a normal sync uses, so storing `data`
+    /// This is generated from a clean config via the same `push()` call a normal sync uses, so storing `data`
     /// reproduces the message hashes the config already had rather than creating a new revision
     struct ConfigRecoveryData: Equatable {
         public let variant: ConfigDump.Variant
@@ -445,13 +445,13 @@ public extension LibSession {
 
         /// Every hash which currently makes up this config
         ///
-        /// For a multipart config this is one hash per part, and the config is only healthy once **all** of them are
+        /// For a multipart config this is one hash per part, and the config is only healthy once all of them are
         /// present again
         public let allHashes: Set<String>
 
         /// The serialised parts to store (one entry for a normal config, one per part for a multipart config)
         ///
-        /// **Note:** `libSession` returns `activeHashes()` as an unordered set so there is no way to map a part hash back
+        /// Note: `libSession` returns `activeHashes()` as an unordered set so there is no way to map a part hash back
         /// to its index here, which is why every part of an affected config is re-stored rather than just the missing
         /// ones. Storing a part which is still present is a no-op TTL refresh, so this is safe - just marginally more
         /// data than the minimum
@@ -462,7 +462,7 @@ public extension LibSession {
 
         /// Hashes `libSession` considers superseded
         ///
-        /// `ConfigBase::push()` hands these over and **clears its own copy** even when the config is clean, so they have
+        /// `ConfigBase::push()` hands these over and clears its own copy even when the config is clean, so they have
         /// to be carried through to a delete request the way a normal push does or they'd be silently dropped and the
         /// messages would linger on the swarm until their TTL expired
         public let obsoleteHashes: Set<String>
@@ -490,8 +490,8 @@ public extension LibSession {
 public extension LibSession {
     /// The outcome of inspecting a swarm's configs for recovery
     ///
-    /// The two fields mean genuinely different things and must not be collapsed: a config absent from `data` because a **guard**
-    /// ruled it out is settled and must never be re-stored, whereas one absent because the inspection **threw** has no verdict
+    /// The two fields mean genuinely different things and must not be collapsed: a config absent from `data` because a guard
+    /// ruled it out is settled and must never be re-stored, whereas one absent because the inspection threw has no verdict
     /// at all and has to stay eligible. Treating the second as the first bars a hash on a transient error
     struct ConfigRecoveryInspection: Equatable {
         public let data: [ConfigRecoveryData]

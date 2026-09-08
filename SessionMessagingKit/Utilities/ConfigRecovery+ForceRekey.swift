@@ -18,7 +18,7 @@ public extension ConfigRecovery {
     /// admins can reach the precondition in the same window - they poll the same swarm and see the same missing keys - and
     /// without a bound each of them rekeys on every poll.
     ///
-    /// **Long, and longer than the re-store bar, because the two bound different risks.** That bar governs a redundant
+    /// Long, and longer than the re-store bar, because the two bound different risks. That bar governs a redundant
     /// re-store, which sends byte-identical data and costs one request. This one governs a rekey, which makes every member on
     /// every version process a new generation and can leave content encrypted under superseded keys unreadable to anyone who
     /// never held them. So the two err in opposite directions, and the delay costs nothing by comparison - a group that reaches
@@ -28,11 +28,11 @@ public extension ConfigRecovery {
 
     /// Rekey the group so its members get usable keys again
     ///
-    /// **The caller must already have established** that a backfill ran and left the bytes absent, and that detection says the
+    /// The caller must already have established that a backfill ran and left the bytes absent, and that detection says the
     /// swarm has lost them - i.e. *nobody has it and it is gone*. This checks only what is its own: that we are an admin, and
     /// that we have not just done this.
     ///
-    /// **Admin-only, and a member must not appear to try.** A member cannot produce a keys message at all, so a member reaching
+    /// Admin-only, and a member must not appear to try. A member cannot produce a keys message at all, so a member reaching
     /// the rekey would generate auth failures rather than a repair.
     ///
     /// ## What an unnecessary rekey costs
@@ -42,7 +42,7 @@ public extension ConfigRecovery {
     /// is still on the swarm because every other member's poll renews its TTL. The cost is that every member processes a new
     /// generation, and content encrypted under superseded keys may be unreadable to anyone who never held them.
     ///
-    /// 🔴 **The exclusion risk is the members view, not the rekey.** The new key is encrypted to *this device's* view of the
+    /// **The exclusion risk is the members view, not the rekey.** The new key is encrypted to *this device's* view of the
     /// membership, and this fires precisely on devices whose config state is known to be degraded. A member added while we were
     /// away and not yet merged locally is silently excluded by a rekey issued from that stale view.
     ///
@@ -53,7 +53,7 @@ public extension ConfigRecovery {
         pollToken: ConfigRecovery.PollToken,
         using dependencies: Dependencies
     ) async {
-        /// Levelness reached **during this poll**, not at any earlier point. A device level only as of an older poll may have
+        /// Levelness reached during this poll, not at any earlier point. A device level only as of an older poll may have
         /// missed a member added since, and `rekey` encrypts the new key to exactly the members view it is handed
         guard await dependencies[singleton: .configRecovery].localStateIsLevelWithSwarm(
             swarmPublicKey: swarmPublicKey,

@@ -69,7 +69,7 @@ extension SwarmPollerType {
             forceSynchronousProcessing: forceSynchronousProcessing
         )
 
-        /// Both consumers are handed **this poll's** detection explicitly rather than reading it back out of a cache
+        /// Both consumers are handed this poll's detection explicitly rather than reading it back out of a cache
         ///
         /// Storing a detection to be consumed later allows it to be picked up by a different poll, or dropped when nothing
         /// consumes it - and it bought nothing, since detection repeats every poll and a hash that is still missing is simply
@@ -96,11 +96,11 @@ extension SwarmPollerType {
 
         /// Backfill any keys-message bytes we are missing
         ///
-        /// ⚠️ **Deliberately not gated on `outcome.detection`.** Detection says the swarm has *lost* a hash; this fires when
+        /// **Deliberately not gated on `outcome.detection`.** Detection says the swarm has *lost* a hash; this fires when
         /// *we* lack bytes for a hash the swarm still has - the opposite condition, and one that stops being fixable the
         /// moment detection would notice it. Hanging this off the detection path would look correct and repair almost nothing.
         ///
-        /// It also runs **after** the two consumers above rather than before: this poll's report was built from the byte set
+        /// It also runs after the two consumers above rather than before: this poll's report was built from the byte set
         /// as it stood at the start, so anything captured now is for the next poll's report to use. That ordering is what
         /// makes this feed the ordinary re-store path rather than duplicate it
         if namespaces.contains(.configGroupKeys) {
@@ -117,13 +117,13 @@ extension SwarmPollerType {
         /// bytes absent, so they are not obtainable by re-reading; and this poll's detection says the swarm has lost the keys.
         /// Those are two different facts and neither implies the other - `keysVerdict == .expired` alone would fire on a group
         /// that has simply never been looked at.
-        /// ⚠️ **Levelness as of *this* poll, not at any point this session.** The plain predicate is set by a good poll and
+        /// Levelness as of *this* poll, not at any point this session. The plain predicate is set by a good poll and
         /// cleared only by a sticky withdrawal, so it stays true indefinitely. Right for the re-store, where staleness costs a
-        /// redundant store; **fail-open here at exactly the wrong moment**, because a member added an hour ago with our last
+        /// redundant store; fail-open here at exactly the wrong moment, because a member added an hour ago with our last
         /// complete poll yesterday still reads true, and our `GroupMembers` view is stale by precisely the delta that produces
         /// the exclusion.
         ///
-        /// A rekey encrypts the new key to **this device's view of the members**. Issued from a stale view it silently excludes
+        /// A rekey encrypts the new key to this device's view of the members. Issued from a stale view it silently excludes
         /// anyone we have not merged yet - and this fires precisely on devices whose config state is known to be degraded, so
         /// the stale view is the expected case rather than the unlucky one
         if outcome.detection.keysVerdict == .expired,
@@ -139,7 +139,7 @@ extension SwarmPollerType {
         return outcome.result
     }
 
-    /// Re-read the whole keys namespace, **deliberately without a `lastHash`**
+    /// Re-read the whole keys namespace, deliberately without a `lastHash`
     ///
     /// There is no retrieve-by-hash API, so re-reading the namespace from scratch is the mechanism: passing our last hash
     /// would return only what has arrived since, which is precisely the set we already have bytes for. One small read per
@@ -175,9 +175,9 @@ extension SwarmPollerType {
     private func performPoll(
         forceSynchronousProcessing: Bool
     ) async throws -> (result: PollResult<PollResponse>, detection: ConfigRecovery.DetectionReport, pollToken: ConfigRecovery.PollToken) {
-        /// Open the poll **before** anything else runs, because the token has to name the poll that is about to happen
+        /// Open the poll before anything else runs, because the token has to name the poll that is about to happen
         ///
-        /// ⚠️ **Minting this at the end instead would produce a check that can never refuse.** The token would name the poll
+        /// Minting this at the end instead would produce a check that can never refuse. The token would name the poll
         /// that just finished, so a mark made during that poll would always equal it, and the rekey's freshness test would
         /// agree every time while looking exactly like a working guard
         let pollToken: ConfigRecovery.PollToken = await dependencies[singleton: .configRecovery]
@@ -194,7 +194,7 @@ extension SwarmPollerType {
             swarmPublicKey: destination.target,
             using: dependencies
         ))
-        /// Retrieved **per config** rather than as one flat set, because config expiry detection has to be able to say which
+        /// Retrieved per config rather than as one flat set, because config expiry detection has to be able to say which
         /// config a missing hash belongs to - the keys config decides whether a group is expired, and is also the one config
         /// which must never be re-stored
         let activeHashesByVariant: [ConfigDump.Variant: Set<String>] = {
@@ -266,33 +266,33 @@ extension SwarmPollerType {
         let rawMessageCount: Int = sortedMessages.map { $0.messages.count }.reduce(0, +)
         
         /// If every config namespace we asked about answered and none of them had anything new, our local state is level with
-        /// what **this service node** holds - which is what config recovery needs before it will re-store anything. It does
+        /// what this service node holds - which is what config recovery needs before it will re-store anything. It does
         /// not need a merge to have literally occurred, and waiting for one would mean recovery could never run for the
         /// devices that need it most: a device whose configs have expired gets *nothing* back from the swarm to merge.
         ///
-        /// **One node, not the swarm - and that is sufficient for two reasons, both load-bearing.** We poll a single snode,
+        /// One node, not the swarm - and that is sufficient for two reasons, both load-bearing. We poll a single snode,
         /// so a peer could hold a newer config this one hasn't backfilled, and we would re-store while stale:
         ///
-        /// 1. **A stale re-store loses cleanly.** It lands as its own message and loses to the higher-seqno one on merge,
+        /// 1. A stale re-store loses cleanly. It lands as its own message and loses to the higher-seqno one on merge,
         ///    because re-storing is *additive* rather than an overwrite - it cannot displace the newer state.
-        /// 2. **We cannot delete what we have not seen.** The obsolete-hash set accompanying a re-store contains only hashes
+        /// 2. We cannot delete what we have not seen. The obsolete-hash set accompanying a re-store contains only hashes
         ///    our own config superseded, so an unmerged newer message is not a candidate for sweeping.
         ///
-        /// If either ever stops holding, polling one node becomes a genuine correctness bug here and **no test points at
-        /// it** - which is why they are written down rather than left as something a reader could re-derive.
+        /// If either ever stops holding, polling one node becomes a genuine correctness bug here and no test points at
+        /// it - which is why they are written down rather than left as something a reader could re-derive.
         ///
-        /// **Note:** This cannot be answered from the `expire` response instead. `expire` only reports on hashes we already
+        /// Note: This cannot be answered from the `expire` response instead. `expire` only reports on hashes we already
         /// hold, whereas levelness is precisely "is there something on the swarm we haven't merged" - unknowable from a
         /// liveness check on known hashes. `retrieve` is the only instrument that answers it.
         ///
-        /// **The "answered" half is not a formality.** A failed retrieve is dropped from the response entirely, so a poll
+        /// The "answered" half is not a formality. A failed retrieve is dropped from the response entirely, so a poll
         /// whose sub-requests all errored is indistinguishable *by count* from a poll of a swarm that genuinely holds nothing.
         /// Keying off "no messages came back" alone would treat a total failure as proof we're up to date, which is the same
         /// hazard the precondition exists to prevent, just approached from the other side
         let requestedConfigNamespaces: Set<Network.StorageServer.Namespace> = Set(namespaces.filter { $0.isConfigNamespace })
         let answeredNamespaces: Set<Network.StorageServer.Namespace> = Set(response.keys)
 
-        /// **Computed once and used by BOTH markers below, deliberately.**
+        /// Computed once and used by BOTH markers below, deliberately.
         ///
         /// There are two places this poll can conclude we are level - one for a poll that returned no config messages, one for
         /// a poll whose config messages all merged - and they are far enough apart in this function that they were not
@@ -301,7 +301,7 @@ extension SwarmPollerType {
         /// level with a swarm we did not fully hear back from. Sharing the value is what stops them drifting apart again
         let allConfigNamespacesAnswered: Bool = requestedConfigNamespaces.isSubset(of: answeredNamespaces)
 
-        /// Whether **this** poll established levelness, as opposed to some earlier poll having done so
+        /// Whether this poll established levelness, as opposed to some earlier poll having done so
         ///
         /// The store's own predicate is session-sticky by design, which is right for deciding whether a re-store may run and
         /// wrong for authorising a rekey. This is the freshness signal, and it is deliberately local to one poll
@@ -341,7 +341,7 @@ extension SwarmPollerType {
         switch configMergeWasComplete {
             case .none: break
             case .some(true):
-                /// A **complete merge of a partial answer is not levelness.** Taking in everything we were given says nothing
+                /// A complete merge of a partial answer is not levelness. Taking in everything we were given says nothing
                 /// about the namespace whose retrieve failed, so this needs the same coverage gate as the marker above
                 if allConfigNamespacesAnswered {
                     await dependencies[singleton: .configRecovery]

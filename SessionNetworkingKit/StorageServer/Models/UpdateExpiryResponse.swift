@@ -14,7 +14,7 @@ extension Network.StorageServer {
         /// Whether this sub-response actually told us which hashes it still holds
         ///
         /// The storage server only includes the `unchanged` array when the request set `extend` or `shorten`, so
-        /// when this is `false` a hash appearing in neither `changed` nor `unchanged` carries **no information** -
+        /// when this is `false` a hash appearing in neither `changed` nor `unchanged` carries no information -
         /// it may well still be present, it just wasn't modified. See `ConfigExpiryDetection`
         public let hasUnchangedInfo: Bool
 
@@ -46,8 +46,8 @@ public extension Network.StorageServer.UpdateExpiryResponse {
 
         /// The hashes this service node still holds but didn't modify, mapped to their current expiry
         ///
-        /// **Note:** This is `nil` when the response omitted the `unchanged` key entirely, which the storage server
-        /// does unless the request set `extend` or `shorten` - it is deliberately **not** defaulted to an empty
+        /// Note: This is `nil` when the response omitted the `unchanged` key entirely, which the storage server
+        /// does unless the request set `extend` or `shorten` - it is deliberately not defaulted to an empty
         /// dictionary because "this node holds nothing else" and "this node didn't tell us" must not be conflated
         /// (a hash in neither array would otherwise look expired on every poll)
         public let unchanged: [String: UInt64]?

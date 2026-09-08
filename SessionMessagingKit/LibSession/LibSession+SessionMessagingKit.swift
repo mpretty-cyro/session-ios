@@ -901,7 +901,7 @@ public extension LibSession {
 
             /// Hashes we couldn't reach a verdict on, because the inspection itself failed
             ///
-            /// These are **not** guard rejections - a guard says "this must not be re-stored", whereas a thrown inspection
+            /// These are not guard rejections - a guard says "this must not be re-stored", whereas a thrown inspection
             /// says nothing at all, so treating the two alike would bar a hash on a transient error
             var inspectionFailedHashes: Set<String> = []
             let data: [ConfigRecoveryData] = configStore[sessionId].compactMap { config -> ConfigRecoveryData? in
@@ -912,19 +912,19 @@ public extension LibSession {
 
                 guard !configMissingHashes.isEmpty else { return nil }
 
-                /// A keys config is recovered by pushing back the **retained bytes**, not by generating a push
+                /// A keys config is recovered by pushing back the retained bytes, not by generating a push
                 ///
                 /// `push()` can't help here - `groups_keys_pending_config` only yields data while a rekey is in flight - and a
                 /// keys message can't be regenerated anyway, since it is admin-signed. Re-storing the bytes verbatim lands on
-                /// the same hash, needs no signature, and is therefore something a **member** can do, which is the whole point.
+                /// the same hash, needs no signature, and is therefore something a member can do, which is the whole point.
                 ///
-                /// **Every retained message is re-stored, not just the missing ones.** A generation is one rekey plus every
+                /// Every retained message is re-stored, not just the missing ones. A generation is one rekey plus every
                 /// supplemental issued against it, and a member who receives only part of a generation does not get the key -
                 /// so completeness is per generation, not per hash. Re-storing one that is still present is a no-op TTL
                 /// refresh, the same reasoning as a multipart config.
                 ///
                 /// If nothing is retained - a group that loaded its keys before retention existed - this returns `nil` and the
-                /// group is flagged expired as before. **That is a statement about this device now, not a permanent verdict:**
+                /// group is flagged expired as before. That is a statement about this device now, not a permanent verdict:
                 /// the bytes are recoverable by re-loading the message while it is still on the swarm
                 if config.variant == .groupKeys {
                     let retained: [String: Data] = config.activeKeyMessages()
@@ -1017,11 +1017,11 @@ public extension LibSession {
             return try performMerge(swarmPublicKey: swarmPublicKey, messages: messages).timestamps
         }
 
-        /// Merge the messages, also reporting whether **every** one of them was taken in
+        /// Merge the messages, also reporting whether every one of them was taken in
         ///
         /// A merge can lose messages without throwing - a whole variant is skipped when there's no config object for it or
         /// `merge` reports nothing merged, and `merge` itself treats a partial merge as a warning rather than an error. That
-        /// tolerance is deliberate (one bad config message must not fail a poll) but it means a successful call is **not**
+        /// tolerance is deliberate (one bad config message must not fail a poll) but it means a successful call is not
         /// proof we incorporated what the swarm sent us, which is precisely what config recovery's precondition asks
         private func performMerge(
             swarmPublicKey: String,
@@ -1166,15 +1166,15 @@ public extension LibSession {
                     return (sessionId, variant, dump)
                 }
             
-            /// If we took in **everything** the swarm sent us then our local state is now level with it, which is what config
+            /// If we took in everything the swarm sent us then our local state is now level with it, which is what config
             /// recovery requires before it will re-store anything - a device that has seen everything the swarm holds
             /// re-stores the current result, which is correct by construction
             ///
-            /// **A merge which lost messages must not set this.** Merging is deliberately tolerant of an individual message
+            /// A merge which lost messages must not set this. Merging is deliberately tolerant of an individual message
             /// failing, so "no error thrown" is not the same as "we incorporated it" - and a poll that dropped a config
             /// message is exactly the state where our view is knowably stale, which is what the precondition exists to catch
             ///
-            /// **And a lossy merge has to be recorded, not just left unmarked.** A config message which parsed but didn't
+            /// And a lossy merge has to be recorded, not just left unmarked. A config message which parsed but didn't
             /// merge has already had its `lastHash` advanced past it, so it will never be offered again - meaning the *next*
             /// poll returns no config messages and would otherwise be read as "level with the swarm". Marking the failure
             /// makes it stick for the session instead of being corrected for exactly one poll
@@ -1186,7 +1186,7 @@ public extension LibSession {
 
             /// If we don't need to push and there were no merge results then no need to do anything else
             ///
-            /// **Note:** Still reports the merge outcome - whether we took everything in is independent of whether the result
+            /// Note: Still reports the merge outcome - whether we took everything in is independent of whether the result
             /// needs pushing or dumping, and returning early without it would silently look like a complete merge
             guard
                 needsPush ||
@@ -1317,7 +1317,7 @@ public protocol LibSessionCacheType: LibSessionImmutableCacheType, MutableCacheT
         swarmPublicKey: String,
         messages: [ConfigMessageReceiveJob.Details.MessageInfo]
     ) throws -> [ConfigDump.Variant: Int64]
-    /// Returns whether **every** message was taken in - the caller has to apply that to config recovery's state, which lives
+    /// Returns whether every message was taken in - the caller has to apply that to config recovery's state, which lives
     /// on an actor and so cannot be reached from inside this synchronous database write
     func handleConfigMessages(
         _ db: ObservingDatabase,
